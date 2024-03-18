@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -262,7 +266,7 @@
         <span class="s2">&quot;AUTO&quot;</span> <span class="k">if</span> <span class="n">documents</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">connectors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="p">)</span>
 
-    <span class="k">return</span> <span class="p">{</span>
+    <span class="n">req</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
         <span class="s2">&quot;chat_history&quot;</span><span class="p">:</span> <span class="p">[</span>
             <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">get_role</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">content</span><span class="p">}</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
@@ -271,7 +275,9 @@
         <span class="s2">&quot;connectors&quot;</span><span class="p">:</span> <span class="n">maybe_connectors</span><span class="p">,</span>
         <span class="s2">&quot;prompt_truncation&quot;</span><span class="p">:</span> <span class="n">prompt_truncation</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-    <span class="p">}</span></div>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">req</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span></div>
 
 
 <div class="viewcode-block" id="ChatCohere"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.cohere.ChatCohere.html#langchain_community.chat_models.cohere.ChatCohere">[docs]</a><span class="k">class</span> <span class="nc">ChatCohere</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">,</span> <span class="n">BaseCohere</span><span class="p">):</span>
@@ -324,7 +330,11 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">request</span> <span class="o">=</span> <span class="n">get_cohere_chat_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;chat_stream&quot;</span><span class="p">):</span>  <span class="c1"># detect and support sdk v5</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat_stream</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">event_type</span> <span class="o">==</span> <span class="s2">&quot;text-generation&quot;</span><span class="p">:</span>
@@ -342,7 +352,11 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">request</span> <span class="o">=</span> <span class="n">get_cohere_chat_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">stream</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="p">,</span> <span class="s2">&quot;chat_stream&quot;</span><span class="p">):</span>  <span class="c1"># detect and support sdk v5</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">chat_stream</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="k">async</span> <span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">stream</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">event_type</span> <span class="o">==</span> <span class="s2">&quot;text-generation&quot;</span><span class="p">:</span>
@@ -402,7 +416,7 @@
             <span class="k">return</span> <span class="k">await</span> <span class="n">agenerate_from_stream</span><span class="p">(</span><span class="n">stream_iter</span><span class="p">)</span>
 
         <span class="n">request</span> <span class="o">=</span> <span class="n">get_cohere_chat_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">request</span><span class="p">)</span>
 
         <span class="n">message</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
         <span class="n">generation_info</span> <span class="o">=</span> <span class="kc">None</span>
@@ -423,7 +437,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>

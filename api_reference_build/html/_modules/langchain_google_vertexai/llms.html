@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -186,6 +190,7 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">vertexai</span>  <span class="c1"># type: ignore[import-untyped]</span>
+<span class="kn">from</span> <span class="nn">google.cloud.aiplatform</span> <span class="kn">import</span> <span class="n">telemetry</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
@@ -228,6 +233,7 @@
 <span class="kn">from</span> <span class="nn">langchain_google_vertexai._utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">create_retry_decorator</span><span class="p">,</span>
     <span class="n">get_generation_info</span><span class="p">,</span>
+    <span class="n">get_user_agent</span><span class="p">,</span>
     <span class="n">is_codey_model</span><span class="p">,</span>
     <span class="n">is_gemini_model</span><span class="p">,</span>
 <span class="p">)</span>
@@ -262,7 +268,8 @@
                 <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">predict_streaming</span><span class="p">(</span><span class="n">prompt</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">prompt</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">_completion_with_retry_inner</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">is_gemini</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="n">llm</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_completion_with_retry_inner</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">is_gemini</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
 <span class="k">async</span> <span class="k">def</span> <span class="nf">_acompletion_with_retry</span><span class="p">(</span>
@@ -293,9 +300,10 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Async streaming is supported only for Gemini family!&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">predict_async</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="k">await</span> <span class="n">_acompletion_with_retry_inner</span><span class="p">(</span>
-        <span class="n">prompt</span><span class="p">,</span> <span class="n">is_gemini</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-    <span class="p">)</span>
+    <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="n">llm</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">_acompletion_with_retry_inner</span><span class="p">(</span>
+            <span class="n">prompt</span><span class="p">,</span> <span class="n">is_gemini</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
 
 
 <span class="k">class</span> <span class="nc">_VertexAIBase</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
@@ -402,6 +410,12 @@
                     <span class="n">param_value</span> <span class="k">if</span> <span class="n">param_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">default_value</span>
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">updated_params</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_user_agent</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gets the User Agent.&quot;&quot;&quot;</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">user_agent</span> <span class="o">=</span> <span class="n">get_user_agent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">user_agent</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">_init_vertexai</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -666,7 +680,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>

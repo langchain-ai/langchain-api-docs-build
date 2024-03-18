@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -599,8 +603,9 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of documents most similar to the query text and distance for each.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">query_embedding</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aembed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">asimilarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">),</span>
+            <span class="n">query_embedding</span><span class="p">,</span>
             <span class="n">k</span><span class="p">,</span>
             <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
             <span class="n">search_params</span><span class="o">=</span><span class="n">search_params</span><span class="p">,</span>
@@ -1023,7 +1028,7 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">query_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="n">query_embedding</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aembed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">amax_marginal_relevance_search_by_vector</span><span class="p">(</span>
             <span class="n">query_embedding</span><span class="p">,</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
@@ -2204,6 +2209,26 @@
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Neither of embeddings or embedding_function is set&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">embedding</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;tolist&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">embedding</span>
 
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_aembed_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Embed query text asynchronously.</span>
+
+<span class="sd">        Used to provide backward compatibility with `embedding_function` argument.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            query: Query text.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of floats representing the query embedding.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embeddings</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">embeddings</span><span class="o">.</span><span class="n">aembed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embeddings_function</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embeddings_function</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Neither of embeddings or embedding_function is set&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">embedding</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;tolist&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="n">embedding</span>
+
     <span class="k">def</span> <span class="nf">_embed_texts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">texts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Embed search texts.</span>
 
@@ -2401,7 +2426,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>

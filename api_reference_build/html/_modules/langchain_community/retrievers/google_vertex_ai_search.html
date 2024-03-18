@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -207,8 +211,10 @@
 <span class="k">class</span> <span class="nc">_BaseGoogleVertexAISearchRetriever</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
     <span class="n">project_id</span><span class="p">:</span> <span class="nb">str</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Google Cloud Project ID.&quot;&quot;&quot;</span>
-    <span class="n">data_store_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">data_store_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Vertex AI Search data store ID.&quot;&quot;&quot;</span>
+    <span class="n">search_engine_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Vertex AI Search app ID.&quot;&quot;&quot;</span>
     <span class="n">location_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;global&quot;</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Vertex AI Search data store location.&quot;&quot;&quot;</span>
     <span class="n">serving_config_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default_config&quot;</span>
@@ -217,11 +223,12 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The default custom credentials (google.auth.credentials.Credentials) to use</span>
 <span class="sd">    when making API calls. If not provided, credentials will be ascertained from</span>
 <span class="sd">    the environment.&quot;&quot;&quot;</span>
-    <span class="n">engine_data_type</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot; Defines the Vertex AI Search data type</span>
+    <span class="n">engine_data_type</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Defines the Vertex AI Search app data type</span>
 <span class="sd">    0 - Unstructured data </span>
 <span class="sd">    1 - Structured data</span>
 <span class="sd">    2 - Website data</span>
+<span class="sd">    3 - Blended search</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -233,7 +240,7 @@
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;google.cloud.discoveryengine is not installed.&quot;</span>
                 <span class="s2">&quot;Please install it with pip install &quot;</span>
-                <span class="s2">&quot;google-cloud-discoveryengine&gt;=0.11.0&quot;</span>
+                <span class="s2">&quot;google-cloud-discoveryengine&gt;=0.11.10&quot;</span>
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">google.api_core.exceptions</span> <span class="kn">import</span> <span class="n">InvalidArgument</span>  <span class="c1"># noqa: F401</span>
@@ -246,25 +253,14 @@
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;project_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="s2">&quot;project_id&quot;</span><span class="p">,</span> <span class="s2">&quot;PROJECT_ID&quot;</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="c1"># For backwards compatibility</span>
-            <span class="n">search_engine_id</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;data_store_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
+                <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;data_store_id&quot;</span><span class="p">,</span> <span class="s2">&quot;DATA_STORE_ID&quot;</span>
+            <span class="p">)</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;search_engine_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
                 <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;search_engine_id&quot;</span><span class="p">,</span> <span class="s2">&quot;SEARCH_ENGINE_ID&quot;</span>
             <span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">search_engine_id</span><span class="p">:</span>
-                <span class="kn">import</span> <span class="nn">warnings</span>
-
-                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;The `search_engine_id` parameter is deprecated. Use `data_store_id` instead.&quot;</span><span class="p">,</span>  <span class="c1"># noqa: E501</span>
-                    <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;data_store_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">search_engine_id</span>
-        <span class="k">except</span><span class="p">:</span>  <span class="c1"># noqa: E722</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="k">pass</span>
-
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;data_store_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;data_store_id&quot;</span><span class="p">,</span> <span class="s2">&quot;DATA_STORE_ID&quot;</span>
-        <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">values</span>
 
@@ -327,14 +323,15 @@
                 <span class="k">continue</span>
 
             <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">derived_struct_data</span><span class="p">[</span><span class="n">chunk_type</span><span class="p">]:</span>
-                <span class="n">doc_metadata</span><span class="p">[</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">derived_struct_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;link&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                <span class="n">chunk_metadata</span> <span class="o">=</span> <span class="n">doc_metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">chunk_metadata</span><span class="p">[</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">derived_struct_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;link&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
 
                 <span class="k">if</span> <span class="n">chunk_type</span> <span class="o">==</span> <span class="s2">&quot;extractive_answers&quot;</span><span class="p">:</span>
-                    <span class="n">doc_metadata</span><span class="p">[</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;:</span><span class="si">{</span><span class="n">chunk</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;pageNumber&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="n">chunk_metadata</span><span class="p">[</span><span class="s2">&quot;source&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;:</span><span class="si">{</span><span class="n">chunk</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;pageNumber&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
 
                 <span class="n">documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="n">Document</span><span class="p">(</span>
-                        <span class="n">page_content</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">doc_metadata</span>
+                        <span class="n">page_content</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">chunk_metadata</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
 
@@ -455,12 +452,24 @@
             <span class="n">client_info</span><span class="o">=</span><span class="n">get_client_info</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s2">&quot;vertex-ai-search&quot;</span><span class="p">),</span>
         <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_serving_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">serving_config_path</span><span class="p">(</span>
-            <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project_id</span><span class="p">,</span>
-            <span class="n">location</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">location_id</span><span class="p">,</span>
-            <span class="n">data_store</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_store_id</span><span class="p">,</span>
-            <span class="n">serving_config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">serving_config_id</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_engine_id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;search_engine_id must be specified for blended search apps.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_engine_id</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_serving_config</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;projects/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_id</span><span class="si">}</span><span class="s2">/locations/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">location_id</span><span class="si">}</span><span class="s2">/collections/default_collection/engines/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">search_engine_id</span><span class="si">}</span><span class="s2">/servingConfigs/default_config&quot;</span>  <span class="c1"># noqa: E501</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_store_id</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_serving_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">serving_config_path</span><span class="p">(</span>
+                <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project_id</span><span class="p">,</span>
+                <span class="n">location</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">location_id</span><span class="p">,</span>
+                <span class="n">data_store</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">data_store_id</span><span class="p">,</span>
+                <span class="n">serving_config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">serving_config_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Either data_store_id or search_engine_id must be specified.&quot;</span>
+            <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_create_search_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SearchRequest</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepares a SearchRequest object.&quot;&quot;&quot;</span>
@@ -492,7 +501,7 @@
             <span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">content_search_spec</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
             <span class="n">content_search_spec</span> <span class="o">=</span> <span class="n">SearchRequest</span><span class="o">.</span><span class="n">ContentSearchSpec</span><span class="p">(</span>
                 <span class="n">extractive_content_spec</span><span class="o">=</span><span class="n">SearchRequest</span><span class="o">.</span><span class="n">ContentSearchSpec</span><span class="o">.</span><span class="n">ExtractiveContentSpec</span><span class="p">(</span>
                     <span class="n">max_extractive_answer_count</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_extractive_answer_count</span><span class="p">,</span>
@@ -504,7 +513,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;Only data store type 0 (Unstructured), 1 (Structured),&quot;</span>
-                <span class="s2">&quot;or 2 (Website) are supported currently.&quot;</span>
+                <span class="s2">&quot;2 (Website), or 3 (Blended) are supported currently.&quot;</span>
                 <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot; Got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
@@ -545,7 +554,7 @@
             <span class="p">)</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">documents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_structured_search_response</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">results</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
             <span class="n">chunk_type</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="s2">&quot;extractive_answers&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_extractive_answers</span> <span class="k">else</span> <span class="s2">&quot;snippets&quot;</span>
             <span class="p">)</span>
@@ -555,7 +564,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;Only data store type 0 (Unstructured), 1 (Structured),&quot;</span>
-                <span class="s2">&quot;or 2 (Website) are supported currently.&quot;</span>
+                <span class="s2">&quot;2 (Website), or 3 (Blended) are supported currently.&quot;</span>
                 <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot; Got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
@@ -592,6 +601,9 @@
             <span class="n">client_info</span><span class="o">=</span><span class="n">get_client_info</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s2">&quot;vertex-ai-search&quot;</span><span class="p">),</span>
         <span class="p">)</span>
 
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_store_id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;data_store_id is required for MultiTurnSearchRetriever.&quot;</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_serving_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">serving_config_path</span><span class="p">(</span>
             <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project_id</span><span class="p">,</span>
             <span class="n">location</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">location_id</span><span class="p">,</span>
@@ -599,9 +611,9 @@
             <span class="n">serving_config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">serving_config_id</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;Data store type 1 (Structured)&quot;</span>
+                <span class="s2">&quot;Data store type 1 (Structured) and 3 (Blended)&quot;</span>
                 <span class="s2">&quot;is not currently supported for multi-turn search.&quot;</span>
                 <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot; Got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">engine_data_type</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
@@ -657,7 +669,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>

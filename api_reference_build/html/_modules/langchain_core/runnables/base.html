@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -251,6 +255,7 @@
     <span class="n">accepts_config</span><span class="p">,</span>
     <span class="n">accepts_context</span><span class="p">,</span>
     <span class="n">accepts_run_manager</span><span class="p">,</span>
+    <span class="n">adapt_first_streaming_chunk</span><span class="p">,</span>
     <span class="n">create_model</span><span class="p">,</span>
     <span class="n">gather_with_concurrency</span><span class="p">,</span>
     <span class="n">get_function_first_arg_dict_keys</span><span class="p">,</span>
@@ -641,7 +646,35 @@
         <span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Assigns new fields to the dict output of this runnable.</span>
-<span class="sd">        Returns a new runnable.&quot;&quot;&quot;</span>
+<span class="sd">        Returns a new runnable.</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_community.llms.fake import FakeStreamingListLLM</span>
+<span class="sd">            from langchain_core.output_parsers import StrOutputParser</span>
+<span class="sd">            from langchain_core.prompts import SystemMessagePromptTemplate</span>
+<span class="sd">            from langchain_core.runnables import Runnable</span>
+<span class="sd">            from operator import itemgetter</span>
+
+<span class="sd">            prompt = (</span>
+<span class="sd">                SystemMessagePromptTemplate.from_template(&quot;You are a nice assistant.&quot;)</span>
+<span class="sd">                + &quot;{question}&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            llm = FakeStreamingListLLM(responses=[&quot;foo-lish&quot;])</span>
+
+<span class="sd">            chain: Runnable = prompt | llm | {&quot;str&quot;: StrOutputParser()}</span>
+
+<span class="sd">            chain_with_assign = chain.assign(hello=itemgetter(&quot;str&quot;) | llm)</span>
+
+<span class="sd">            print(chain_with_assign.input_schema.schema())</span>
+<span class="sd">            # {&#39;title&#39;: &#39;PromptInput&#39;, &#39;type&#39;: &#39;object&#39;, &#39;properties&#39;:</span>
+<span class="sd">            {&#39;question&#39;: {&#39;title&#39;: &#39;Question&#39;, &#39;type&#39;: &#39;string&#39;}}}</span>
+<span class="sd">            print(chain_with_assign.output_schema.schema()) #</span>
+<span class="sd">            {&#39;title&#39;: &#39;RunnableSequenceOutput&#39;, &#39;type&#39;: &#39;object&#39;, &#39;properties&#39;:</span>
+<span class="sd">            {&#39;str&#39;: {&#39;title&#39;: &#39;Str&#39;,</span>
+<span class="sd">            &#39;type&#39;: &#39;string&#39;}, &#39;hello&#39;: {&#39;title&#39;: &#39;Hello&#39;, &#39;type&#39;: &#39;string&#39;}}}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">langchain_core.runnables.passthrough</span> <span class="kn">import</span> <span class="n">RunnableAssign</span>
 
         <span class="k">return</span> <span class="bp">self</span> <span class="o">|</span> <span class="n">RunnableAssign</span><span class="p">(</span><span class="n">RunnableParallel</span><span class="p">(</span><span class="n">kwargs</span><span class="p">))</span></div>
@@ -712,6 +745,76 @@
         <span class="k">with</span> <span class="n">get_executor_for_config</span><span class="p">(</span><span class="n">configs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">Output</span><span class="p">],</span> <span class="nb">list</span><span class="p">(</span><span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">invoke</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">configs</span><span class="p">)))</span></div>
 
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">batch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Output</span><span class="p">]]:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">batch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="Runnable.batch_as_completed"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.Runnable.html#langchain_community.agent_toolkits.nla.tool.Runnable.batch_as_completed">[docs]</a>    <span class="k">def</span> <span class="nf">batch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run invoke in parallel on a list of inputs,</span>
+<span class="sd">        yielding results as they complete.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inputs</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">configs</span> <span class="o">=</span> <span class="n">get_config_list</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">))</span>
+
+        <span class="k">def</span> <span class="nf">invoke</span><span class="p">(</span>
+            <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">Input</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]:</span>
+            <span class="k">if</span> <span class="n">return_exceptions</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">out</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">out</span> <span class="o">=</span> <span class="n">e</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">invoke</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">configs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">return</span>
+
+        <span class="k">with</span> <span class="n">get_executor_for_config</span><span class="p">(</span><span class="n">configs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+            <span class="n">futures</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">executor</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">invoke</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">configs</span><span class="p">))</span>
+            <span class="p">}</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">while</span> <span class="n">futures</span><span class="p">:</span>
+                    <span class="n">done</span><span class="p">,</span> <span class="n">futures</span> <span class="o">=</span> <span class="n">wait</span><span class="p">(</span><span class="n">futures</span><span class="p">,</span> <span class="n">return_when</span><span class="o">=</span><span class="n">FIRST_COMPLETED</span><span class="p">)</span>
+                    <span class="k">while</span> <span class="n">done</span><span class="p">:</span>
+                        <span class="k">yield</span> <span class="n">done</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+                    <span class="n">future</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span></div>
+
 <div class="viewcode-block" id="Runnable.abatch"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.Runnable.html#langchain_community.agent_toolkits.nla.tool.Runnable.abatch">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">abatch</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
@@ -745,6 +848,64 @@
 
         <span class="n">coros</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">ainvoke</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">configs</span><span class="p">)</span>
         <span class="k">return</span> <span class="k">await</span> <span class="n">gather_with_concurrency</span><span class="p">(</span><span class="n">configs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_concurrency&quot;</span><span class="p">),</span> <span class="o">*</span><span class="n">coros</span><span class="p">)</span></div>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">abatch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Output</span><span class="p">]]:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">abatch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="Runnable.abatch_as_completed"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.Runnable.html#langchain_community.agent_toolkits.nla.tool.Runnable.abatch_as_completed">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">abatch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run ainvoke in parallel on a list of inputs,</span>
+<span class="sd">        yielding results as they complete.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inputs</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">configs</span> <span class="o">=</span> <span class="n">get_config_list</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">))</span>
+
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke</span><span class="p">(</span>
+            <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">Input</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]:</span>
+            <span class="k">if</span> <span class="n">return_exceptions</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">out</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
+                        <span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">out</span> <span class="o">=</span> <span class="n">e</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+        <span class="n">coros</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">ainvoke</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">)),</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">configs</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">coro</span> <span class="ow">in</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">as_completed</span><span class="p">(</span><span class="n">coros</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="k">await</span> <span class="n">coro</span></div>
 
 <div class="viewcode-block" id="Runnable.stream"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.Runnable.html#langchain_community.agent_toolkits.nla.tool.Runnable.stream">[docs]</a>    <span class="k">def</span> <span class="nf">stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -869,6 +1030,7 @@
             <span class="n">diff</span><span class="o">=</span><span class="n">diff</span><span class="p">,</span>
             <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span>
             <span class="n">with_streamed_output_list</span><span class="o">=</span><span class="n">with_streamed_output_list</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">):</span>
             <span class="k">yield</span> <span class="n">item</span></div>
 
@@ -1232,7 +1394,7 @@
 
         <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">input</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">got_first_val</span><span class="p">:</span>
-                <span class="n">final</span> <span class="o">=</span> <span class="n">_adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+                <span class="n">final</span> <span class="o">=</span> <span class="n">adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
                 <span class="n">got_first_val</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Make a best effort to gather, for any type that supports `+`</span>
@@ -1265,7 +1427,7 @@
 
         <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">input</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">got_first_val</span><span class="p">:</span>
-                <span class="n">final</span> <span class="o">=</span> <span class="n">_adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+                <span class="n">final</span> <span class="o">=</span> <span class="n">adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
                 <span class="n">got_first_val</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Make a best effort to gather, for any type that supports `+`</span>
@@ -1404,6 +1566,29 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunnableWithFallbacksT</span><span class="p">[</span><span class="n">Input</span><span class="p">,</span> <span class="n">Output</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add fallbacks to a runnable, returning a new Runnable.</span>
 
+<span class="sd">        Example:</span>
+
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from typing import Iterator</span>
+
+<span class="sd">                from langchain_core.runnables import RunnableGenerator</span>
+
+
+<span class="sd">                def _generate_immediate_error(input: Iterator) -&gt; Iterator[str]:</span>
+<span class="sd">                    raise ValueError()</span>
+<span class="sd">                    yield &quot;&quot;</span>
+
+
+<span class="sd">                def _generate(input: Iterator) -&gt; Iterator[str]:</span>
+<span class="sd">                    yield from &quot;foo bar&quot;</span>
+
+
+<span class="sd">                runnable = RunnableGenerator(_generate_immediate_error).with_fallbacks(</span>
+<span class="sd">                    [RunnableGenerator(_generate)]</span>
+<span class="sd">                    )</span>
+<span class="sd">                print(&#39;&#39;.join(runnable.stream({}))) #foo bar</span>
+
 <span class="sd">        Args:</span>
 <span class="sd">            fallbacks: A sequence of runnables to try if the original runnable fails.</span>
 <span class="sd">            exceptions_to_handle: A tuple of exception types to handle.</span>
@@ -1415,6 +1600,7 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            A new Runnable that will try the original runnable, and then each</span>
 <span class="sd">            fallback in order, upon failures.</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">langchain_core.runnables.fallbacks</span> <span class="kn">import</span> <span class="n">RunnableWithFallbacks</span>
 
@@ -3756,7 +3942,7 @@
         <span class="n">final</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Input</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">ichunk</span> <span class="ow">in</span> <span class="nb">input</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">final</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">final</span> <span class="o">=</span> <span class="n">_adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">ichunk</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+                <span class="n">final</span> <span class="o">=</span> <span class="n">adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">ichunk</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">+</span> <span class="n">ichunk</span>  <span class="c1"># type: ignore[operator]</span>
@@ -3840,7 +4026,7 @@
         <span class="n">final</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Input</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">async</span> <span class="k">for</span> <span class="n">ichunk</span> <span class="ow">in</span> <span class="nb">input</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">final</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">final</span> <span class="o">=</span> <span class="n">_adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">ichunk</span><span class="p">)</span>
+                <span class="n">final</span> <span class="o">=</span> <span class="n">adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">ichunk</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">+</span> <span class="n">ichunk</span>  <span class="c1"># type: ignore[operator]</span>
@@ -4331,6 +4517,113 @@
             <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">},</span>
         <span class="p">)</span></div>
 
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">batch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Output</span><span class="p">]]:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">batch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="RunnableBindingBase.batch_as_completed"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.RunnableBindingBase.html#langchain_community.agent_toolkits.nla.tool.RunnableBindingBase.batch_as_completed">[docs]</a>    <span class="k">def</span> <span class="nf">batch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">configs</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+                <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">],</span>
+                <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_merge_configs</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span> <span class="k">for</span> <span class="n">conf</span> <span class="ow">in</span> <span class="n">config</span><span class="p">],</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">configs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_merge_configs</span><span class="p">(</span><span class="n">config</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">))]</span>
+        <span class="c1"># lol mypy</span>
+        <span class="k">if</span> <span class="n">return_exceptions</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">bound</span><span class="o">.</span><span class="n">batch_as_completed</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="p">,</span>
+                <span class="n">configs</span><span class="p">,</span>
+                <span class="n">return_exceptions</span><span class="o">=</span><span class="n">return_exceptions</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">},</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">bound</span><span class="o">.</span><span class="n">batch_as_completed</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="p">,</span>
+                <span class="n">configs</span><span class="p">,</span>
+                <span class="n">return_exceptions</span><span class="o">=</span><span class="n">return_exceptions</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">},</span>
+            <span class="p">)</span></div>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">abatch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Output</span><span class="p">]]:</span>
+        <span class="o">...</span>
+
+    <span class="nd">@overload</span>
+    <span class="k">def</span> <span class="nf">abatch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+        <span class="o">...</span>
+
+<div class="viewcode-block" id="RunnableBindingBase.abatch_as_completed"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.RunnableBindingBase.html#langchain_community.agent_toolkits.nla.tool.RunnableBindingBase.abatch_as_completed">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">abatch_as_completed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">inputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Input</span><span class="p">],</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">return_exceptions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Output</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]]:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">configs</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+                <span class="n">List</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">],</span>
+                <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_merge_configs</span><span class="p">(</span><span class="n">conf</span><span class="p">)</span> <span class="k">for</span> <span class="n">conf</span> <span class="ow">in</span> <span class="n">config</span><span class="p">],</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">configs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_merge_configs</span><span class="p">(</span><span class="n">config</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">inputs</span><span class="p">))]</span>
+        <span class="k">if</span> <span class="n">return_exceptions</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">bound</span><span class="o">.</span><span class="n">abatch_as_completed</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="p">,</span>
+                <span class="n">configs</span><span class="p">,</span>
+                <span class="n">return_exceptions</span><span class="o">=</span><span class="n">return_exceptions</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">},</span>
+            <span class="p">):</span>
+                <span class="k">yield</span> <span class="n">item</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">bound</span><span class="o">.</span><span class="n">abatch_as_completed</span><span class="p">(</span>
+                <span class="n">inputs</span><span class="p">,</span>
+                <span class="n">configs</span><span class="p">,</span>
+                <span class="n">return_exceptions</span><span class="o">=</span><span class="n">return_exceptions</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">},</span>
+            <span class="p">):</span>
+                <span class="k">yield</span> <span class="n">item</span></div>
+
 <div class="viewcode-block" id="RunnableBindingBase.stream"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.RunnableBindingBase.html#langchain_community.agent_toolkits.nla.tool.RunnableBindingBase.stream">[docs]</a>    <span class="k">def</span> <span class="nf">stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">input</span><span class="p">:</span> <span class="n">Input</span><span class="p">,</span>
@@ -4645,21 +4938,13 @@
 <span class="sd">                yield chunk</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="n">RunnableLambda</span><span class="p">(</span><span class="n">func</span><span class="p">)</span></div>
-
-
-<span class="k">def</span> <span class="nf">_adapt_first_streaming_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This might transform the first chunk of a stream into an AddableDict.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">AddableDict</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">AddableDict</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">chunk</span>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>

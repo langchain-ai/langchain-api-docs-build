@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -206,8 +210,15 @@
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_create_retry_decorator</span><span class="p">(</span><span class="n">llm</span><span class="p">:</span> <span class="n">Cohere</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">_create_retry_decorator</span><span class="p">(</span><span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]:</span>
     <span class="kn">import</span> <span class="nn">cohere</span>
+
+    <span class="c1"># support v4 and v5</span>
+    <span class="n">retry_conditions</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">cohere</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">CohereError</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">cohere</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">)</span>
+        <span class="k">else</span> <span class="n">retry_if_exception_type</span><span class="p">(</span><span class="ne">Exception</span><span class="p">)</span>
+    <span class="p">)</span>
 
     <span class="n">min_seconds</span> <span class="o">=</span> <span class="mi">4</span>
     <span class="n">max_seconds</span> <span class="o">=</span> <span class="mi">10</span>
@@ -215,16 +226,16 @@
     <span class="c1"># 4 seconds, then up to 10 seconds, then 10 seconds afterwards</span>
     <span class="k">return</span> <span class="n">retry</span><span class="p">(</span>
         <span class="n">reraise</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">llm</span><span class="o">.</span><span class="n">max_retries</span><span class="p">),</span>
+        <span class="n">stop</span><span class="o">=</span><span class="n">stop_after_attempt</span><span class="p">(</span><span class="n">max_retries</span><span class="p">),</span>
         <span class="n">wait</span><span class="o">=</span><span class="n">wait_exponential</span><span class="p">(</span><span class="n">multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="o">=</span><span class="n">min_seconds</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">max_seconds</span><span class="p">),</span>
-        <span class="n">retry</span><span class="o">=</span><span class="p">(</span><span class="n">retry_if_exception_type</span><span class="p">(</span><span class="n">cohere</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">CohereError</span><span class="p">)),</span>
+        <span class="n">retry</span><span class="o">=</span><span class="n">retry_conditions</span><span class="p">,</span>
         <span class="n">before_sleep</span><span class="o">=</span><span class="n">before_sleep_log</span><span class="p">(</span><span class="n">logger</span><span class="p">,</span> <span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span><span class="p">),</span>
     <span class="p">)</span>
 
 
 <div class="viewcode-block" id="completion_with_retry"><a class="viewcode-back" href="../../../llms/langchain_community.llms.cohere.completion_with_retry.html#langchain_community.llms.cohere.completion_with_retry">[docs]</a><span class="k">def</span> <span class="nf">completion_with_retry</span><span class="p">(</span><span class="n">llm</span><span class="p">:</span> <span class="n">Cohere</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Use tenacity to retry the completion call.&quot;&quot;&quot;</span>
-    <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">_create_retry_decorator</span><span class="p">(</span><span class="n">llm</span><span class="p">)</span>
+    <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">_create_retry_decorator</span><span class="p">(</span><span class="n">llm</span><span class="o">.</span><span class="n">max_retries</span><span class="p">)</span>
 
     <span class="nd">@retry_decorator</span>
     <span class="k">def</span> <span class="nf">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -235,7 +246,7 @@
 
 <div class="viewcode-block" id="acompletion_with_retry"><a class="viewcode-back" href="../../../llms/langchain_community.llms.cohere.acompletion_with_retry.html#langchain_community.llms.cohere.acompletion_with_retry">[docs]</a><span class="k">def</span> <span class="nf">acompletion_with_retry</span><span class="p">(</span><span class="n">llm</span><span class="p">:</span> <span class="n">Cohere</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Use tenacity to retry the completion call.&quot;&quot;&quot;</span>
-    <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">_create_retry_decorator</span><span class="p">(</span><span class="n">llm</span><span class="p">)</span>
+    <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">_create_retry_decorator</span><span class="p">(</span><span class="n">llm</span><span class="o">.</span><span class="n">max_retries</span><span class="p">)</span>
 
     <span class="nd">@retry_decorator</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -440,7 +451,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>

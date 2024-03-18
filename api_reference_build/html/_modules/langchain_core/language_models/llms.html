@@ -122,6 +122,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -145,6 +148,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -194,6 +198,7 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncGenerator</span><span class="p">,</span>
     <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
@@ -293,6 +298,26 @@
         <span class="n">retry</span><span class="o">=</span><span class="n">retry_instance</span><span class="p">,</span>
         <span class="n">before_sleep</span><span class="o">=</span><span class="n">_before_sleep</span><span class="p">,</span>
     <span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_as_async_iterator</span><span class="p">(</span><span class="n">sync_iterator</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a sync iterator into an async iterator.&quot;&quot;&quot;</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_as_sync_iterator</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">:</span>
+        <span class="n">iterator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">sync_iterator</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
+                <span class="kc">None</span><span class="p">,</span>
+                <span class="nb">next</span><span class="p">,</span>
+                <span class="n">iterator</span><span class="p">,</span>
+                <span class="n">done</span><span class="p">,</span>  <span class="c1"># type: ignore[call-arg, arg-type]</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="n">done</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">yield</span> <span class="n">item</span>  <span class="c1"># type: ignore[misc]</span>
+
+    <span class="k">return</span> <span class="n">_as_sync_iterator</span>
 
 
 <div class="viewcode-block" id="get_prompts"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.get_prompts.html#langchain_google_vertexai.vision_models.get_prompts">[docs]</a><span class="k">def</span> <span class="nf">get_prompts</span><span class="p">(</span>
@@ -616,54 +641,71 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="o">==</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_astream</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_astream</span><span class="p">:</span>
             <span class="c1"># model doesn&#39;t implement streaming, so use default implementation</span>
-            <span class="k">yield</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">_stream_implementation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span>
+        <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_stream</span><span class="p">:</span>
+            <span class="c1"># Then stream is implemented, so we can create an async iterator from it</span>
+            <span class="c1"># The typing is hard to type correctly with mypy here, so we cast</span>
+            <span class="c1"># and do a type ignore, this code is unit tested and should be fine.</span>
+            <span class="n">_stream_implementation</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
+                <span class="n">Callable</span><span class="p">[</span>
+                    <span class="p">[</span>
+                        <span class="nb">str</span><span class="p">,</span>
+                        <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+                        <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
+                        <span class="n">Any</span><span class="p">,</span>
+                    <span class="p">],</span>
+                    <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">],</span>
+                <span class="p">],</span>
+                <span class="n">_as_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">),</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_input</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
-            <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dict</span><span class="p">()</span>
-            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
-            <span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;stop&quot;</span><span class="p">:</span> <span class="n">stop</span><span class="p">}</span>
-            <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">AsyncCallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
-                <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">callbacks</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
-                <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
-                <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+            <span class="k">yield</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_input</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dict</span><span class="p">()</span>
+        <span class="n">params</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;stop&quot;</span><span class="p">:</span> <span class="n">stop</span><span class="p">}</span>
+        <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">AsyncCallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">callbacks</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="p">(</span><span class="n">run_manager</span><span class="p">,)</span> <span class="o">=</span> <span class="k">await</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_llm_start</span><span class="p">(</span>
+            <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+            <span class="p">[</span><span class="n">prompt</span><span class="p">],</span>
+            <span class="n">invocation_params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">generation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">_stream_implementation</span><span class="p">(</span>
+                <span class="n">prompt</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">):</span>
+                <span class="k">yield</span> <span class="n">chunk</span><span class="o">.</span><span class="n">text</span>
+                <span class="k">if</span> <span class="n">generation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">generation</span> <span class="o">=</span> <span class="n">chunk</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">generation</span> <span class="o">+=</span> <span class="n">chunk</span>
+            <span class="k">assert</span> <span class="n">generation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_error</span><span class="p">(</span>
+                <span class="n">e</span><span class="p">,</span>
+                <span class="n">response</span><span class="o">=</span><span class="n">LLMResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="p">[[</span><span class="n">generation</span><span class="p">]]</span> <span class="k">if</span> <span class="n">generation</span> <span class="k">else</span> <span class="p">[]),</span>
             <span class="p">)</span>
-            <span class="p">(</span><span class="n">run_manager</span><span class="p">,)</span> <span class="o">=</span> <span class="k">await</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_llm_start</span><span class="p">(</span>
-                <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
-                <span class="p">[</span><span class="n">prompt</span><span class="p">],</span>
-                <span class="n">invocation_params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
-                <span class="n">name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
-                <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">generation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span><span class="p">(</span>
-                    <span class="n">prompt</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-                <span class="p">):</span>
-                    <span class="k">yield</span> <span class="n">chunk</span><span class="o">.</span><span class="n">text</span>
-                    <span class="k">if</span> <span class="n">generation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">generation</span> <span class="o">=</span> <span class="n">chunk</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">generation</span> <span class="o">+=</span> <span class="n">chunk</span>
-                <span class="k">assert</span> <span class="n">generation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_error</span><span class="p">(</span>
-                    <span class="n">e</span><span class="p">,</span>
-                    <span class="n">response</span><span class="o">=</span><span class="n">LLMResult</span><span class="p">(</span>
-                        <span class="n">generations</span><span class="o">=</span><span class="p">[[</span><span class="n">generation</span><span class="p">]]</span> <span class="k">if</span> <span class="n">generation</span> <span class="k">else</span> <span class="p">[]</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_end</span><span class="p">(</span><span class="n">LLMResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="p">[[</span><span class="n">generation</span><span class="p">]]))</span></div>
+            <span class="k">raise</span> <span class="n">e</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_end</span><span class="p">(</span><span class="n">LLMResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="p">[[</span><span class="n">generation</span><span class="p">]]))</span></div>
 
     <span class="c1"># --- Custom methods ---</span>
 
@@ -1363,7 +1405,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 13, 2024.
+          Last updated on Mar 18, 2024.
       </footer>
     </div>
   </div>
