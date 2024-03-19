@@ -397,12 +397,48 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Embeddings</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Provides access to the embedding mechanism used by the Clickhouse instance.</span>
+
+<span class="sd">        This property allows direct access to the embedding function or model being</span>
+<span class="sd">        used by the Clickhouse instance to convert text documents into embedding vectors</span>
+<span class="sd">        for vector similarity search.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The `Embeddings` instance associated with this Clickhouse instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_function</span>
 
 <div class="viewcode-block" id="Clickhouse.escape_str"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.clickhouse.Clickhouse.html#langchain_community.vectorstores.clickhouse.Clickhouse.escape_str">[docs]</a>    <span class="k">def</span> <span class="nf">escape_str</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Escape special characters in a string for Clickhouse SQL queries.</span>
+
+<span class="sd">        This method is used internally to prepare strings for safe insertion</span>
+<span class="sd">        into SQL queries by escaping special characters that might otherwise</span>
+<span class="sd">        interfere with the query syntax.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            value: The string to be escaped.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The escaped string, safe for insertion into SQL queries.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">BS</span><span class="si">}{</span><span class="n">c</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">must_escape</span> <span class="k">else</span> <span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">value</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_build_insert_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">transac</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">column_names</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct an SQL query for inserting data into the Clickhouse database.</span>
+
+<span class="sd">        This method formats and constructs an SQL `INSERT` query string using the</span>
+<span class="sd">        provided transaction data and column names. It is utilized internally during</span>
+<span class="sd">        the process of batch insertion of documents and their embeddings into the</span>
+<span class="sd">        database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            transac: iterable of tuples, representing a row of data to be inserted.</span>
+<span class="sd">            column_names: iterable of strings representing the names of the columns</span>
+<span class="sd">                into which data will be inserted.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A string containing the constructed SQL `INSERT` query.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">ks</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">column_names</span><span class="p">)</span>
         <span class="n">_data</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">transac</span><span class="p">:</span>
@@ -417,6 +453,17 @@
         <span class="k">return</span> <span class="n">i_str</span>
 
     <span class="k">def</span> <span class="nf">_insert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">transac</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">column_names</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute an SQL query to insert data into the Clickhouse database.</span>
+
+<span class="sd">        This method performs the actual insertion of data into the database by</span>
+<span class="sd">        executing the SQL query constructed by `_build_insert_sql`. It&#39;s a critical</span>
+<span class="sd">        step in adding new documents and their associated data into the vector store.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            transac:iterable of tuples, representing a row of data to be inserted.</span>
+<span class="sd">            column_names: An iterable of strings representing the names of the columns</span>
+<span class="sd">                into which data will be inserted.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">_insert_query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_insert_sql</span><span class="p">(</span><span class="n">transac</span><span class="p">,</span> <span class="n">column_names</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="n">_insert_query</span><span class="p">)</span>
 
@@ -531,6 +578,21 @@
     <span class="k">def</span> <span class="nf">_build_query_sql</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">q_emb</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">topk</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">where_str</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct an SQL query for performing a similarity search.</span>
+
+<span class="sd">        This internal method generates an SQL query for finding the top-k most similar</span>
+<span class="sd">        vectors in the database to a given query vector.It allows for optional filtering</span>
+<span class="sd">        conditions to be applied via a WHERE clause.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            q_emb: The query vector as a list of floats.</span>
+<span class="sd">            topk: The number of top similar items to retrieve.</span>
+<span class="sd">            where_str: opt str representing additional WHERE conditions for the query</span>
+<span class="sd">                Defaults to None.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A string containing the SQL query for the similarity search.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">q_emb_str</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">q_emb</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">where_str</span><span class="p">:</span>
             <span class="n">where_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;PREWHERE </span><span class="si">{</span><span class="n">where_str</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -665,7 +727,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 18, 2024.
+          Last updated on Mar 19, 2024.
       </footer>
     </div>
   </div>
