@@ -194,9 +194,7 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
-    <span class="n">AsyncGenerator</span><span class="p">,</span>
     <span class="n">AsyncIterator</span><span class="p">,</span>
-    <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
@@ -207,6 +205,7 @@
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
+<span class="kn">from</span> <span class="nn">langchain_core.caches</span> <span class="kn">import</span> <span class="n">BaseCache</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManager</span><span class="p">,</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
@@ -282,26 +281,6 @@
             <span class="p">)</span>
         <span class="p">]</span>
     <span class="p">)</span></div>
-
-
-<span class="k">def</span> <span class="nf">_as_async_iterator</span><span class="p">(</span><span class="n">sync_iterator</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a sync iterator into an async iterator.&quot;&quot;&quot;</span>
-
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_as_sync_iterator</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">:</span>
-        <span class="n">iterator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">sync_iterator</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">done</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
-        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
-                <span class="kc">None</span><span class="p">,</span>
-                <span class="nb">next</span><span class="p">,</span>
-                <span class="n">iterator</span><span class="p">,</span>
-                <span class="n">done</span><span class="p">,</span>  <span class="c1"># type: ignore[call-arg, arg-type]</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="n">done</span><span class="p">:</span>
-                <span class="k">break</span>
-            <span class="k">yield</span> <span class="n">item</span>  <span class="c1"># type: ignore[misc]</span>
-
-    <span class="k">return</span> <span class="n">_as_sync_iterator</span>
 
 
 <div class="viewcode-block" id="BaseChatModel"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_google_vertexai.vision_models.BaseChatModel">[docs]</a><span class="k">class</span> <span class="nc">BaseChatModel</span><span class="p">(</span><span class="n">BaseLanguageModel</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="n">ABC</span><span class="p">):</span>
@@ -455,26 +434,11 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_astream</span><span class="p">:</span>
-            <span class="c1"># Then astream is implemented</span>
-            <span class="n">_stream_implementation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span>
-        <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span><span class="p">:</span>
-            <span class="c1"># Then stream is implemented, so we can create an async iterator from it</span>
-            <span class="c1"># The typing is hard to type correctly with mypy here, so we cast</span>
-            <span class="c1"># and do a type ignore, this code is unit tested and should be fine.</span>
-            <span class="n">_stream_implementation</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
-                <span class="n">Callable</span><span class="p">[</span>
-                    <span class="p">[</span>
-                        <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
-                        <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
-                        <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
-                        <span class="n">Any</span><span class="p">,</span>
-                    <span class="p">],</span>
-                    <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">],</span>
-                <span class="p">],</span>
-                <span class="n">_as_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">),</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>  <span class="c1"># No async or sync stream is implemented, so fall back to ainvoke</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="ow">is</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_astream</span>
+            <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span>
+        <span class="p">):</span>
+            <span class="c1"># No async or sync stream is implemented, so fall back to ainvoke</span>
             <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span>
                 <span class="n">BaseMessageChunk</span><span class="p">,</span>
                 <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span>
@@ -503,10 +467,14 @@
             <span class="n">run_id</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="p">)</span>
+
         <span class="n">generation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">_stream_implementation</span><span class="p">(</span>
-                <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span><span class="p">(</span>
+                <span class="n">messages</span><span class="p">,</span>
+                <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span>
+                <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">):</span>
                 <span class="n">chunk</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">response_metadata</span> <span class="o">=</span> <span class="n">_gen_info_and_msg_metadata</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
                 <span class="k">yield</span> <span class="n">chunk</span><span class="o">.</span><span class="n">message</span>
@@ -782,7 +750,13 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
-        <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
+            <span class="n">llm_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+        <span class="c1"># We should check the cache unless it&#39;s explicitly set to False</span>
+        <span class="c1"># A None cache means we should use the default global cache</span>
+        <span class="c1"># if it&#39;s configured.</span>
         <span class="n">check_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">check_cache</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">llm_cache</span><span class="p">:</span>
@@ -804,6 +778,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
+        <span class="c1"># Add response metadata to each generation</span>
         <span class="k">for</span> <span class="n">generation</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">:</span>
             <span class="n">generation</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">response_metadata</span> <span class="o">=</span> <span class="n">_gen_info_and_msg_metadata</span><span class="p">(</span>
                 <span class="n">generation</span>
@@ -824,7 +799,13 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
-        <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
+            <span class="n">llm_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+        <span class="c1"># We should check the cache unless it&#39;s explicitly set to False</span>
+        <span class="c1"># A None cache means we should use the default global cache</span>
+        <span class="c1"># if it&#39;s configured.</span>
         <span class="n">check_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">check_cache</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">llm_cache</span><span class="p">:</span>
@@ -845,6 +826,8 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_agenerate</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Add response metadata to each generation</span>
         <span class="k">for</span> <span class="n">generation</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">:</span>
             <span class="n">generation</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">response_metadata</span> <span class="o">=</span> <span class="n">_gen_info_and_msg_metadata</span><span class="p">(</span>
                 <span class="n">generation</span>
@@ -894,14 +877,32 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+        <span class="n">iterator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
+            <span class="kc">None</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">,</span>
+            <span class="n">messages</span><span class="p">,</span>
+            <span class="n">stop</span><span class="p">,</span>
+            <span class="n">run_manager</span><span class="o">.</span><span class="n">get_sync</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
+                <span class="kc">None</span><span class="p">,</span>
+                <span class="nb">next</span><span class="p">,</span>
+                <span class="n">iterator</span><span class="p">,</span>
+                <span class="n">done</span><span class="p">,</span>  <span class="c1"># type: ignore[call-arg, arg-type]</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="n">done</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">yield</span> <span class="n">item</span>  <span class="c1"># type: ignore[misc]</span>
 
 <div class="viewcode-block" id="BaseChatModel.__call__"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_google_vertexai.vision_models.BaseChatModel.__call__">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.1.7&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;invoke&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span>
@@ -1066,7 +1067,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 19, 2024.
+          Last updated on Mar 20, 2024.
       </footer>
     </div>
   </div>

@@ -403,6 +403,7 @@
         <span class="n">database_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
         <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
         <span class="n">wait_until_ready</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">score_threshold</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -423,6 +424,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">client</span> <span class="o">=</span> <span class="n">_generate_mongo_client</span><span class="p">(</span><span class="n">connection_string</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="p">[</span><span class="n">database_name</span><span class="p">][</span><span class="n">collection_name</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span> <span class="o">=</span> <span class="n">score_threshold</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_wait_until_ready</span> <span class="o">=</span> <span class="n">wait_until_ready</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">collection</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="p">,</span>
@@ -433,8 +435,17 @@
 
 <div class="viewcode-block" id="MongoDBAtlasSemanticCache.lookup"><a class="viewcode-back" href="../../cache/langchain_mongodb.cache.MongoDBAtlasSemanticCache.html#langchain_mongodb.cache.MongoDBAtlasSemanticCache.lookup">[docs]</a>    <span class="k">def</span> <span class="nf">lookup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RETURN_VAL_TYPE</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Look up based on prompt and llm_string.&quot;&quot;&quot;</span>
+        <span class="n">post_filter_pipeline</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[{</span><span class="s2">&quot;$match&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$gte&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span><span class="p">}}}]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+
         <span class="n">search_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score</span><span class="p">(</span>
-            <span class="n">prompt</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">pre_filter</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">LLM</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$eq&quot;</span><span class="p">:</span> <span class="n">llm_string</span><span class="p">}}</span>
+            <span class="n">prompt</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">,</span>
+            <span class="n">pre_filter</span><span class="o">=</span><span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">LLM</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$eq&quot;</span><span class="p">:</span> <span class="n">llm_string</span><span class="p">}},</span>
+            <span class="n">post_filter_pipeline</span><span class="o">=</span><span class="n">post_filter_pipeline</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">search_response</span><span class="p">:</span>
             <span class="n">return_val</span> <span class="o">=</span> <span class="n">search_response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">RETURN_VAL</span><span class="p">)</span>
@@ -483,7 +494,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 19, 2024.
+          Last updated on Mar 20, 2024.
       </footer>
     </div>
   </div>

@@ -199,7 +199,6 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
-    <span class="n">AsyncGenerator</span><span class="p">,</span>
     <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
@@ -225,6 +224,7 @@
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
+<span class="kn">from</span> <span class="nn">langchain_core.caches</span> <span class="kn">import</span> <span class="n">BaseCache</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManager</span><span class="p">,</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
@@ -299,26 +299,6 @@
         <span class="n">retry</span><span class="o">=</span><span class="n">retry_instance</span><span class="p">,</span>
         <span class="n">before_sleep</span><span class="o">=</span><span class="n">_before_sleep</span><span class="p">,</span>
     <span class="p">)</span></div>
-
-
-<span class="k">def</span> <span class="nf">_as_async_iterator</span><span class="p">(</span><span class="n">sync_iterator</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a sync iterator into an async iterator.&quot;&quot;&quot;</span>
-
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_as_sync_iterator</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">:</span>
-        <span class="n">iterator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">sync_iterator</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">done</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
-        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
-                <span class="kc">None</span><span class="p">,</span>
-                <span class="nb">next</span><span class="p">,</span>
-                <span class="n">iterator</span><span class="p">,</span>
-                <span class="n">done</span><span class="p">,</span>  <span class="c1"># type: ignore[call-arg, arg-type]</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="n">done</span><span class="p">:</span>
-                <span class="k">break</span>
-            <span class="k">yield</span> <span class="n">item</span>  <span class="c1"># type: ignore[misc]</span>
-
-    <span class="k">return</span> <span class="n">_as_sync_iterator</span>
 
 
 <div class="viewcode-block" id="get_prompts"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.get_prompts.html#langchain_google_vertexai.vision_models.get_prompts">[docs]</a><span class="k">def</span> <span class="nf">get_prompts</span><span class="p">(</span>
@@ -645,26 +625,10 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_astream</span><span class="p">:</span>
-            <span class="c1"># model doesn&#39;t implement streaming, so use default implementation</span>
-            <span class="n">_stream_implementation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span>
-        <span class="k">elif</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_stream</span><span class="p">:</span>
-            <span class="c1"># Then stream is implemented, so we can create an async iterator from it</span>
-            <span class="c1"># The typing is hard to type correctly with mypy here, so we cast</span>
-            <span class="c1"># and do a type ignore, this code is unit tested and should be fine.</span>
-            <span class="n">_stream_implementation</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
-                <span class="n">Callable</span><span class="p">[</span>
-                    <span class="p">[</span>
-                        <span class="nb">str</span><span class="p">,</span>
-                        <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
-                        <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
-                        <span class="n">Any</span><span class="p">,</span>
-                    <span class="p">],</span>
-                    <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">],</span>
-                <span class="p">],</span>
-                <span class="n">_as_async_iterator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">),</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="ow">is</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_astream</span>
+            <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="n">BaseLLM</span><span class="o">.</span><span class="n">_stream</span>
+        <span class="p">):</span>
             <span class="k">yield</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="k">return</span>
 
@@ -694,8 +658,11 @@
         <span class="p">)</span>
         <span class="n">generation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">_stream_implementation</span><span class="p">(</span>
-                <span class="n">prompt</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span><span class="p">(</span>
+                <span class="n">prompt</span><span class="p">,</span>
+                <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span>
+                <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">):</span>
                 <span class="k">yield</span> <span class="n">chunk</span><span class="o">.</span><span class="n">text</span>
                 <span class="k">if</span> <span class="n">generation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -750,14 +717,32 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+        <span class="n">iterator</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
+            <span class="kc">None</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">,</span>
+            <span class="n">prompt</span><span class="p">,</span>
+            <span class="n">stop</span><span class="p">,</span>
+            <span class="n">run_manager</span><span class="o">.</span><span class="n">get_sync</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
+                <span class="kc">None</span><span class="p">,</span>
+                <span class="nb">next</span><span class="p">,</span>
+                <span class="n">iterator</span><span class="p">,</span>
+                <span class="n">done</span><span class="p">,</span>  <span class="c1"># type: ignore[call-arg, arg-type]</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="n">done</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">yield</span> <span class="n">item</span>  <span class="c1"># type: ignore[misc]</span>
 
 <div class="viewcode-block" id="BaseLLM.generate_prompt"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.BaseLLM.html#langchain_google_vertexai.vision_models.BaseLLM.generate_prompt">[docs]</a>    <span class="k">def</span> <span class="nf">generate_prompt</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -919,6 +904,10 @@
             <span class="n">missing_prompt_idxs</span><span class="p">,</span>
             <span class="n">missing_prompts</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="n">get_prompts</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">prompts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Local cache is not yet supported for &quot;</span> <span class="s2">&quot;LLMs (only chat models)&quot;</span>
+            <span class="p">)</span>
         <span class="n">disregard_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span>
         <span class="n">new_arg_supported</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_generate</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;run_manager&quot;</span>
@@ -1128,6 +1117,11 @@
             <span class="n">missing_prompt_idxs</span><span class="p">,</span>
             <span class="n">missing_prompts</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="k">await</span> <span class="n">aget_prompts</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">prompts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Local cache is not yet supported for &quot;</span> <span class="s2">&quot;LLMs (only chat models)&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">disregard_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span>
         <span class="n">new_arg_supported</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_agenerate</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;run_manager&quot;</span>
@@ -1429,7 +1423,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 19, 2024.
+          Last updated on Mar 20, 2024.
       </footer>
     </div>
   </div>
