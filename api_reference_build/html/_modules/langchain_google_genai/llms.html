@@ -308,6 +308,10 @@
     <span class="p">)</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Model name to use.&quot;&quot;&quot;</span>
     <span class="n">google_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SecretStr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">credentials</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="s2">&quot;The default custom credentials (google.auth.credentials.Credentials) to use &quot;</span>
+    <span class="s2">&quot;when making API calls. If not provided, credentials will be ascertained from &quot;</span>
+    <span class="s2">&quot;the GOOGLE_API_KEY envvar&quot;</span>
     <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.7</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run inference with this temperature. Must by in the closed interval</span>
 <span class="sd">       [0.0, 1.0].&quot;&quot;&quot;</span>
@@ -389,21 +393,27 @@
     <span class="nd">@root_validator</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validates params and passes them to google-generativeai package.&quot;&quot;&quot;</span>
-        <span class="n">google_api_key</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;google_api_key&quot;</span><span class="p">,</span> <span class="s2">&quot;GOOGLE_API_KEY&quot;</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;credentials&quot;</span><span class="p">):</span>
+            <span class="n">genai</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                <span class="n">credentials</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;credentials&quot;</span><span class="p">),</span>
+                <span class="n">transport</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;transport&quot;</span><span class="p">),</span>
+                <span class="n">client_options</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client_options&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">google_api_key</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
+                <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;google_api_key&quot;</span><span class="p">,</span> <span class="s2">&quot;GOOGLE_API_KEY&quot;</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">google_api_key</span><span class="p">,</span> <span class="n">SecretStr</span><span class="p">):</span>
+                <span class="n">google_api_key</span> <span class="o">=</span> <span class="n">google_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+            <span class="n">genai</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+                <span class="n">api_key</span><span class="o">=</span><span class="n">google_api_key</span><span class="p">,</span>
+                <span class="n">transport</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;transport&quot;</span><span class="p">),</span>
+                <span class="n">client_options</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client_options&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+
         <span class="n">model_name</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model&quot;</span><span class="p">]</span>
 
         <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">]</span>
-
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">google_api_key</span><span class="p">,</span> <span class="n">SecretStr</span><span class="p">):</span>
-            <span class="n">google_api_key</span> <span class="o">=</span> <span class="n">google_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
-
-        <span class="n">genai</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
-            <span class="n">api_key</span><span class="o">=</span><span class="n">google_api_key</span><span class="p">,</span>
-            <span class="n">transport</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;transport&quot;</span><span class="p">),</span>
-            <span class="n">client_options</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client_options&quot;</span><span class="p">),</span>
-        <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">safety_settings</span> <span class="ow">and</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="n">GoogleModelFamily</span><span class="p">(</span><span class="n">model_name</span><span class="p">)</span> <span class="o">==</span> <span class="n">GoogleModelFamily</span><span class="o">.</span><span class="n">GEMINI</span>
@@ -540,7 +550,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 21, 2024.
+          Last updated on Mar 22, 2024.
       </footer>
     </div>
   </div>

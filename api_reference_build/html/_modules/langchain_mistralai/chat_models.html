@@ -186,11 +186,11 @@
   <h1>Source code for langchain_mistralai.chat_models</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">importlib.util</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncContextManager</span><span class="p">,</span>
     <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
@@ -204,6 +204,8 @@
     <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="kn">import</span> <span class="nn">httpx</span>
+<span class="kn">from</span> <span class="nn">httpx_sse</span> <span class="kn">import</span> <span class="n">EventSource</span><span class="p">,</span> <span class="n">aconnect_sse</span><span class="p">,</span> <span class="n">connect_sse</span>
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">beta</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
@@ -240,19 +242,6 @@
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">convert_to_secret_str</span><span class="p">,</span> <span class="n">get_from_dict_or_env</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
-<span class="kn">from</span> <span class="nn">mistralai.async_client</span> <span class="kn">import</span> <span class="n">MistralAsyncClient</span>
-<span class="kn">from</span> <span class="nn">mistralai.client</span> <span class="kn">import</span> <span class="n">MistralClient</span>
-<span class="kn">from</span> <span class="nn">mistralai.constants</span> <span class="kn">import</span> <span class="n">ENDPOINT</span> <span class="k">as</span> <span class="n">DEFAULT_MISTRAL_ENDPOINT</span>
-<span class="kn">from</span> <span class="nn">mistralai.exceptions</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">MistralAPIException</span><span class="p">,</span>
-    <span class="n">MistralConnectionException</span><span class="p">,</span>
-    <span class="n">MistralException</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">mistralai.models.chat_completion</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ChatCompletionResponse</span> <span class="k">as</span> <span class="n">MistralChatCompletionResponse</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">mistralai.models.chat_completion</span> <span class="kn">import</span> <span class="n">ChatMessage</span> <span class="k">as</span> <span class="n">MistralChatMessage</span>
-<span class="kn">from</span> <span class="nn">mistralai.models.chat_completion</span> <span class="kn">import</span> <span class="n">DeltaMessage</span> <span class="k">as</span> <span class="n">MistralDeltaMessage</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -265,36 +254,34 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a tenacity retry decorator, preconfigured to handle exceptions&quot;&quot;&quot;</span>
 
-    <span class="n">errors</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">MistralException</span><span class="p">,</span>
-        <span class="n">MistralAPIException</span><span class="p">,</span>
-        <span class="n">MistralConnectionException</span><span class="p">,</span>
-    <span class="p">]</span>
+    <span class="n">errors</span> <span class="o">=</span> <span class="p">[</span><span class="n">httpx</span><span class="o">.</span><span class="n">RequestError</span><span class="p">,</span> <span class="n">httpx</span><span class="o">.</span><span class="n">StreamError</span><span class="p">]</span>
     <span class="k">return</span> <span class="n">create_base_retry_decorator</span><span class="p">(</span>
         <span class="n">error_types</span><span class="o">=</span><span class="n">errors</span><span class="p">,</span> <span class="n">max_retries</span><span class="o">=</span><span class="n">llm</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span>
     <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_convert_mistral_chat_message_to_message</span><span class="p">(</span>
-    <span class="n">_message</span><span class="p">:</span> <span class="n">MistralChatMessage</span><span class="p">,</span>
+    <span class="n">_message</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseMessage</span><span class="p">:</span>
-    <span class="n">role</span> <span class="o">=</span> <span class="n">_message</span><span class="o">.</span><span class="n">role</span>
-    <span class="n">content</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">],</span> <span class="n">_message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;user&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">HumanMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span><span class="p">:</span>
-        <span class="n">additional_kwargs</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_message</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_message</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">):</span>
-            <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">tc</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_message</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">)</span>
-            <span class="p">]</span>
-        <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">SystemMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;tool&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ToolMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">_message</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ChatMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">)</span>
+    <span class="n">role</span> <span class="o">=</span> <span class="n">_message</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected role to be &#39;assistant&#39;, got </span><span class="si">{</span><span class="n">role</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">_message</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">])</span>
+
+    <span class="n">additional_kwargs</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">tool_calls</span> <span class="o">:=</span> <span class="n">_message</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">):</span>
+        <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">tc</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_aiter_sse</span><span class="p">(</span>
+    <span class="n">event_source_mgr</span><span class="p">:</span> <span class="n">AsyncContextManager</span><span class="p">[</span><span class="n">EventSource</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Iterate over the server-sent events.&quot;&quot;&quot;</span>
+    <span class="k">async</span> <span class="k">with</span> <span class="n">event_source_mgr</span> <span class="k">as</span> <span class="n">event_source</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">event_source</span><span class="o">.</span><span class="n">aiter_sse</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">data</span> <span class="o">==</span> <span class="s2">&quot;[DONE]&quot;</span><span class="p">:</span>
+                <span class="k">return</span>
+            <span class="k">yield</span> <span class="n">event</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
 
 <div class="viewcode-block" id="acompletion_with_retry"><a class="viewcode-back" href="../../chat_models/langchain_mistralai.chat_models.acompletion_with_retry.html#langchain_mistralai.chat_models.acompletion_with_retry">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">acompletion_with_retry</span><span class="p">(</span>
@@ -307,28 +294,33 @@
 
     <span class="nd">@retry_decorator</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">stream</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;stream&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">stream</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">stream</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">llm</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">chat_stream</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">event_source</span> <span class="o">=</span> <span class="n">aconnect_sse</span><span class="p">(</span>
+                <span class="n">llm</span><span class="o">.</span><span class="n">async_client</span><span class="p">,</span> <span class="s2">&quot;POST&quot;</span><span class="p">,</span> <span class="s2">&quot;/chat/completions&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">_aiter_sse</span><span class="p">(</span><span class="n">event_source</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s2">&quot;/chat/completions&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
     <span class="k">return</span> <span class="k">await</span> <span class="n">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
 <span class="k">def</span> <span class="nf">_convert_delta_to_message_chunk</span><span class="p">(</span>
-    <span class="n">_delta</span><span class="p">:</span> <span class="n">MistralDeltaMessage</span><span class="p">,</span> <span class="n">default_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]</span>
+    <span class="n">_delta</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">default_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseMessageChunk</span><span class="p">:</span>
-    <span class="n">role</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_delta</span><span class="p">,</span> <span class="s2">&quot;role&quot;</span><span class="p">)</span>
-    <span class="n">content</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_delta</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">role</span> <span class="o">=</span> <span class="n">_delta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">)</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="n">_delta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;user&quot;</span> <span class="ow">or</span> <span class="n">default_class</span> <span class="o">==</span> <span class="n">HumanMessageChunk</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">HumanMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span> <span class="ow">or</span> <span class="n">default_class</span> <span class="o">==</span> <span class="n">AIMessageChunk</span><span class="p">:</span>
         <span class="n">additional_kwargs</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">_delta</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_delta</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">):</span>
-            <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">tc</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_delta</span><span class="p">,</span> <span class="s2">&quot;tool_calls&quot;</span><span class="p">)</span>
-            <span class="p">]</span>
+        <span class="k">if</span> <span class="n">tool_calls</span> <span class="o">:=</span> <span class="n">_delta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">):</span>
+            <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">tc</span><span class="o">.</span><span class="n">model_dump</span><span class="p">()</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span> <span class="ow">or</span> <span class="n">default_class</span> <span class="o">==</span> <span class="n">SystemMessageChunk</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">SystemMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
@@ -340,44 +332,48 @@
 
 <span class="k">def</span> <span class="nf">_convert_message_to_mistral_chat_message</span><span class="p">(</span>
     <span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MistralChatMessage</span><span class="p">:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ChatMessage</span><span class="p">):</span>
-        <span class="n">mistral_message</span> <span class="o">=</span> <span class="n">MistralChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
-        <span class="n">mistral_message</span> <span class="o">=</span> <span class="n">MistralChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
         <span class="k">if</span> <span class="s2">&quot;tool_calls&quot;</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">mistralai.models.chat_completion</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore[attr-defined]</span>
-                <span class="n">ToolCall</span> <span class="k">as</span> <span class="n">MistralToolCall</span><span class="p">,</span>
-            <span class="p">)</span>
-
             <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">MistralToolCall</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">tc</span><span class="p">)</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tc</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">tc</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
                 <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span>
             <span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">tool_calls</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">mistral_message</span> <span class="o">=</span> <span class="n">MistralChatMessage</span><span class="p">(</span>
-            <span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+            <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="n">tool_calls</span><span class="p">,</span>
+        <span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
-        <span class="n">mistral_message</span> <span class="o">=</span> <span class="n">MistralChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
-        <span class="n">mistral_message</span> <span class="o">=</span> <span class="n">MistralChatMessage</span><span class="p">(</span>
-            <span class="n">role</span><span class="o">=</span><span class="s2">&quot;tool&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">name</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;tool&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="p">}</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Got unknown type </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">mistral_message</span>
 
 
 <div class="viewcode-block" id="ChatMistralAI"><a class="viewcode-back" href="../../chat_models/langchain_mistralai.chat_models.ChatMistralAI.html#langchain_mistralai.chat_models.ChatMistralAI">[docs]</a><span class="k">class</span> <span class="nc">ChatMistralAI</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A chat model that uses the MistralAI API.&quot;&quot;&quot;</span>
 
-    <span class="n">client</span><span class="p">:</span> <span class="n">MistralClient</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1">#: :meta private:</span>
-    <span class="n">async_client</span><span class="p">:</span> <span class="n">MistralAsyncClient</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1">#: :meta private:</span>
+    <span class="n">client</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1">#: :meta private:</span>
+    <span class="n">async_client</span><span class="p">:</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1">#: :meta private:</span>
     <span class="n">mistral_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SecretStr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_MISTRAL_ENDPOINT</span>
+    <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https://api.mistral.ai/v1&quot;</span>
     <span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
     <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">120</span>
     <span class="n">max_concurrent_requests</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">64</span>
@@ -390,6 +386,7 @@
 <span class="sd">       probability sum is at least top_p. Must be in the closed interval [0.0, 1.0].&quot;&quot;&quot;</span>
     <span class="n">random_seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">safe_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_default_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -400,7 +397,7 @@
             <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_tokens</span><span class="p">,</span>
             <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">top_p</span><span class="p">,</span>
             <span class="s2">&quot;random_seed&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">random_seed</span><span class="p">,</span>
-            <span class="s2">&quot;safe_mode&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_mode</span><span class="p">,</span>
+            <span class="s2">&quot;safe_prompt&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_mode</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">filtered</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">defaults</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
         <span class="k">return</span> <span class="n">filtered</span>
@@ -414,45 +411,60 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use tenacity to retry the completion call.&quot;&quot;&quot;</span>
-        <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">_create_retry_decorator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">)</span>
+        <span class="c1"># retry_decorator = _create_retry_decorator(self, run_manager=run_manager)</span>
 
-        <span class="nd">@retry_decorator</span>
+        <span class="c1"># @retry_decorator</span>
         <span class="k">def</span> <span class="nf">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-            <span class="n">stream</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;stream&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">stream</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream&quot;</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">stream</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat_stream</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+                <span class="k">def</span> <span class="nf">iter_sse</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Dict</span><span class="p">]:</span>
+                    <span class="k">with</span> <span class="n">connect_sse</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;POST&quot;</span><span class="p">,</span> <span class="s2">&quot;/chat/completions&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">kwargs</span>
+                    <span class="p">)</span> <span class="k">as</span> <span class="n">event_source</span><span class="p">:</span>
+                        <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">event_source</span><span class="o">.</span><span class="n">iter_sse</span><span class="p">():</span>
+                            <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">data</span> <span class="o">==</span> <span class="s2">&quot;[DONE]&quot;</span><span class="p">:</span>
+                                <span class="k">return</span>
+                            <span class="k">yield</span> <span class="n">event</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+                <span class="k">return</span> <span class="n">iter_sse</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s2">&quot;/chat/completions&quot;</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+        <span class="n">rtn</span> <span class="o">=</span> <span class="n">_completion_with_retry</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">rtn</span></div>
 
     <span class="nd">@root_validator</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate api key, python package exists, temperature, and top_p.&quot;&quot;&quot;</span>
-        <span class="n">mistralai_spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;mistralai&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">mistralai_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">MistralException</span><span class="p">(</span>
-                <span class="s2">&quot;Could not find mistralai python package. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install mistralai`&quot;</span>
-            <span class="p">)</span>
 
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;mistral_api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">convert_to_secret_str</span><span class="p">(</span>
             <span class="n">get_from_dict_or_env</span><span class="p">(</span>
                 <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;mistral_api_key&quot;</span><span class="p">,</span> <span class="s2">&quot;MISTRAL_API_KEY&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
             <span class="p">)</span>
         <span class="p">)</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">MistralClient</span><span class="p">(</span>
-            <span class="n">api_key</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;mistral_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
-            <span class="n">endpoint</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;endpoint&quot;</span><span class="p">],</span>
-            <span class="n">max_retries</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_retries&quot;</span><span class="p">],</span>
+        <span class="n">api_key_str</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;mistral_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+        <span class="c1"># todo: handle retries</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
+            <span class="n">base_url</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;endpoint&quot;</span><span class="p">],</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">api_key_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;timeout&quot;</span><span class="p">],</span>
         <span class="p">)</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">MistralAsyncClient</span><span class="p">(</span>
-            <span class="n">api_key</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;mistral_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
-            <span class="n">endpoint</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;endpoint&quot;</span><span class="p">],</span>
-            <span class="n">max_retries</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_retries&quot;</span><span class="p">],</span>
+        <span class="c1"># todo: handle retries and max_concurrency</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span>
+            <span class="n">base_url</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;endpoint&quot;</span><span class="p">],</span>
+            <span class="n">headers</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">api_key_str</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="p">},</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;timeout&quot;</span><span class="p">],</span>
-            <span class="n">max_concurrent_requests</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_concurrent_requests&quot;</span><span class="p">],</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
@@ -471,7 +483,7 @@
         <span class="n">stream</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
-        <span class="n">should_stream</span> <span class="o">=</span> <span class="n">stream</span> <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span>
+        <span class="n">should_stream</span> <span class="o">=</span> <span class="n">stream</span> <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span>
         <span class="k">if</span> <span class="n">should_stream</span><span class="p">:</span>
             <span class="n">stream_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span>
                 <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
@@ -485,27 +497,23 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_chat_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_create_chat_result</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">MistralChatCompletionResponse</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_create_chat_result</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
         <span class="n">generations</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">:</span>
-            <span class="n">finish_reason</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="s2">&quot;finish_reason&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">finish_reason</span><span class="p">:</span>
-                <span class="n">finish_reason</span> <span class="o">=</span> <span class="n">finish_reason</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">]:</span>
+            <span class="n">finish_reason</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;finish_reason&quot;</span><span class="p">)</span>
             <span class="n">gen</span> <span class="o">=</span> <span class="n">ChatGeneration</span><span class="p">(</span>
-                <span class="n">message</span><span class="o">=</span><span class="n">_convert_mistral_chat_message_to_message</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">message</span><span class="p">),</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">_convert_mistral_chat_message_to_message</span><span class="p">(</span><span class="n">res</span><span class="p">[</span><span class="s2">&quot;message&quot;</span><span class="p">]),</span>
                 <span class="n">generation_info</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;finish_reason&quot;</span><span class="p">:</span> <span class="n">finish_reason</span><span class="p">},</span>
             <span class="p">)</span>
             <span class="n">generations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">gen</span><span class="p">)</span>
-        <span class="n">token_usage</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;usage&quot;</span><span class="p">)</span>
-        <span class="n">token_usage</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">(</span><span class="n">token_usage</span><span class="p">)</span> <span class="k">if</span> <span class="n">token_usage</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="n">token_usage</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="p">{})</span>
+
         <span class="n">llm_output</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;token_usage&quot;</span><span class="p">:</span> <span class="n">token_usage</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">}</span>
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">,</span> <span class="n">llm_output</span><span class="o">=</span><span class="n">llm_output</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_create_message_dicts</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">MistralChatMessage</span><span class="p">],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
         <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client_params</span>
         <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="s2">&quot;stop&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">&quot;stop&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
@@ -526,20 +534,24 @@
         <span class="n">message_dicts</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_message_dicts</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
         <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
 
-        <span class="n">default_chunk_class</span> <span class="o">=</span> <span class="n">AIMessageChunk</span>
+        <span class="n">default_chunk_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]</span> <span class="o">=</span> <span class="n">AIMessageChunk</span>
         <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">completion_with_retry</span><span class="p">(</span>
             <span class="n">messages</span><span class="o">=</span><span class="n">message_dicts</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span>
         <span class="p">):</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">choices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">delta</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">delta</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">delta</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;delta&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">delta</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]:</span>
                 <span class="k">continue</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">_convert_delta_to_message_chunk</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">default_chunk_class</span><span class="p">)</span>
-            <span class="n">default_chunk_class</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="vm">__class__</span>
+            <span class="n">new_chunk</span> <span class="o">=</span> <span class="n">_convert_delta_to_message_chunk</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">default_chunk_class</span><span class="p">)</span>
+            <span class="c1"># make future chunks same type as first chunk</span>
+            <span class="n">default_chunk_class</span> <span class="o">=</span> <span class="n">new_chunk</span><span class="o">.</span><span class="vm">__class__</span>
+            <span class="n">gen_chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">new_chunk</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
-            <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
+                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span>
+                    <span class="n">token</span><span class="o">=</span><span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">new_chunk</span><span class="o">.</span><span class="n">content</span><span class="p">),</span> <span class="n">chunk</span><span class="o">=</span><span class="n">gen_chunk</span>
+                <span class="p">)</span>
+            <span class="k">yield</span> <span class="n">gen_chunk</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -551,20 +563,24 @@
         <span class="n">message_dicts</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_message_dicts</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
         <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
 
-        <span class="n">default_chunk_class</span> <span class="o">=</span> <span class="n">AIMessageChunk</span>
+        <span class="n">default_chunk_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]</span> <span class="o">=</span> <span class="n">AIMessageChunk</span>
         <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">acompletion_with_retry</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">message_dicts</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span>
         <span class="p">):</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">choices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">delta</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">delta</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">delta</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;delta&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">delta</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]:</span>
                 <span class="k">continue</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">_convert_delta_to_message_chunk</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">default_chunk_class</span><span class="p">)</span>
-            <span class="n">default_chunk_class</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="vm">__class__</span>
+            <span class="n">new_chunk</span> <span class="o">=</span> <span class="n">_convert_delta_to_message_chunk</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">default_chunk_class</span><span class="p">)</span>
+            <span class="c1"># make future chunks same type as first chunk</span>
+            <span class="n">default_chunk_class</span> <span class="o">=</span> <span class="n">new_chunk</span><span class="o">.</span><span class="vm">__class__</span>
+            <span class="n">gen_chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">new_chunk</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
-            <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span>
+                    <span class="n">token</span><span class="o">=</span><span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">new_chunk</span><span class="o">.</span><span class="n">content</span><span class="p">),</span> <span class="n">chunk</span><span class="o">=</span><span class="n">gen_chunk</span>
+                <span class="p">)</span>
+            <span class="k">yield</span> <span class="n">gen_chunk</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_agenerate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -774,7 +790,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 21, 2024.
+          Last updated on Mar 22, 2024.
       </footer>
     </div>
   </div>
