@@ -189,6 +189,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -206,6 +207,12 @@
 <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AIMessage</span><span class="p">,</span>
+    <span class="n">BaseMessage</span><span class="p">,</span>
+    <span class="n">HumanMessage</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.json_schema</span> <span class="kn">import</span> <span class="n">dereference_refs</span>
 
@@ -518,13 +525,106 @@
         <span class="k">return</span> <span class="n">tool</span>
     <span class="n">function</span> <span class="o">=</span> <span class="n">convert_to_openai_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span> <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">function</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="tool_example_to_messages"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.tool_example_to_messages.html#langchain_core.utils.function_calling.tool_example_to_messages">[docs]</a><span class="k">def</span> <span class="nf">tool_example_to_messages</span><span class="p">(</span>
+    <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tool_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">tool_outputs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an example into a list of messages that can be fed into an LLM.</span>
+
+<span class="sd">    This code is an adapter that converts a single example to a list of messages</span>
+<span class="sd">    that can be fed into a chat model.</span>
+
+<span class="sd">    The list of messages per example corresponds to:</span>
+
+<span class="sd">    1) HumanMessage: contains the content from which content should be extracted.</span>
+<span class="sd">    2) AIMessage: contains the extracted information from the model</span>
+<span class="sd">    3) ToolMessage: contains confirmation to the model that the model requested a tool</span>
+<span class="sd">        correctly.</span>
+
+<span class="sd">    The ToolMessage is required because some chat models are hyper-optimized for agents</span>
+<span class="sd">    rather than for an extraction use case.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        input: string, the user input</span>
+<span class="sd">        tool_calls: List[BaseModel], a list of tool calls represented as Pydantic</span>
+<span class="sd">            BaseModels</span>
+<span class="sd">        tool_outputs: Optional[List[str]], a list of tool call outputs.</span>
+<span class="sd">            Does not need to be provided. If not provided, a placeholder value</span>
+<span class="sd">            will be inserted.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A list of messages</span>
+
+<span class="sd">    Examples:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from typing import List, Optional</span>
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+<span class="sd">            from langchain_openai import ChatOpenAI</span>
+
+<span class="sd">            class Person(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Information about a person.&#39;&#39;&#39;</span>
+<span class="sd">                name: Optional[str] = Field(..., description=&quot;The name of the person&quot;)</span>
+<span class="sd">                hair_color: Optional[str] = Field(</span>
+<span class="sd">                    ..., description=&quot;The color of the peron&#39;s eyes if known&quot;</span>
+<span class="sd">                )</span>
+<span class="sd">                height_in_meters: Optional[str] = Field(</span>
+<span class="sd">                    ..., description=&quot;Height in METERs&quot;</span>
+<span class="sd">                )</span>
+
+<span class="sd">            examples = [</span>
+<span class="sd">                (</span>
+<span class="sd">                    &quot;The ocean is vast and blue. It&#39;s more than 20,000 feet deep.&quot;,</span>
+<span class="sd">                    Person(name=None, height_in_meters=None, hair_color=None),</span>
+<span class="sd">                ),</span>
+<span class="sd">                (</span>
+<span class="sd">                    &quot;Fiona traveled far from France to Spain.&quot;,</span>
+<span class="sd">                    Person(name=&quot;Fiona&quot;, height_in_meters=None, hair_color=None),</span>
+<span class="sd">                ),</span>
+<span class="sd">            ]</span>
+
+
+<span class="sd">            messages = []</span>
+
+<span class="sd">            for txt, tool_call in examples:</span>
+<span class="sd">                messages.extend(</span>
+<span class="sd">                    tool_example_to_messages(txt, [tool_call])</span>
+<span class="sd">                )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="nb">input</span><span class="p">)]</span>
+    <span class="n">openai_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+        <span class="n">openai_tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()),</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="c1"># The name of the function right now corresponds to the name</span>
+                    <span class="c1"># of the pydantic model. This is implicit in the API right now,</span>
+                    <span class="c1"># and will be improved over time.</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                    <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                <span class="p">},</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="n">openai_tool_calls</span><span class="p">})</span>
+    <span class="p">)</span>
+    <span class="n">tool_outputs</span> <span class="o">=</span> <span class="n">tool_outputs</span> <span class="ow">or</span> <span class="p">[</span><span class="s2">&quot;You have correctly called this tool.&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span>
+        <span class="n">openai_tool_calls</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">output</span><span class="p">,</span> <span class="n">tool_call_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tool_outputs</span><span class="p">,</span> <span class="n">openai_tool_calls</span><span class="p">):</span>
+        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ToolMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">output</span><span class="p">,</span> <span class="n">tool_call_id</span><span class="o">=</span><span class="n">tool_call_dict</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]))</span>  <span class="c1"># type: ignore</span>
+    <span class="k">return</span> <span class="n">messages</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 22, 2024.
+          Last updated on Mar 23, 2024.
       </footer>
     </div>
   </div>
