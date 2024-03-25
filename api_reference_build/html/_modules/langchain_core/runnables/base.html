@@ -624,12 +624,86 @@
         <span class="o">*</span><span class="n">others</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Runnable</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Other</span><span class="p">],</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Other</span><span class="p">]],</span>
         <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">Input</span><span class="p">,</span> <span class="n">Other</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compose this runnable with another object to create a RunnableSequence.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compose this Runnable with Runnable-like objects to make a RunnableSequence.</span>
+
+<span class="sd">        Equivalent to `RunnableSequence(self, *others)` or `self | others[0] | ...`</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_core.runnables import RunnableLambda</span>
+
+<span class="sd">                def add_one(x: int) -&gt; int:</span>
+<span class="sd">                    return x + 1</span>
+
+<span class="sd">                def mul_two(x: int) -&gt; int:</span>
+<span class="sd">                    return x * 2</span>
+
+<span class="sd">                runnable_1 = RunnableLambda(add_one)</span>
+<span class="sd">                runnable_2 = RunnableLambda(mul_two)</span>
+<span class="sd">                sequence = runnable_1.pipe(runnable_2)</span>
+<span class="sd">                # Or equivalently:</span>
+<span class="sd">                # sequence = runnable_1 | runnable_2</span>
+<span class="sd">                # sequence = RunnableSequence(first=runnable_1, last=runnable_2)</span>
+<span class="sd">                sequence.invoke(1)</span>
+<span class="sd">                await sequence.ainvoke(1)</span>
+<span class="sd">                # -&gt; 4</span>
+
+<span class="sd">                sequence.batch([1, 2, 3])</span>
+<span class="sd">                await sequence.abatch([1, 2, 3])</span>
+<span class="sd">                # -&gt; [4, 6, 8]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">RunnableSequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">others</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="Runnable.pick"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.Runnable.html#langchain_community.agent_toolkits.nla.tool.Runnable.pick">[docs]</a>    <span class="k">def</span> <span class="nf">pick</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Pick keys from the dict output of this runnable.</span>
-<span class="sd">        Returns a new runnable.&quot;&quot;&quot;</span>
+
+<span class="sd">        Pick single key:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                import json</span>
+
+<span class="sd">                from langchain_core.runnables import RunnableLambda, RunnableMap</span>
+
+<span class="sd">                as_str = RunnableLambda(str)</span>
+<span class="sd">                as_json = RunnableLambda(json.loads)</span>
+<span class="sd">                chain = RunnableMap(str=as_str, json=as_json)</span>
+
+<span class="sd">                chain.invoke(&quot;[1, 2, 3]&quot;)</span>
+<span class="sd">                # -&gt; {&quot;str&quot;: &quot;[1, 2, 3]&quot;, &quot;json&quot;: [1, 2, 3]}</span>
+
+<span class="sd">                json_only_chain = chain.pick(&quot;json&quot;)</span>
+<span class="sd">                json_only_chain.invoke(&quot;[1, 2, 3]&quot;)</span>
+<span class="sd">                # -&gt; [1, 2, 3]</span>
+
+<span class="sd">        Pick list of keys:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from typing import Any</span>
+
+<span class="sd">                import json</span>
+
+<span class="sd">                from langchain_core.runnables import RunnableLambda, RunnableMap</span>
+
+<span class="sd">                as_str = RunnableLambda(str)</span>
+<span class="sd">                as_json = RunnableLambda(json.loads)</span>
+<span class="sd">                def as_bytes(x: Any) -&gt; bytes:</span>
+<span class="sd">                    return bytes(x, &quot;utf-8&quot;)</span>
+
+<span class="sd">                chain = RunnableMap(</span>
+<span class="sd">                    str=as_str,</span>
+<span class="sd">                    json=as_json,</span>
+<span class="sd">                    bytes=RunnableLambda(as_bytes)</span>
+<span class="sd">                )</span>
+
+<span class="sd">                chain.invoke(&quot;[1, 2, 3]&quot;)</span>
+<span class="sd">                # -&gt; {&quot;str&quot;: &quot;[1, 2, 3]&quot;, &quot;json&quot;: [1, 2, 3], &quot;bytes&quot;: b&quot;[1, 2, 3]&quot;}</span>
+
+<span class="sd">                json_and_bytes_chain = chain.pick([&quot;json&quot;, &quot;bytes&quot;])</span>
+<span class="sd">                json_and_bytes_chain.invoke(&quot;[1, 2, 3]&quot;)</span>
+<span class="sd">                # -&gt; {&quot;json&quot;: [1, 2, 3], &quot;bytes&quot;: b&quot;[1, 2, 3]&quot;}</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="kn">from</span> <span class="nn">langchain_core.runnables.passthrough</span> <span class="kn">import</span> <span class="n">RunnablePick</span>
 
         <span class="k">return</span> <span class="bp">self</span> <span class="o">|</span> <span class="n">RunnablePick</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span></div>
@@ -4993,7 +5067,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 24, 2024.
+          Last updated on Mar 25, 2024.
       </footer>
     </div>
   </div>
