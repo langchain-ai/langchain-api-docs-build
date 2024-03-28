@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -132,6 +135,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
@@ -1522,6 +1526,37 @@
 <div class="viewcode-block" id="Runnable.bind"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.base.Runnable.html#langchain_community.agent_toolkits.nla.tool.Runnable.bind">[docs]</a>    <span class="k">def</span> <span class="nf">bind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">Input</span><span class="p">,</span> <span class="n">Output</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Bind arguments to a Runnable, returning a new Runnable.</span>
+
+<span class="sd">        Useful when a runnable in a chain requires an argument that is not</span>
+<span class="sd">        in the output of the previous runnable or included in the user input.</span>
+
+<span class="sd">        Example:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_community.chat_models import ChatOllama</span>
+<span class="sd">            from langchain_core.output_parsers import StrOutputParser</span>
+
+<span class="sd">            llm = ChatOllama(model=&#39;llama2&#39;)</span>
+
+<span class="sd">            # Without bind.</span>
+<span class="sd">            chain = (</span>
+<span class="sd">                llm</span>
+<span class="sd">                | StrOutputParser()</span>
+<span class="sd">            )</span>
+
+<span class="sd">            chain.invoke(&quot;Repeat quoted words exactly: &#39;One two three four five.&#39;&quot;)</span>
+<span class="sd">            # Output is &#39;One two three four five.&#39;</span>
+
+<span class="sd">            # With bind.</span>
+<span class="sd">            chain = (</span>
+<span class="sd">                llm.bind(stop=[&quot;three&quot;])</span>
+<span class="sd">                | StrOutputParser()</span>
+<span class="sd">            )</span>
+
+<span class="sd">            chain.invoke(&quot;Repeat quoted words exactly: &#39;One two three four five.&#39;&quot;)</span>
+<span class="sd">            # Output is &#39;One two&#39;</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">RunnableBinding</span><span class="p">(</span><span class="n">bound</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{})</span></div>
 
@@ -1560,6 +1595,26 @@
 <span class="sd">        The Run object contains information about the run, including its id,</span>
 <span class="sd">        type, input, output, error, start_time, end_time, and any tags or metadata</span>
 <span class="sd">        added to the run.</span>
+
+<span class="sd">        Example:</span>
+
+<span class="sd">        .. code-block:: python</span>
+<span class="sd">            from langchain_core.runnables import RunnableLambda</span>
+<span class="sd">            import time</span>
+
+<span class="sd">            def test_runnable(time_to_sleep : int):</span>
+<span class="sd">                time.sleep(time_to_sleep)</span>
+
+<span class="sd">            def fn_start(run_obj : Runnable):</span>
+<span class="sd">                print(&quot;start_time:&quot;, run_obj.start_time)</span>
+
+<span class="sd">            def fn_end(run_obj : Runnable):</span>
+<span class="sd">                print(&quot;end_time:&quot;, run_obj.end_time)</span>
+
+<span class="sd">            RunnableLambda(test_runnable).with_listeners(</span>
+<span class="sd">                on_start=fn_start,</span>
+<span class="sd">                on_end=fn_end</span>
+<span class="sd">                ).invoke(2)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">langchain_core.tracers.root_listeners</span> <span class="kn">import</span> <span class="n">RootListenersTracer</span>
 
@@ -1657,6 +1712,18 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Return a new Runnable that maps a list of inputs to a list of outputs,</span>
 <span class="sd">        by calling invoke() with each input.</span>
+
+<span class="sd">        Example:</span>
+
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                    from langchain_core.runnables import RunnableLambda</span>
+
+<span class="sd">                    def _lambda(x: int) -&gt; int:</span>
+<span class="sd">                        return x + 1</span>
+
+<span class="sd">                    runnable = RunnableLambda(_lambda)</span>
+<span class="sd">                    print(runnable.map().invoke([1, 2, 3])) # [2, 3, 4]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">RunnableEach</span><span class="p">(</span><span class="n">bound</span><span class="o">=</span><span class="bp">self</span><span class="p">)</span></div>
 
@@ -5067,7 +5134,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 25, 2024.
+          Last updated on Mar 28, 2024.
       </footer>
     </div>
   </div>

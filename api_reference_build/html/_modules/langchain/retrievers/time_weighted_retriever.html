@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -132,6 +135,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
@@ -188,7 +192,10 @@
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
-<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForRetrieverRun</span>
+<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AsyncCallbackManagerForRetrieverRun</span><span class="p">,</span>
+    <span class="n">CallbackManagerForRetrieverRun</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span>
 <span class="kn">from</span> <span class="nn">langchain_core.retrievers</span> <span class="kn">import</span> <span class="n">BaseRetriever</span>
@@ -275,17 +282,26 @@
                 <span class="n">results</span><span class="p">[</span><span class="n">buffer_idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">relevance</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">results</span></div>
 
-    <span class="k">def</span> <span class="nf">_get_relevant_documents</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">:</span> <span class="n">CallbackManagerForRetrieverRun</span>
+<div class="viewcode-block" id="TimeWeightedVectorStoreRetriever.aget_salient_docs"><a class="viewcode-back" href="../../../retrievers/langchain.retrievers.time_weighted_retriever.TimeWeightedVectorStoreRetriever.html#langchain.retrievers.time_weighted_retriever.TimeWeightedVectorStoreRetriever.aget_salient_docs">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aget_salient_docs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return documents that are salient to the query.&quot;&quot;&quot;</span>
+        <span class="n">docs_and_scores</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span>
+        <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">asimilarity_search_with_relevance_scores</span><span class="p">(</span>
+                <span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">search_kwargs</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">fetched_doc</span><span class="p">,</span> <span class="n">relevance</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;buffer_idx&quot;</span> <span class="ow">in</span> <span class="n">fetched_doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">:</span>
+                <span class="n">buffer_idx</span> <span class="o">=</span> <span class="n">fetched_doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;buffer_idx&quot;</span><span class="p">]</span>
+                <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_stream</span><span class="p">[</span><span class="n">buffer_idx</span><span class="p">]</span>
+                <span class="n">results</span><span class="p">[</span><span class="n">buffer_idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">relevance</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+
+    <span class="k">def</span> <span class="nf">_get_rescored_docs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">docs_and_scores</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return documents that are relevant to the query.&quot;&quot;&quot;</span>
         <span class="n">current_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
-        <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;buffer_idx&quot;</span><span class="p">]:</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_salience</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_stream</span><span class="p">[</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="p">:]</span>
-        <span class="p">}</span>
-        <span class="c1"># If a doc is considered salient, update the salience score</span>
-        <span class="n">docs_and_scores</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_salient_docs</span><span class="p">(</span><span class="n">query</span><span class="p">))</span>
         <span class="n">rescored_docs</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_combined_score</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">relevance</span><span class="p">,</span> <span class="n">current_time</span><span class="p">))</span>
             <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">relevance</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
@@ -299,6 +315,28 @@
             <span class="n">buffered_doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;last_accessed_at&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">current_time</span>
             <span class="n">result</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">buffered_doc</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span> <span class="nf">_get_relevant_documents</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">:</span> <span class="n">CallbackManagerForRetrieverRun</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+        <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;buffer_idx&quot;</span><span class="p">]:</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_salience</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_stream</span><span class="p">[</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="p">:]</span>
+        <span class="p">}</span>
+        <span class="c1"># If a doc is considered salient, update the salience score</span>
+        <span class="n">docs_and_scores</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_salient_docs</span><span class="p">(</span><span class="n">query</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_rescored_docs</span><span class="p">(</span><span class="n">docs_and_scores</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_aget_relevant_documents</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">:</span> <span class="n">AsyncCallbackManagerForRetrieverRun</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+        <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;buffer_idx&quot;</span><span class="p">]:</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_salience</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_stream</span><span class="p">[</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span> <span class="p">:]</span>
+        <span class="p">}</span>
+        <span class="c1"># If a doc is considered salient, update the salience score</span>
+        <span class="n">docs_and_scores</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aget_salient_docs</span><span class="p">(</span><span class="n">query</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_rescored_docs</span><span class="p">(</span><span class="n">docs_and_scores</span><span class="p">)</span>
 
 <div class="viewcode-block" id="TimeWeightedVectorStoreRetriever.add_documents"><a class="viewcode-back" href="../../../retrievers/langchain.retrievers.time_weighted_retriever.TimeWeightedVectorStoreRetriever.html#langchain.retrievers.time_weighted_retriever.TimeWeightedVectorStoreRetriever.add_documents">[docs]</a>    <span class="k">def</span> <span class="nf">add_documents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add documents to vectorstore.&quot;&quot;&quot;</span>
@@ -339,7 +377,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 25, 2024.
+          Last updated on Mar 28, 2024.
       </footer>
     </div>
   </div>

@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -132,6 +135,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
@@ -187,8 +191,10 @@
 <span></span><span class="sd">&quot;&quot;&quot;Example selector that selects examples based on SemanticSimilarity.&quot;&quot;&quot;</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span>
 
+<span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.example_selectors.base</span> <span class="kn">import</span> <span class="n">BaseExampleSelector</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Extra</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VectorStore</span>
@@ -202,7 +208,7 @@
     <span class="k">return</span> <span class="p">[</span><span class="n">values</span><span class="p">[</span><span class="n">val</span><span class="p">]</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">values</span><span class="p">)]</span></div>
 
 
-<div class="viewcode-block" id="SemanticSimilarityExampleSelector"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector">[docs]</a><span class="k">class</span> <span class="nc">SemanticSimilarityExampleSelector</span><span class="p">(</span><span class="n">BaseExampleSelector</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">_VectorStoreExampleSelector</span><span class="p">(</span><span class="n">BaseExampleSelector</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Example selector that selects examples based on SemanticSimilarity.&quot;&quot;&quot;</span>
 
     <span class="n">vectorstore</span><span class="p">:</span> <span class="n">VectorStore</span>
@@ -223,34 +229,63 @@
         <span class="n">extra</span> <span class="o">=</span> <span class="n">Extra</span><span class="o">.</span><span class="n">forbid</span>
         <span class="n">arbitrary_types_allowed</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="SemanticSimilarityExampleSelector.add_example"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.add_example">[docs]</a>    <span class="k">def</span> <span class="nf">add_example</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">example</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add new example to vectorstore.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">:</span>
-            <span class="n">string_example</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-                <span class="n">sorted_values</span><span class="p">({</span><span class="n">key</span><span class="p">:</span> <span class="n">example</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">})</span>
-            <span class="p">)</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_example_to_text</span><span class="p">(</span>
+        <span class="n">example</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">input_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">input_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">({</span><span class="n">key</span><span class="p">:</span> <span class="n">example</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">input_keys</span><span class="p">}))</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">string_example</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">(</span><span class="n">example</span><span class="p">))</span>
-        <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">([</span><span class="n">string_example</span><span class="p">],</span> <span class="n">metadatas</span><span class="o">=</span><span class="p">[</span><span class="n">example</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+            <span class="k">return</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">(</span><span class="n">example</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">_documents_to_examples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="c1"># Get the examples from the metadata.</span>
+        <span class="c1"># This assumes that examples are stored in metadata.</span>
+        <span class="n">examples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">dict</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
+        <span class="c1"># If example keys are provided, filter examples to those keys.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_keys</span><span class="p">:</span>
+            <span class="n">examples</span> <span class="o">=</span> <span class="p">[{</span><span class="n">k</span><span class="p">:</span> <span class="n">eg</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_keys</span><span class="p">}</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">examples</span>
+
+    <span class="k">def</span> <span class="nf">add_example</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">example</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add new example to vectorstore.&quot;&quot;&quot;</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">example</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">)],</span> <span class="n">metadatas</span><span class="o">=</span><span class="p">[</span><span class="n">example</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">aadd_example</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">example</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add new example to vectorstore.&quot;&quot;&quot;</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">aadd_texts</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">example</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">)],</span> <span class="n">metadatas</span><span class="o">=</span><span class="p">[</span><span class="n">example</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="SemanticSimilarityExampleSelector"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector">[docs]</a><span class="k">class</span> <span class="nc">SemanticSimilarityExampleSelector</span><span class="p">(</span><span class="n">_VectorStoreExampleSelector</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Example selector that selects examples based on SemanticSimilarity.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="SemanticSimilarityExampleSelector.select_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.select_examples">[docs]</a>    <span class="k">def</span> <span class="nf">select_examples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_variables</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Select which examples to use based on semantic similarity.&quot;&quot;&quot;</span>
         <span class="c1"># Get the docs with the highest similarity.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">:</span>
-            <span class="n">input_variables</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">input_variables</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">}</span>
         <span class="n">vectorstore_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">query</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">(</span><span class="n">input_variables</span><span class="p">))</span>
         <span class="n">example_docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">similarity_search</span><span class="p">(</span>
-            <span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span> <span class="o">**</span><span class="n">vectorstore_kwargs</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">input_variables</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">),</span>
+            <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">vectorstore_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c1"># Get the examples from the metadata.</span>
-        <span class="c1"># This assumes that examples are stored in metadata.</span>
-        <span class="n">examples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">dict</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">example_docs</span><span class="p">]</span>
-        <span class="c1"># If example keys are provided, filter examples to those keys.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_keys</span><span class="p">:</span>
-            <span class="n">examples</span> <span class="o">=</span> <span class="p">[{</span><span class="n">k</span><span class="p">:</span> <span class="n">eg</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_keys</span><span class="p">}</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">examples</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_documents_to_examples</span><span class="p">(</span><span class="n">example_docs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SemanticSimilarityExampleSelector.aselect_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.aselect_examples">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aselect_examples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_variables</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Select which examples to use based on semantic similarity.&quot;&quot;&quot;</span>
+        <span class="c1"># Get the docs with the highest similarity.</span>
+        <span class="n">vectorstore_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">example_docs</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">asimilarity_search</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">input_variables</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">),</span>
+            <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">vectorstore_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_documents_to_examples</span><span class="p">(</span><span class="n">example_docs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="SemanticSimilarityExampleSelector.from_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.from_examples">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_examples</span><span class="p">(</span>
@@ -276,19 +311,60 @@
 <span class="sd">            k: Number of examples to select</span>
 <span class="sd">            input_keys: If provided, the search is based on the input variables</span>
 <span class="sd">                instead of all variables.</span>
+<span class="sd">            example_keys: If provided, keys to filter examples to.</span>
+<span class="sd">            vectorstore_kwargs: Extra arguments passed to similarity_search function</span>
+<span class="sd">                of the vectorstore.</span>
 <span class="sd">            vectorstore_cls_kwargs: optional kwargs containing url for vector store</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            The ExampleSelector instantiated, backed by a vector store.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">input_keys</span><span class="p">:</span>
-            <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">eg</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">input_keys</span><span class="p">}))</span>
-                <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span>
-            <span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">(</span><span class="n">eg</span><span class="p">))</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
+        <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">cls</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">eg</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">)</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
         <span class="n">vectorstore</span> <span class="o">=</span> <span class="n">vectorstore_cls</span><span class="o">.</span><span class="n">from_texts</span><span class="p">(</span>
+            <span class="n">string_examples</span><span class="p">,</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">examples</span><span class="p">,</span> <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">vectorstore</span><span class="o">=</span><span class="n">vectorstore</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">input_keys</span><span class="o">=</span><span class="n">input_keys</span><span class="p">,</span>
+            <span class="n">example_keys</span><span class="o">=</span><span class="n">example_keys</span><span class="p">,</span>
+            <span class="n">vectorstore_kwargs</span><span class="o">=</span><span class="n">vectorstore_kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="SemanticSimilarityExampleSelector.afrom_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.html#langchain_core.example_selectors.semantic_similarity.SemanticSimilarityExampleSelector.afrom_examples">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">afrom_examples</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">examples</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span>
+        <span class="n">embeddings</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
+        <span class="n">vectorstore_cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">VectorStore</span><span class="p">],</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">input_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">example_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vectorstore_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SemanticSimilarityExampleSelector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create k-shot example selector using example list and embeddings.</span>
+
+<span class="sd">        Reshuffles examples dynamically based on query similarity.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            examples: List of examples to use in the prompt.</span>
+<span class="sd">            embeddings: An initialized embedding API interface, e.g. OpenAIEmbeddings().</span>
+<span class="sd">            vectorstore_cls: A vector store DB interface class, e.g. FAISS.</span>
+<span class="sd">            k: Number of examples to select</span>
+<span class="sd">            input_keys: If provided, the search is based on the input variables</span>
+<span class="sd">                instead of all variables.</span>
+<span class="sd">            example_keys: If provided, keys to filter examples to.</span>
+<span class="sd">            vectorstore_kwargs: Extra arguments passed to similarity_search function</span>
+<span class="sd">                of the vectorstore.</span>
+<span class="sd">            vectorstore_cls_kwargs: optional kwargs containing url for vector store</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The ExampleSelector instantiated, backed by a vector store.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">cls</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">eg</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">)</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
+        <span class="n">vectorstore</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vectorstore_cls</span><span class="o">.</span><span class="n">afrom_texts</span><span class="p">(</span>
             <span class="n">string_examples</span><span class="p">,</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">examples</span><span class="p">,</span> <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
@@ -300,7 +376,7 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="MaxMarginalRelevanceExampleSelector"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.html#langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector">[docs]</a><span class="k">class</span> <span class="nc">MaxMarginalRelevanceExampleSelector</span><span class="p">(</span><span class="n">SemanticSimilarityExampleSelector</span><span class="p">):</span>
+<div class="viewcode-block" id="MaxMarginalRelevanceExampleSelector"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.html#langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector">[docs]</a><span class="k">class</span> <span class="nc">MaxMarginalRelevanceExampleSelector</span><span class="p">(</span><span class="n">_VectorStoreExampleSelector</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;ExampleSelector that selects examples based on Max Marginal Relevance.</span>
 
 <span class="sd">    This was shown to improve performance in this paper:</span>
@@ -311,21 +387,20 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Number of examples to fetch to rerank.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="MaxMarginalRelevanceExampleSelector.select_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.html#langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.select_examples">[docs]</a>    <span class="k">def</span> <span class="nf">select_examples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_variables</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Select which examples to use based on semantic similarity.&quot;&quot;&quot;</span>
-        <span class="c1"># Get the docs with the highest similarity.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">:</span>
-            <span class="n">input_variables</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">input_variables</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">}</span>
-        <span class="n">query</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">(</span><span class="n">input_variables</span><span class="p">))</span>
         <span class="n">example_docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">max_marginal_relevance_search</span><span class="p">(</span>
-            <span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span> <span class="n">fetch_k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fetch_k</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">input_variables</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">),</span>
+            <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fetch_k</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c1"># Get the examples from the metadata.</span>
-        <span class="c1"># This assumes that examples are stored in metadata.</span>
-        <span class="n">examples</span> <span class="o">=</span> <span class="p">[</span><span class="nb">dict</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">example_docs</span><span class="p">]</span>
-        <span class="c1"># If example keys are provided, filter examples to those keys.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_keys</span><span class="p">:</span>
-            <span class="n">examples</span> <span class="o">=</span> <span class="p">[{</span><span class="n">k</span><span class="p">:</span> <span class="n">eg</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">example_keys</span><span class="p">}</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">examples</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_documents_to_examples</span><span class="p">(</span><span class="n">example_docs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MaxMarginalRelevanceExampleSelector.aselect_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.html#langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.aselect_examples">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aselect_examples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_variables</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="n">example_docs</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">amax_marginal_relevance_search</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">input_variables</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_keys</span><span class="p">),</span>
+            <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fetch_k</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_documents_to_examples</span><span class="p">(</span><span class="n">example_docs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="MaxMarginalRelevanceExampleSelector.from_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.html#langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.from_examples">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_examples</span><span class="p">(</span>
@@ -336,42 +411,96 @@
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">input_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+        <span class="n">example_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vectorstore_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MaxMarginalRelevanceExampleSelector</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create k-shot example selector using example list and embeddings.</span>
 
-<span class="sd">        Reshuffles examples dynamically based on query similarity.</span>
+<span class="sd">        Reshuffles examples dynamically based on Max Marginal Relevance.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            examples: List of examples to use in the prompt.</span>
-<span class="sd">            embeddings: An iniialized embedding API interface, e.g. OpenAIEmbeddings().</span>
+<span class="sd">            embeddings: An initialized embedding API interface, e.g. OpenAIEmbeddings().</span>
 <span class="sd">            vectorstore_cls: A vector store DB interface class, e.g. FAISS.</span>
 <span class="sd">            k: Number of examples to select</span>
+<span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
 <span class="sd">            input_keys: If provided, the search is based on the input variables</span>
 <span class="sd">                instead of all variables.</span>
+<span class="sd">            example_keys: If provided, keys to filter examples to.</span>
+<span class="sd">            vectorstore_kwargs: Extra arguments passed to similarity_search function</span>
+<span class="sd">                of the vectorstore.</span>
 <span class="sd">            vectorstore_cls_kwargs: optional kwargs containing url for vector store</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            The ExampleSelector instantiated, backed by a vector store.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">input_keys</span><span class="p">:</span>
-            <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">({</span><span class="n">k</span><span class="p">:</span> <span class="n">eg</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">input_keys</span><span class="p">}))</span>
-                <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span>
-            <span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sorted_values</span><span class="p">(</span><span class="n">eg</span><span class="p">))</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
+        <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">cls</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">eg</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">)</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
         <span class="n">vectorstore</span> <span class="o">=</span> <span class="n">vectorstore_cls</span><span class="o">.</span><span class="n">from_texts</span><span class="p">(</span>
             <span class="n">string_examples</span><span class="p">,</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">examples</span><span class="p">,</span> <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">vectorstore</span><span class="o">=</span><span class="n">vectorstore</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span> <span class="n">input_keys</span><span class="o">=</span><span class="n">input_keys</span><span class="p">)</span></div></div>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">vectorstore</span><span class="o">=</span><span class="n">vectorstore</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">input_keys</span><span class="o">=</span><span class="n">input_keys</span><span class="p">,</span>
+            <span class="n">example_keys</span><span class="o">=</span><span class="n">example_keys</span><span class="p">,</span>
+            <span class="n">vectorstore_kwargs</span><span class="o">=</span><span class="n">vectorstore_kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="MaxMarginalRelevanceExampleSelector.afrom_examples"><a class="viewcode-back" href="../../../example_selectors/langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.html#langchain_core.example_selectors.semantic_similarity.MaxMarginalRelevanceExampleSelector.afrom_examples">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">afrom_examples</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">examples</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span>
+        <span class="n">embeddings</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
+        <span class="n">vectorstore_cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">VectorStore</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">input_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+        <span class="n">example_keys</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vectorstore_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MaxMarginalRelevanceExampleSelector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create k-shot example selector using example list and embeddings.</span>
+
+<span class="sd">        Reshuffles examples dynamically based on Max Marginal Relevance.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            examples: List of examples to use in the prompt.</span>
+<span class="sd">            embeddings: An initialized embedding API interface, e.g. OpenAIEmbeddings().</span>
+<span class="sd">            vectorstore_cls: A vector store DB interface class, e.g. FAISS.</span>
+<span class="sd">            k: Number of examples to select</span>
+<span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
+<span class="sd">            input_keys: If provided, the search is based on the input variables</span>
+<span class="sd">                instead of all variables.</span>
+<span class="sd">            example_keys: If provided, keys to filter examples to.</span>
+<span class="sd">            vectorstore_kwargs: Extra arguments passed to similarity_search function</span>
+<span class="sd">                of the vectorstore.</span>
+<span class="sd">            vectorstore_cls_kwargs: optional kwargs containing url for vector store</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The ExampleSelector instantiated, backed by a vector store.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">string_examples</span> <span class="o">=</span> <span class="p">[</span><span class="bp">cls</span><span class="o">.</span><span class="n">_example_to_text</span><span class="p">(</span><span class="n">eg</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">)</span> <span class="k">for</span> <span class="n">eg</span> <span class="ow">in</span> <span class="n">examples</span><span class="p">]</span>
+        <span class="n">vectorstore</span> <span class="o">=</span> <span class="k">await</span> <span class="n">vectorstore_cls</span><span class="o">.</span><span class="n">afrom_texts</span><span class="p">(</span>
+            <span class="n">string_examples</span><span class="p">,</span> <span class="n">embeddings</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">examples</span><span class="p">,</span> <span class="o">**</span><span class="n">vectorstore_cls_kwargs</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">vectorstore</span><span class="o">=</span><span class="n">vectorstore</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">input_keys</span><span class="o">=</span><span class="n">input_keys</span><span class="p">,</span>
+            <span class="n">example_keys</span><span class="o">=</span><span class="n">example_keys</span><span class="p">,</span>
+            <span class="n">vectorstore_kwargs</span><span class="o">=</span><span class="n">vectorstore_kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 25, 2024.
+          Last updated on Mar 28, 2024.
       </footer>
     </div>
   </div>

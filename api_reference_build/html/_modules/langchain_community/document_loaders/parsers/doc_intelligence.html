@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -132,6 +135,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../fireworks_api_reference.html">fireworks</a>
@@ -184,12 +188,15 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_community.document_loaders.parsers.doc_intelligence</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span>
+<span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.document_loaders.base</span> <span class="kn">import</span> <span class="n">BaseBlobParser</span>
 <span class="kn">from</span> <span class="nn">langchain_community.document_loaders.blob_loaders</span> <span class="kn">import</span> <span class="n">Blob</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="AzureAIDocumentIntelligenceParser"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.doc_intelligence.AzureAIDocumentIntelligenceParser.html#langchain_community.document_loaders.parsers.doc_intelligence.AzureAIDocumentIntelligenceParser">[docs]</a><span class="k">class</span> <span class="nc">AzureAIDocumentIntelligenceParser</span><span class="p">(</span><span class="n">BaseBlobParser</span><span class="p">):</span>
@@ -203,22 +210,43 @@
         <span class="n">api_version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">api_model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;prebuilt-layout&quot;</span><span class="p">,</span>
         <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;markdown&quot;</span><span class="p">,</span>
+        <span class="n">analysis_features</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="kn">from</span> <span class="nn">azure.ai.documentintelligence</span> <span class="kn">import</span> <span class="n">DocumentIntelligenceClient</span>
+        <span class="kn">from</span> <span class="nn">azure.ai.documentintelligence.models</span> <span class="kn">import</span> <span class="n">DocumentAnalysisFeature</span>
         <span class="kn">from</span> <span class="nn">azure.core.credentials</span> <span class="kn">import</span> <span class="n">AzureKeyCredential</span>
 
         <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="n">api_version</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;api_version&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">api_version</span>
+
+        <span class="k">if</span> <span class="n">analysis_features</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_SUPPORTED_FEATURES</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">DocumentAnalysisFeature</span><span class="o">.</span><span class="n">OCR_HIGH_RESOLUTION</span><span class="p">,</span>
+            <span class="p">]</span>
+
+            <span class="n">analysis_features</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">DocumentAnalysisFeature</span><span class="p">(</span><span class="n">feature</span><span class="p">)</span> <span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">analysis_features</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">feature</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_SUPPORTED_FEATURES</span> <span class="k">for</span> <span class="n">feature</span> <span class="ow">in</span> <span class="n">analysis_features</span><span class="p">]</span>
+            <span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;The current supported features are: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">_SUPPORTED_FEATURES</span><span class="p">]</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="s2">&quot;Using other features may result in unexpected behavior.&quot;</span>
+                <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">DocumentIntelligenceClient</span><span class="p">(</span>
             <span class="n">endpoint</span><span class="o">=</span><span class="n">api_endpoint</span><span class="p">,</span>
             <span class="n">credential</span><span class="o">=</span><span class="n">AzureKeyCredential</span><span class="p">(</span><span class="n">api_key</span><span class="p">),</span>
             <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x-ms-useragent&quot;</span><span class="p">:</span> <span class="s2">&quot;langchain-parser/1.0.0&quot;</span><span class="p">},</span>
+            <span class="n">features</span><span class="o">=</span><span class="n">analysis_features</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_model</span> <span class="o">=</span> <span class="n">api_model</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;single&quot;</span><span class="p">,</span> <span class="s2">&quot;page&quot;</span><span class="p">,</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;markdown&quot;</span><span class="p">]</span></div>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;single&quot;</span><span class="p">,</span> <span class="s2">&quot;page&quot;</span><span class="p">,</span> <span class="s2">&quot;markdown&quot;</span><span class="p">]</span></div>
 
     <span class="k">def</span> <span class="nf">_generate_docs_page</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">pages</span><span class="p">:</span>
@@ -234,41 +262,6 @@
 
     <span class="k">def</span> <span class="nf">_generate_docs_single</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="k">yield</span> <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{})</span>
-
-    <span class="k">def</span> <span class="nf">_generate_docs_object</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
-        <span class="c1"># record relationship between page id and span offset</span>
-        <span class="n">page_offset</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">pages</span><span class="p">:</span>
-            <span class="c1"># assume that spans only contain 1 element, to double check</span>
-            <span class="n">page_offset</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">spans</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;offset&quot;</span><span class="p">])</span>
-
-        <span class="c1"># paragraph</span>
-        <span class="c1"># warning: paragraph content is overlapping with table content</span>
-        <span class="k">for</span> <span class="n">para</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">paragraphs</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">Document</span><span class="p">(</span>
-                <span class="n">page_content</span><span class="o">=</span><span class="n">para</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">para</span><span class="o">.</span><span class="n">role</span><span class="p">,</span>
-                    <span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="n">para</span><span class="o">.</span><span class="n">bounding_regions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">page_number</span><span class="p">,</span>
-                    <span class="s2">&quot;bounding_box&quot;</span><span class="p">:</span> <span class="n">para</span><span class="o">.</span><span class="n">bounding_regions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">polygon</span><span class="p">,</span>
-                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;paragraph&quot;</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-
-        <span class="c1"># table</span>
-        <span class="k">for</span> <span class="n">table</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">tables</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">Document</span><span class="p">(</span>
-                <span class="n">page_content</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">cells</span><span class="p">,</span>  <span class="c1"># json object</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;footnote&quot;</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">footnotes</span><span class="p">,</span>
-                    <span class="s2">&quot;caption&quot;</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">caption</span><span class="p">,</span>
-                    <span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="n">para</span><span class="o">.</span><span class="n">bounding_regions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">page_number</span><span class="p">,</span>
-                    <span class="s2">&quot;bounding_box&quot;</span><span class="p">:</span> <span class="n">para</span><span class="o">.</span><span class="n">bounding_regions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">polygon</span><span class="p">,</span>
-                    <span class="s2">&quot;row_count&quot;</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">row_count</span><span class="p">,</span>
-                    <span class="s2">&quot;column_count&quot;</span><span class="p">:</span> <span class="n">table</span><span class="o">.</span><span class="n">column_count</span><span class="p">,</span>
-                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;table&quot;</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
 
 <div class="viewcode-block" id="AzureAIDocumentIntelligenceParser.lazy_parse"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.doc_intelligence.AzureAIDocumentIntelligenceParser.html#langchain_community.document_loaders.parsers.doc_intelligence.AzureAIDocumentIntelligenceParser.lazy_parse">[docs]</a>    <span class="k">def</span> <span class="nf">lazy_parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blob</span><span class="p">:</span> <span class="n">Blob</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Lazily parse the blob.&quot;&quot;&quot;</span>
@@ -287,7 +280,7 @@
             <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;page&quot;</span><span class="p">]:</span>
                 <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_docs_page</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_docs_object</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid mode: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="AzureAIDocumentIntelligenceParser.parse_url"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.doc_intelligence.AzureAIDocumentIntelligenceParser.html#langchain_community.document_loaders.parsers.doc_intelligence.AzureAIDocumentIntelligenceParser.parse_url">[docs]</a>    <span class="k">def</span> <span class="nf">parse_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="kn">from</span> <span class="nn">azure.ai.documentintelligence.models</span> <span class="kn">import</span> <span class="n">AnalyzeDocumentRequest</span>
@@ -305,14 +298,14 @@
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;page&quot;</span><span class="p">]:</span>
             <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_docs_page</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_docs_object</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div></div>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid mode: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 25, 2024.
+          Last updated on Mar 28, 2024.
       </footer>
     </div>
   </div>
