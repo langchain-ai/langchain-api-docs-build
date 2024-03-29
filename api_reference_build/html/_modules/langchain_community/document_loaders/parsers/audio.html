@@ -189,6 +189,7 @@
         
   <h1>Source code for langchain_community.document_loaders.parsers.audio</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
@@ -215,10 +216,17 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="OpenAIWhisperParser.__init__"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.audio.OpenAIWhisperParser.html#langchain_community.document_loaders.parsers.audio.OpenAIWhisperParser.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">chunk_duration_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">chunk_duration_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">base_url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">chunk_duration_threshold</span> <span class="o">=</span> <span class="n">chunk_duration_threshold</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chunk_duration_threshold</span> <span class="o">=</span> <span class="n">chunk_duration_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">base_url</span> <span class="k">if</span> <span class="n">base_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;OPENAI_API_BASE&quot;</span><span class="p">)</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="OpenAIWhisperParser.lazy_parse"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.audio.OpenAIWhisperParser.html#langchain_community.document_loaders.parsers.audio.OpenAIWhisperParser.lazy_parse">[docs]</a>    <span class="k">def</span> <span class="nf">lazy_parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blob</span><span class="p">:</span> <span class="n">Blob</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Lazily parse the blob.&quot;&quot;&quot;</span>
@@ -241,11 +249,13 @@
 
         <span class="k">if</span> <span class="n">is_openai_v1</span><span class="p">():</span>
             <span class="c1"># api_key optional, defaults to `os.environ[&#39;OPENAI_API_KEY&#39;]`</span>
-            <span class="n">client</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">OpenAI</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">)</span>
+            <span class="n">client</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">OpenAI</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">,</span> <span class="n">base_url</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Set the API key if provided</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
                 <span class="n">openai</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="p">:</span>
+                <span class="n">openai</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span>
 
         <span class="c1"># Audio file from disk</span>
         <span class="n">audio</span> <span class="o">=</span> <span class="n">AudioSegment</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
@@ -515,7 +525,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 28, 2024.
+          Last updated on Mar 29, 2024.
       </footer>
     </div>
   </div>

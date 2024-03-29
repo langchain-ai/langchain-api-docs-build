@@ -189,6 +189,7 @@
         
   <h1>Source code for langchain_community.chat_models.bedrock</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
@@ -424,10 +425,9 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">provider</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_provider</span><span class="p">()</span>
-        <span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">formatted_messages</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">prompt</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">formatted_messages</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
         <span class="k">if</span> <span class="n">provider</span> <span class="o">==</span> <span class="s2">&quot;anthropic&quot;</span><span class="p">:</span>
-            <span class="n">prompt</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">system</span><span class="p">,</span> <span class="n">formatted_messages</span> <span class="o">=</span> <span class="n">ChatPromptAdapter</span><span class="o">.</span><span class="n">format_messages</span><span class="p">(</span>
                 <span class="n">provider</span><span class="p">,</span> <span class="n">messages</span>
             <span class="p">)</span>
@@ -455,17 +455,17 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
         <span class="n">completion</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">llm_output</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;model_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_id</span><span class="p">}</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
                 <span class="n">completion</span> <span class="o">+=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">text</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">provider</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_provider</span><span class="p">()</span>
-            <span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="n">formatted_messages</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">prompt</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">formatted_messages</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
             <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
+
             <span class="k">if</span> <span class="n">provider</span> <span class="o">==</span> <span class="s2">&quot;anthropic&quot;</span><span class="p">:</span>
-                <span class="n">prompt</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="n">system</span><span class="p">,</span> <span class="n">formatted_messages</span> <span class="o">=</span> <span class="n">ChatPromptAdapter</span><span class="o">.</span><span class="n">format_messages</span><span class="p">(</span>
                     <span class="n">provider</span><span class="p">,</span> <span class="n">messages</span>
                 <span class="p">)</span>
@@ -477,7 +477,7 @@
             <span class="k">if</span> <span class="n">stop</span><span class="p">:</span>
                 <span class="n">params</span><span class="p">[</span><span class="s2">&quot;stop_sequences&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop</span>
 
-            <span class="n">completion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_input_and_invoke</span><span class="p">(</span>
+            <span class="n">completion</span><span class="p">,</span> <span class="n">usage_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_input_and_invoke</span><span class="p">(</span>
                 <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
                 <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span>
                 <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span>
@@ -486,9 +486,24 @@
                 <span class="o">**</span><span class="n">params</span><span class="p">,</span>
             <span class="p">)</span>
 
+            <span class="n">llm_output</span><span class="p">[</span><span class="s2">&quot;usage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">usage_info</span>
+
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span>
-            <span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">completion</span><span class="p">))]</span>
+            <span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">completion</span><span class="p">))],</span>
+            <span class="n">llm_output</span><span class="o">=</span><span class="n">llm_output</span><span class="p">,</span>
         <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_combine_llm_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">llm_outputs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">final_usage</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+        <span class="n">final_output</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">llm_outputs</span><span class="p">:</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">output</span> <span class="ow">or</span> <span class="p">{}</span>
+            <span class="n">usage</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="k">for</span> <span class="n">token_type</span><span class="p">,</span> <span class="n">token_count</span> <span class="ow">in</span> <span class="n">usage</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">final_usage</span><span class="p">[</span><span class="n">token_type</span><span class="p">]</span> <span class="o">+=</span> <span class="n">token_count</span>
+            <span class="n">final_output</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+        <span class="n">final_output</span><span class="p">[</span><span class="s2">&quot;usage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">final_usage</span>
+        <span class="k">return</span> <span class="n">final_output</span>
 
 <div class="viewcode-block" id="BedrockChat.get_num_tokens"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.bedrock.BedrockChat.html#langchain_community.chat_models.bedrock.BedrockChat.get_num_tokens">[docs]</a>    <span class="k">def</span> <span class="nf">get_num_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_is_anthropic</span><span class="p">:</span>
@@ -507,7 +522,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 28, 2024.
+          Last updated on Mar 29, 2024.
       </footer>
     </div>
   </div>

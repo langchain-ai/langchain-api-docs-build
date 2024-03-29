@@ -410,26 +410,38 @@
             <span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span>
             <span class="s2">&quot;score_threshold&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;score_threshold&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
         <span class="p">}</span>
-        <span class="n">query</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;select id, text, metadata,</span>
-<span class="s2">        vector::similarity::cosine(embedding,</span><span class="si">{embedding}</span><span class="s2">) as similarity</span>
-<span class="s2">        from </span><span class="si">{collection}</span>
-<span class="s2">        where vector::similarity::cosine(embedding,</span><span class="si">{embedding}</span><span class="s2">) &gt;= </span><span class="si">{score_threshold}</span>
-<span class="s2">        order by similarity desc LIMIT </span><span class="si">{k}</span>
-<span class="s2">        &quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        select</span>
+<span class="s2">            id,</span>
+<span class="s2">            text,</span>
+<span class="s2">            metadata,</span>
+<span class="s2">            vector::similarity::cosine(embedding, $embedding) as similarity</span>
+<span class="s2">        from ⟨</span><span class="si">{</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;collection&quot;</span><span class="p">]</span><span class="si">}</span><span class="s2">⟩</span>
+<span class="s2">        where vector::similarity::cosine(embedding, $embedding) &gt;= $score_threshold</span>
+<span class="s2">        order by similarity desc LIMIT $k;</span>
+<span class="s2">        &quot;&quot;&quot;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">sdb</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span>
 
+        <span class="n">result</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;OK&quot;</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">surrealdb.ws</span> <span class="kn">import</span> <span class="n">SurrealException</span>
+
+            <span class="n">err</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;result&quot;</span><span class="p">,</span> <span class="s2">&quot;Unknown Error&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">SurrealException</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="p">[</span>
             <span class="p">(</span>
                 <span class="n">Document</span><span class="p">(</span>
-                    <span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span>
-                    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span> <span class="o">**</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]},</span>
+                    <span class="n">page_content</span><span class="o">=</span><span class="n">doc</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">],</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span> <span class="o">**</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})},</span>
                 <span class="p">),</span>
-                <span class="n">result</span><span class="p">[</span><span class="s2">&quot;similarity&quot;</span><span class="p">],</span>
+                <span class="n">doc</span><span class="p">[</span><span class="s2">&quot;similarity&quot;</span><span class="p">],</span>
             <span class="p">)</span>
-            <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;result&quot;</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;result&quot;</span><span class="p">]</span>
         <span class="p">]</span>
 
 <div class="viewcode-block" id="SurrealDBStore.asimilarity_search_with_relevance_scores"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.surrealdb.SurrealDBStore.html#langchain_community.vectorstores.surrealdb.SurrealDBStore.asimilarity_search_with_relevance_scores">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">asimilarity_search_with_relevance_scores</span><span class="p">(</span>
@@ -655,7 +667,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 28, 2024.
+          Last updated on Mar 29, 2024.
       </footer>
     </div>
   </div>

@@ -198,20 +198,55 @@
 
 <span class="kn">from</span> <span class="nn">langchain_community.document_loaders.base</span> <span class="kn">import</span> <span class="n">BaseLoader</span>
 
+<span class="c1"># Pre-compile regular expressions for video ID extraction</span>
+<span class="n">BV_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;BV\w+&quot;</span><span class="p">)</span>
+<span class="n">AV_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;av[0-9]+&quot;</span><span class="p">)</span>
+
 
 <div class="viewcode-block" id="BiliBiliLoader"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.bilibili.BiliBiliLoader.html#langchain_community.document_loaders.bilibili.BiliBiliLoader">[docs]</a><span class="k">class</span> <span class="nc">BiliBiliLoader</span><span class="p">(</span><span class="n">BaseLoader</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load `BiliBili` video transcripts.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loader for fetching transcripts from BiliBili videos.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="BiliBiliLoader.__init__"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.bilibili.BiliBiliLoader.html#langchain_community.document_loaders.bilibili.BiliBiliLoader.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video_urls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize with bilibili url.</span>
+<div class="viewcode-block" id="BiliBiliLoader.__init__"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.bilibili.BiliBiliLoader.html#langchain_community.document_loaders.bilibili.BiliBiliLoader.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">video_urls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">sessdata</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">bili_jct</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">buvid3</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the loader with BiliBili video URLs and authentication cookies.</span>
+<span class="sd">        if no authentication cookies are provided, the loader can&#39;t get transcripts</span>
+<span class="sd">        and will only fetch videos info.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            video_urls: List of bilibili urls.</span>
+<span class="sd">            video_urls (List[str]): List of BiliBili video URLs.</span>
+<span class="sd">            sessdata (str): SESSDATA cookie value for authentication.</span>
+<span class="sd">            bili_jct (str): BILI_JCT cookie value for authentication.</span>
+<span class="sd">            buvid3 (str): BUVI3 cookie value for authentication.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">video_urls</span> <span class="o">=</span> <span class="n">video_urls</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">video_urls</span> <span class="o">=</span> <span class="n">video_urls</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">credential</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">bilibili_api</span> <span class="kn">import</span> <span class="n">video</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;requests package not found, please install it with &quot;</span>
+                <span class="s2">&quot;`pip install bilibili-api-python`&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">sessdata</span> <span class="ow">and</span> <span class="n">bili_jct</span> <span class="ow">and</span> <span class="n">buvid3</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">credential</span> <span class="o">=</span> <span class="n">video</span><span class="o">.</span><span class="n">Credential</span><span class="p">(</span>
+                <span class="n">sessdata</span><span class="o">=</span><span class="n">sessdata</span><span class="p">,</span> <span class="n">bili_jct</span><span class="o">=</span><span class="n">bili_jct</span><span class="p">,</span> <span class="n">buvid3</span><span class="o">=</span><span class="n">buvid3</span>
+            <span class="p">)</span></div>
 
 <div class="viewcode-block" id="BiliBiliLoader.load"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.bilibili.BiliBiliLoader.html#langchain_community.document_loaders.bilibili.BiliBiliLoader.load">[docs]</a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load Documents from bilibili url.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load and return a list of documents containing video transcripts.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List[Document]: List of Document objects transcripts and metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_urls</span><span class="p">:</span>
             <span class="n">transcript</span><span class="p">,</span> <span class="n">video_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_bilibili_subs_and_info</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
@@ -221,6 +256,10 @@
         <span class="k">return</span> <span class="n">results</span></div>
 
     <span class="k">def</span> <span class="nf">_get_bilibili_subs_and_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve video information and transcript for a given BiliBili URL.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bvid</span> <span class="o">=</span> <span class="n">BV_PATTERN</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">bilibili_api</span> <span class="kn">import</span> <span class="n">sync</span><span class="p">,</span> <span class="n">video</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
@@ -228,56 +267,60 @@
                 <span class="s2">&quot;requests package not found, please install it with &quot;</span>
                 <span class="s2">&quot;`pip install bilibili-api-python`&quot;</span>
             <span class="p">)</span>
-
-        <span class="n">bvid</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;BV\w+&quot;</span><span class="p">,</span> <span class="n">url</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">bvid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">v</span> <span class="o">=</span> <span class="n">video</span><span class="o">.</span><span class="n">Video</span><span class="p">(</span><span class="n">bvid</span><span class="o">=</span><span class="n">bvid</span><span class="o">.</span><span class="n">group</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">bvid</span><span class="p">:</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="n">video</span><span class="o">.</span><span class="n">Video</span><span class="p">(</span><span class="n">bvid</span><span class="o">=</span><span class="n">bvid</span><span class="o">.</span><span class="n">group</span><span class="p">(),</span> <span class="n">credential</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">credential</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">aid</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;av[0-9]+&quot;</span><span class="p">,</span> <span class="n">url</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">aid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">v</span> <span class="o">=</span> <span class="n">video</span><span class="o">.</span><span class="n">Video</span><span class="p">(</span><span class="n">aid</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">aid</span><span class="o">.</span><span class="n">group</span><span class="p">()[</span><span class="mi">2</span><span class="p">:]))</span>
-                <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2"> is not bilibili url.&quot;</span><span class="p">)</span>
+            <span class="n">aid</span> <span class="o">=</span> <span class="n">AV_PATTERN</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">aid</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">video</span><span class="o">.</span><span class="n">Video</span><span class="p">(</span><span class="n">aid</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">aid</span><span class="o">.</span><span class="n">group</span><span class="p">()[</span><span class="mi">2</span><span class="p">:]),</span> <span class="n">credential</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">credential</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2"> is not bilibili url.&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unable to find a valid video ID in URL: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="n">video_info</span> <span class="o">=</span> <span class="n">sync</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">get_info</span><span class="p">())</span>
         <span class="n">video_info</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;url&quot;</span><span class="p">:</span> <span class="n">url</span><span class="p">})</span>
-        <span class="n">sub</span> <span class="o">=</span> <span class="n">sync</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">get_subtitle</span><span class="p">(</span><span class="n">video_info</span><span class="p">[</span><span class="s2">&quot;cid&quot;</span><span class="p">]))</span>
 
-        <span class="c1"># Get subtitle url</span>
-        <span class="n">sub_list</span> <span class="o">=</span> <span class="n">sub</span><span class="p">[</span><span class="s2">&quot;subtitles&quot;</span><span class="p">]</span>
+        <span class="c1"># Return if no credential is provided</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">credential</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">video_info</span>
+
+        <span class="c1"># Fetching and processing subtitles</span>
+        <span class="n">sub</span> <span class="o">=</span> <span class="n">sync</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">get_subtitle</span><span class="p">(</span><span class="n">video_info</span><span class="p">[</span><span class="s2">&quot;cid&quot;</span><span class="p">]))</span>
+        <span class="n">sub_list</span> <span class="o">=</span> <span class="n">sub</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;subtitles&quot;</span><span class="p">,</span> <span class="p">[])</span>
         <span class="k">if</span> <span class="n">sub_list</span><span class="p">:</span>
-            <span class="n">sub_url</span> <span class="o">=</span> <span class="n">sub_list</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;subtitle_url&quot;</span><span class="p">]</span>
+            <span class="n">sub_url</span> <span class="o">=</span> <span class="n">sub_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;subtitle_url&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">sub_url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;http&quot;</span><span class="p">):</span>
                 <span class="n">sub_url</span> <span class="o">=</span> <span class="s2">&quot;https:&quot;</span> <span class="o">+</span> <span class="n">sub_url</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sub_url</span><span class="p">)</span>
-            <span class="n">raw_sub_titles</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">content</span><span class="p">)[</span><span class="s2">&quot;body&quot;</span><span class="p">]</span>
-            <span class="n">raw_transcript</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">c</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">raw_sub_titles</span><span class="p">])</span>
 
-            <span class="n">raw_transcript_with_meta_info</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Video Title: </span><span class="si">{</span><span class="n">video_info</span><span class="p">[</span><span class="s1">&#39;title&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">,&quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;description: </span><span class="si">{</span><span class="n">video_info</span><span class="p">[</span><span class="s1">&#39;desc&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Transcript: </span><span class="si">{</span><span class="n">raw_transcript</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">raw_transcript_with_meta_info</span><span class="p">,</span> <span class="n">video_info</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sub_url</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+                <span class="n">raw_sub_titles</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;body&quot;</span><span class="p">,</span> <span class="p">[])</span>
+                <span class="n">raw_transcript</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">c</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">raw_sub_titles</span><span class="p">])</span>
+
+                <span class="n">raw_transcript_with_meta_info</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Video Title: </span><span class="si">{</span><span class="n">video_info</span><span class="p">[</span><span class="s1">&#39;title&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;description: </span><span class="si">{</span><span class="n">video_info</span><span class="p">[</span><span class="s1">&#39;desc&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Transcript: </span><span class="si">{</span><span class="n">raw_transcript</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="n">raw_transcript_with_meta_info</span><span class="p">,</span> <span class="n">video_info</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Failed to fetch subtitles for </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;HTTP Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">raw_transcript</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">                No subtitles found for video: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">.</span>
-<span class="s2">                Return Empty transcript.</span>
-<span class="s2">                &quot;&quot;&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;No subtitles found for video: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">. Returning empty transcript.&quot;</span>
             <span class="p">)</span>
-            <span class="k">return</span> <span class="n">raw_transcript</span><span class="p">,</span> <span class="n">video_info</span></div>
+
+        <span class="c1"># Return empty transcript if no subtitles are found</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">video_info</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 28, 2024.
+          Last updated on Mar 29, 2024.
       </footer>
     </div>
   </div>

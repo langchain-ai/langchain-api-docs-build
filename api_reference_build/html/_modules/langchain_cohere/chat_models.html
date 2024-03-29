@@ -202,6 +202,7 @@
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">cohere.types</span> <span class="kn">import</span> <span class="n">NonStreamedChatResponse</span><span class="p">,</span> <span class="n">ToolCall</span>
+<span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">beta</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
@@ -220,12 +221,20 @@
     <span class="n">HumanMessage</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">JsonOutputKeyToolsParser</span><span class="p">,</span>
+    <span class="n">PydanticToolsParser</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 
-<span class="kn">from</span> <span class="nn">langchain_cohere.cohere_agent</span> <span class="kn">import</span> <span class="n">_format_to_cohere_tools</span>
+<span class="kn">from</span> <span class="nn">langchain_cohere.cohere_agent</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_convert_to_cohere_tool</span><span class="p">,</span>
+    <span class="n">_format_to_cohere_tools</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_cohere.llms</span> <span class="kn">import</span> <span class="n">BaseCohere</span>
 
 
@@ -271,25 +280,22 @@
     <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">additional_kwargs</span>
 
     <span class="c1"># cohere SDK will fail loudly if both connectors and documents are provided</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="nb">len</span><span class="p">(</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="p">[]))</span> <span class="o">&gt;</span> <span class="mi">0</span>
-        <span class="ow">and</span> <span class="n">documents</span>
-        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
-    <span class="p">):</span>
+    <span class="k">if</span> <span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="p">[])</span> <span class="ow">and</span> <span class="n">documents</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;Received documents both as a keyword argument and as an prompt additional&quot;</span>
-            <span class="s2">&quot;keywword argument. Please choose only one option.&quot;</span>
+            <span class="s2">&quot;Received documents both as a keyword argument and as an prompt additional keyword argument. Please choose only one option.&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="p">)</span>
 
-    <span class="n">formatted_docs</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span>
-            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="sa">f</span><span class="s2">&quot;doc-</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="p">[]))</span>
-    <span class="p">]</span> <span class="ow">or</span> <span class="n">documents</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">formatted_docs</span><span class="p">:</span>
-        <span class="n">formatted_docs</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">formatted_docs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">):</span>
+        <span class="n">formatted_docs</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="sa">f</span><span class="s2">&quot;doc-</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">doc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="p">[]))</span>
+        <span class="p">]</span>
+    <span class="k">elif</span> <span class="n">documents</span><span class="p">:</span>
+        <span class="n">formatted_docs</span> <span class="o">=</span> <span class="n">documents</span>
 
     <span class="c1"># by enabling automatic prompt truncation, the probability of request failure is</span>
     <span class="c1"># reduced with minimal impact on response quality</span>
@@ -357,6 +363,39 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
         <span class="n">formatted_tools</span> <span class="o">=</span> <span class="n">_format_to_cohere_tools</span><span class="p">(</span><span class="n">tools</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ChatCohere.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_cohere.chat_models.ChatCohere.html#langchain_cohere.chat_models.ChatCohere.with_structured_output">[docs]</a>    <span class="nd">@beta</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            schema: The output schema as a dict or a Pydantic class. If a Pydantic class</span>
+<span class="sd">                then the model output will be an object of that class. If a dict then</span>
+<span class="sd">                the model output will be a dict.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A Runnable that takes any ChatModel input and returns either a dict or</span>
+<span class="sd">            Pydantic class as output.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received unsupported arguments </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">is_pydantic_schema</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">)</span>
+        <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">is_pydantic_schema</span><span class="p">:</span>
+            <span class="n">output_parser</span><span class="p">:</span> <span class="n">OutputParserLike</span> <span class="o">=</span> <span class="n">PydanticToolsParser</span><span class="p">(</span>
+                <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">],</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">key_name</span> <span class="o">=</span> <span class="n">_convert_to_cohere_tool</span><span class="p">(</span><span class="n">schema</span><span class="p">)[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">JsonOutputKeyToolsParser</span><span class="p">(</span>
+                <span class="n">key_name</span><span class="o">=</span><span class="n">key_name</span><span class="p">,</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">output_parser</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -524,7 +563,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 28, 2024.
+          Last updated on Mar 29, 2024.
       </footer>
     </div>
   </div>
