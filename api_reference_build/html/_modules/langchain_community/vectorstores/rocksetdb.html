@@ -195,10 +195,13 @@
 <span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">run_in_executor</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VectorStore</span>
+
+<span class="kn">from</span> <span class="nn">langchain_community.vectorstores.utils</span> <span class="kn">import</span> <span class="n">maximal_marginal_relevance</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -444,7 +447,12 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Accepts a query_embedding (vector), and returns documents with</span>
 <span class="sd">        similar embeddings along with their relevance scores.&quot;&quot;&quot;</span>
 
-        <span class="n">q_str</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_query_sql</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">distance_func</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">where_str</span><span class="p">)</span>
+        <span class="n">exclude_embeddings</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="s2">&quot;exclude_embeddings&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">exclude_embeddings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;exclude_embeddings&quot;</span><span class="p">]</span>
+        <span class="n">q_str</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_query_sql</span><span class="p">(</span>
+            <span class="n">embedding</span><span class="p">,</span> <span class="n">distance_func</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">where_str</span><span class="p">,</span> <span class="n">exclude_embeddings</span>
+        <span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">query_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">Queries</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">sql</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="n">q_str</span><span class="p">})</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
@@ -480,6 +488,60 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">finalResult</span></div>
 
+<div class="viewcode-block" id="Rockset.max_marginal_relevance_search"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.rocksetdb.Rockset.html#langchain_community.vectorstores.rocksetdb.Rockset.max_marginal_relevance_search">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+        <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">where_str</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs selected using the maximal marginal relevance.</span>
+
+<span class="sd">        Maximal marginal relevance optimizes for similarity to query AND diversity</span>
+<span class="sd">        among selected documents.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            query: Text to look up documents similar to.</span>
+<span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
+<span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
+<span class="sd">            distance_func (DistanceFunction): how to compute distance between two</span>
+<span class="sd">                vectors in Rockset.</span>
+<span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
+<span class="sd">                        of diversity among the results with 0 corresponding</span>
+<span class="sd">                        to maximum diversity and 1 to minimum diversity.</span>
+<span class="sd">                        Defaults to 0.5.</span>
+<span class="sd">            where_str: where clause for the sql query</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            List of Documents selected by maximal marginal relevance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">query_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embeddings</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="n">initial_docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_by_vector</span><span class="p">(</span>
+            <span class="n">query_embedding</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">where_str</span><span class="o">=</span><span class="n">where_str</span><span class="p">,</span>
+            <span class="n">exclude_embeddings</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="p">]</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">initial_docs</span><span class="p">]</span>
+
+        <span class="n">selected_indices</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">query_embedding</span><span class="p">),</span>
+            <span class="n">embeddings</span><span class="p">,</span>
+            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># remove embeddings key before returning for cleanup to be consistent with</span>
+        <span class="c1">#   other search functions</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">selected_indices</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">initial_docs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">initial_docs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">selected_indices</span><span class="p">]</span></div>
+
     <span class="c1"># Helper functions</span>
 
     <span class="k">def</span> <span class="nf">_build_query_sql</span><span class="p">(</span>
@@ -488,6 +550,7 @@
         <span class="n">distance_func</span><span class="p">:</span> <span class="n">DistanceFunction</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">where_str</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">exclude_embeddings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Builds Rockset SQL query to query similar vectors to query_vector&quot;&quot;&quot;</span>
 
@@ -495,8 +558,11 @@
         <span class="n">distance_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="si">{</span><span class="n">distance_func</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="si">}</span><span class="s2">, </span><span class="se">\</span>
 <span class="s2">[</span><span class="si">{</span><span class="n">q_embedding_str</span><span class="si">}</span><span class="s2">]) as dist&quot;&quot;&quot;</span>
         <span class="n">where_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;WHERE </span><span class="si">{</span><span class="n">where_str</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">where_str</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">select_embedding</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot; EXCEPT(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="si">}</span><span class="s2">),&quot;</span> <span class="k">if</span> <span class="n">exclude_embeddings</span> <span class="k">else</span> <span class="s2">&quot;,&quot;</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="se">\</span>
-<span class="s2">SELECT * EXCEPT(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="si">}</span><span class="s2">), </span><span class="si">{</span><span class="n">distance_str</span><span class="si">}</span>
+<span class="s2">SELECT *</span><span class="si">{</span><span class="n">select_embedding</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">distance_str</span><span class="si">}</span>
 <span class="s2">FROM </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_workspace</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_collection_name</span><span class="si">}</span>
 <span class="si">{</span><span class="n">where_str</span><span class="si">}</span><span class="se">\</span>
 <span class="s2">ORDER BY dist </span><span class="si">{</span><span class="n">distance_func</span><span class="o">.</span><span class="n">order_by</span><span class="p">()</span><span class="si">}</span>
@@ -546,7 +612,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 29, 2024.
+          Last updated on Mar 30, 2024.
       </footer>
     </div>
   </div>

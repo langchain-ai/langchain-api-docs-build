@@ -188,7 +188,7 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_community.llms.predibase</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.llms</span> <span class="kn">import</span> <span class="n">LLM</span>
@@ -205,6 +205,13 @@
     <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">predibase_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>
     <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">default_options_for_generation</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;max_new_tokens&quot;</span><span class="p">:</span> <span class="mi">256</span><span class="p">,</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="n">const</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -219,8 +226,17 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">predibase</span> <span class="kn">import</span> <span class="n">PredibaseClient</span>
+            <span class="kn">from</span> <span class="nn">predibase.pql</span> <span class="kn">import</span> <span class="n">get_session</span>
+            <span class="kn">from</span> <span class="nn">predibase.pql.api</span> <span class="kn">import</span> <span class="n">Session</span>
+            <span class="kn">from</span> <span class="nn">predibase.resource.llm.interface</span> <span class="kn">import</span> <span class="n">LLMDeployment</span>
+            <span class="kn">from</span> <span class="nn">predibase.resource.llm.response</span> <span class="kn">import</span> <span class="n">GeneratedResponse</span>
 
-            <span class="n">pc</span> <span class="o">=</span> <span class="n">PredibaseClient</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predibase_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">())</span>
+            <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">(</span>
+                <span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predibase_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+                <span class="n">gateway</span><span class="o">=</span><span class="s2">&quot;https://api.app.predibase.com/v1&quot;</span><span class="p">,</span>
+                <span class="n">serving_endpoint</span><span class="o">=</span><span class="s2">&quot;serving.app.predibase.com&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">pc</span><span class="p">:</span> <span class="n">PredibaseClient</span> <span class="o">=</span> <span class="n">PredibaseClient</span><span class="p">(</span><span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;Could not import Predibase Python package. &quot;</span>
@@ -228,9 +244,17 @@
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
         <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Your API key is not correct. Please try again&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-        <span class="c1"># load model and version</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">prompt</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">response</span>
+        <span class="n">options</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">kwargs</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_options_for_generation</span>
+        <span class="p">)</span>
+        <span class="n">base_llm_deployment</span><span class="p">:</span> <span class="n">LLMDeployment</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span>
+            <span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;pb://deployments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+        <span class="n">result</span><span class="p">:</span> <span class="n">GeneratedResponse</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+            <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">response</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -244,7 +268,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 29, 2024.
+          Last updated on Mar 30, 2024.
       </footer>
     </div>
   </div>

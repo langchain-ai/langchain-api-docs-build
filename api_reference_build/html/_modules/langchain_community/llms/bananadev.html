@@ -189,12 +189,12 @@
         
   <h1>Source code for langchain_community.llms.bananadev</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">cast</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.llms</span> <span class="kn">import</span> <span class="n">LLM</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">root_validator</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">SecretStr</span><span class="p">,</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">convert_to_secret_str</span><span class="p">,</span> <span class="n">get_from_dict_or_env</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.llms.utils</span> <span class="kn">import</span> <span class="n">enforce_stop_tokens</span>
 
@@ -228,7 +228,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Holds any model parameters valid for `create` call not</span>
 <span class="sd">    explicitly specified.&quot;&quot;&quot;</span>
 
-    <span class="n">banana_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">banana_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SecretStr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic config.&quot;&quot;&quot;</span>
@@ -256,8 +256,8 @@
     <span class="nd">@root_validator</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that api key and python package exists in environment.&quot;&quot;&quot;</span>
-        <span class="n">banana_api_key</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;banana_api_key&quot;</span><span class="p">,</span> <span class="s2">&quot;BANANA_API_KEY&quot;</span>
+        <span class="n">banana_api_key</span> <span class="o">=</span> <span class="n">convert_to_secret_str</span><span class="p">(</span>
+            <span class="n">get_from_dict_or_env</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="s2">&quot;banana_api_key&quot;</span><span class="p">,</span> <span class="s2">&quot;BANANA_API_KEY&quot;</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;banana_api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">banana_api_key</span>
         <span class="k">return</span> <span class="n">values</span>
@@ -293,7 +293,7 @@
             <span class="p">)</span>
         <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
-        <span class="n">api_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">banana_api_key</span>
+        <span class="n">api_key</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">SecretStr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">banana_api_key</span><span class="p">)</span>
         <span class="n">model_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_key</span>
         <span class="n">model_url_slug</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_url_slug</span>
         <span class="n">model_inputs</span> <span class="o">=</span> <span class="p">{</span>
@@ -303,7 +303,7 @@
         <span class="p">}</span>
         <span class="n">model</span> <span class="o">=</span> <span class="n">Client</span><span class="p">(</span>
             <span class="c1"># Found in main dashboard</span>
-            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
             <span class="c1"># Both found in model details page</span>
             <span class="n">model_key</span><span class="o">=</span><span class="n">model_key</span><span class="p">,</span>
             <span class="n">url</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;https://</span><span class="si">{</span><span class="n">model_url_slug</span><span class="si">}</span><span class="s2">.run.banana.dev&quot;</span><span class="p">,</span>
@@ -330,7 +330,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 29, 2024.
+          Last updated on Mar 30, 2024.
       </footer>
     </div>
   </div>
