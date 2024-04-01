@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_together.llms &mdash; 🦜🔗 LangChain 0.1.13</title>
+  <title>langchain_together.llms &mdash; 🦜🔗 LangChain 0.1.14</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_together/llms.html" />
 
@@ -190,6 +190,7 @@
   <h1>Source code for langchain_together.llms</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Wrapper around Together AI&#39;s Completion API.&quot;&quot;&quot;</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>
@@ -224,13 +225,14 @@
 <span class="sd">            model = Together(model_name=&quot;mistralai/Mixtral-8x7B-Instruct-v0.1&quot;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https://api.together.xyz/inference&quot;</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base inference API URL.&quot;&quot;&quot;</span>
+    <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https://api.together.xyz/v1/completions&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base completions API URL.&quot;&quot;&quot;</span>
     <span class="n">together_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Together AI API key. Get it here: https://api.together.xyz/settings/api-keys&quot;&quot;&quot;</span>
     <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Model name. Available models listed here: </span>
-<span class="sd">        https://docs.together.ai/docs/inference-models</span>
+<span class="sd">        Base Models: https://docs.together.ai/docs/inference-models#language-models</span>
+<span class="sd">        Chat Models: https://docs.together.ai/docs/inference-models#chat-models</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Model temperature.&quot;&quot;&quot;</span>
@@ -272,13 +274,28 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
+    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">validate_max_tokens</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The v1 completions endpoint, has max_tokens as required parameter.</span>
+<span class="sd">        Set a default value and warn if the parameter is missing.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The completions endpoint, has &#39;max_tokens&#39; as required argument. &quot;</span>
+                <span class="s2">&quot;The default value is being set to 200 &quot;</span>
+                <span class="s2">&quot;Consider setting this value, when initializing LLM&quot;</span>
+            <span class="p">)</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">200</span>  <span class="c1"># Default Value</span>
+        <span class="k">return</span> <span class="n">values</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return type of model.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="s2">&quot;together&quot;</span>
 
     <span class="k">def</span> <span class="nf">_format_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">][</span><span class="s2">&quot;choices&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
 
 <div class="viewcode-block" id="Together.get_user_agent"><a class="viewcode-back" href="../../llms/langchain_together.llms.Together.html#langchain_together.llms.Together.get_user_agent">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">get_user_agent</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -338,9 +355,6 @@
             <span class="p">)</span>
 
         <span class="n">data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;finished&quot;</span><span class="p">:</span>
-            <span class="n">err_msg</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;Undefined Error&quot;</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">err_msg</span><span class="p">)</span>
 
         <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_output</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
@@ -393,10 +407,6 @@
 
                 <span class="n">response_json</span> <span class="o">=</span> <span class="k">await</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
 
-                <span class="k">if</span> <span class="n">response_json</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;finished&quot;</span><span class="p">:</span>
-                    <span class="n">err_msg</span> <span class="o">=</span> <span class="n">response_json</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;Undefined Error&quot;</span><span class="p">)</span>
-                    <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="n">err_msg</span><span class="p">)</span>
-
                 <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_output</span><span class="p">(</span><span class="n">response_json</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">output</span></div>
 </pre></div>
@@ -405,7 +415,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 31, 2024.
+          Last updated on Apr 01, 2024.
       </footer>
     </div>
   </div>
