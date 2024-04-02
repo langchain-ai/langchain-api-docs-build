@@ -189,6 +189,7 @@
         
   <h1>Source code for langchain_openai.embeddings.azure</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Azure OpenAI embeddings wrapper.&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">os</span>
@@ -247,6 +248,8 @@
     <span class="n">openai_api_version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;api_version&quot;</span><span class="p">)</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Automatically inferred from env var `OPENAI_API_VERSION` if not provided.&quot;&quot;&quot;</span>
     <span class="n">validate_base_url</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2048</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Maximum number of texts to embed in each batch&quot;&quot;&quot;</span>
 
     <span class="nd">@root_validator</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
@@ -289,10 +292,6 @@
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">convert_to_secret_str</span><span class="p">(</span><span class="n">azure_ad_token</span><span class="p">)</span> <span class="k">if</span> <span class="n">azure_ad_token</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="p">)</span>
-        <span class="c1"># Azure OpenAI embedding models allow a maximum of 2048 texts</span>
-        <span class="c1"># at a time in each batch</span>
-        <span class="c1"># See: https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=console#best-practices</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;chunk_size&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;chunk_size&quot;</span><span class="p">],</span> <span class="mi">2048</span><span class="p">)</span>
         <span class="c1"># For backwards compatibility. Before openai v1, no distinction was made</span>
         <span class="c1"># between azure_endpoint and base_url (openai_api_base).</span>
         <span class="n">openai_api_base</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">]</span>
@@ -316,12 +315,16 @@
             <span class="s2">&quot;api_version&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_version&quot;</span><span class="p">],</span>
             <span class="s2">&quot;azure_endpoint&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_endpoint&quot;</span><span class="p">],</span>
             <span class="s2">&quot;azure_deployment&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;deployment&quot;</span><span class="p">],</span>
-            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="s2">&quot;azure_ad_token&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;azure_ad_token&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
             <span class="s2">&quot;azure_ad_token_provider&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token_provider&quot;</span><span class="p">],</span>
             <span class="s2">&quot;organization&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_organization&quot;</span><span class="p">],</span>
             <span class="s2">&quot;base_url&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">],</span>
@@ -351,7 +354,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 01, 2024.
+          Last updated on Apr 02, 2024.
       </footer>
     </div>
   </div>

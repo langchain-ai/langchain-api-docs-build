@@ -210,12 +210,11 @@
 
 <span class="kn">from</span> <span class="nn">langchain_robocorp._common</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">get_param_fields</span><span class="p">,</span>
-    <span class="n">get_required_param_descriptions</span><span class="p">,</span>
+    <span class="n">model_to_dict</span><span class="p">,</span>
     <span class="n">reduce_openapi_spec</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_robocorp._prompts</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">API_CONTROLLER_PROMPT</span><span class="p">,</span>
-    <span class="n">TOOLKIT_TOOL_DESCRIPTION</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">MAX_RESPONSE_LENGTH</span> <span class="o">=</span> <span class="mi">5000</span>
@@ -346,17 +345,9 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="n">endpoint</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;/api/actions&quot;</span><span class="p">):</span>
                 <span class="k">continue</span>
 
-            <span class="n">summary</span> <span class="o">=</span> <span class="n">docs</span><span class="p">[</span><span class="s2">&quot;summary&quot;</span><span class="p">]</span>
-
-            <span class="n">tool_description</span> <span class="o">=</span> <span class="n">TOOLKIT_TOOL_DESCRIPTION</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="n">name</span><span class="o">=</span><span class="n">summary</span><span class="p">,</span>
-                <span class="n">description</span><span class="o">=</span><span class="n">docs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="n">summary</span><span class="p">),</span>
-                <span class="n">required_params</span><span class="o">=</span><span class="n">get_required_param_descriptions</span><span class="p">(</span><span class="n">docs</span><span class="p">),</span>
-            <span class="p">)</span>
-
             <span class="n">tool_args</span><span class="p">:</span> <span class="n">ToolArgs</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;robocorp_action_server_</span><span class="si">{</span><span class="n">docs</span><span class="p">[</span><span class="s1">&#39;operationId&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">tool_description</span><span class="p">,</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">docs</span><span class="p">[</span><span class="s2">&quot;operationId&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">docs</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
                 <span class="s2">&quot;callback_manager&quot;</span><span class="p">:</span> <span class="n">callback_manager</span><span class="p">,</span>
             <span class="p">}</span>
 
@@ -408,16 +399,17 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">docs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">tools_args</span><span class="p">:</span> <span class="n">ToolArgs</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseTool</span><span class="p">:</span>
         <span class="n">fields</span> <span class="o">=</span> <span class="n">get_param_fields</span><span class="p">(</span><span class="n">docs</span><span class="p">)</span>
+        <span class="n">_DynamicToolInputSchema</span> <span class="o">=</span> <span class="n">create_model</span><span class="p">(</span><span class="s2">&quot;DynamicToolInputSchema&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>
 
-        <span class="k">def</span> <span class="nf">create_function</span><span class="p">(</span><span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
-            <span class="k">def</span> <span class="nf">func</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_action_request</span><span class="p">(</span><span class="n">endpoint</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">dynamic_func</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_action_request</span><span class="p">(</span><span class="n">endpoint</span><span class="p">,</span> <span class="o">**</span><span class="n">model_to_dict</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
 
-            <span class="k">return</span> <span class="n">func</span>
+        <span class="n">dynamic_func</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">=</span> <span class="n">tools_args</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+        <span class="n">dynamic_func</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">tools_args</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="n">StructuredTool</span><span class="p">(</span>
-            <span class="n">func</span><span class="o">=</span><span class="n">create_function</span><span class="p">(</span><span class="n">endpoint</span><span class="p">),</span>
-            <span class="n">args_schema</span><span class="o">=</span><span class="n">create_model</span><span class="p">(</span><span class="s2">&quot;DynamicToolInputSchema&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">),</span>
+            <span class="n">func</span><span class="o">=</span><span class="n">dynamic_func</span><span class="p">,</span>
+            <span class="n">args_schema</span><span class="o">=</span><span class="n">_DynamicToolInputSchema</span><span class="p">,</span>
             <span class="o">**</span><span class="n">tools_args</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -448,7 +440,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 01, 2024.
+          Last updated on Apr 02, 2024.
       </footer>
     </div>
   </div>
