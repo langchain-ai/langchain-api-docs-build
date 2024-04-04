@@ -120,6 +120,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -150,6 +153,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
@@ -2104,7 +2108,6 @@
         <span class="n">_configure_hooks</span><span class="p">,</span>
         <span class="n">_get_tracer_project</span><span class="p">,</span>
         <span class="n">_tracing_v2_is_enabled</span><span class="p">,</span>
-        <span class="n">tracing_callback_var</span><span class="p">,</span>
         <span class="n">tracing_v2_callback_var</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -2143,20 +2146,25 @@
         <span class="n">callback_manager</span><span class="o">.</span><span class="n">add_metadata</span><span class="p">(</span><span class="n">inheritable_metadata</span> <span class="ow">or</span> <span class="p">{})</span>
         <span class="n">callback_manager</span><span class="o">.</span><span class="n">add_metadata</span><span class="p">(</span><span class="n">local_metadata</span> <span class="ow">or</span> <span class="p">{},</span> <span class="kc">False</span><span class="p">)</span>
 
-    <span class="n">tracer</span> <span class="o">=</span> <span class="n">tracing_callback_var</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-    <span class="n">tracing_enabled_</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">env_var_is_set</span><span class="p">(</span><span class="s2">&quot;LANGCHAIN_TRACING&quot;</span><span class="p">)</span>
-        <span class="ow">or</span> <span class="n">tracer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="ow">or</span> <span class="n">env_var_is_set</span><span class="p">(</span><span class="s2">&quot;LANGCHAIN_HANDLER&quot;</span><span class="p">)</span>
+    <span class="n">v1_tracing_enabled_</span> <span class="o">=</span> <span class="n">env_var_is_set</span><span class="p">(</span><span class="s2">&quot;LANGCHAIN_TRACING&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">env_var_is_set</span><span class="p">(</span>
+        <span class="s2">&quot;LANGCHAIN_HANDLER&quot;</span>
     <span class="p">)</span>
 
     <span class="n">tracer_v2</span> <span class="o">=</span> <span class="n">tracing_v2_callback_var</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
     <span class="n">tracing_v2_enabled_</span> <span class="o">=</span> <span class="n">_tracing_v2_is_enabled</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">v1_tracing_enabled_</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">tracing_v2_enabled_</span><span class="p">:</span>
+        <span class="c1"># if both are enabled, can silently ignore the v1 tracer</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;Tracing using LangChainTracerV1 is no longer supported. &quot;</span>
+            <span class="s2">&quot;Please set the LANGCHAIN_TRACING_V2 environment variable to enable &quot;</span>
+            <span class="s2">&quot;tracing instead.&quot;</span>
+        <span class="p">)</span>
+
     <span class="n">tracer_project</span> <span class="o">=</span> <span class="n">_get_tracer_project</span><span class="p">()</span>
     <span class="n">debug</span> <span class="o">=</span> <span class="n">_get_debug</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">verbose</span> <span class="ow">or</span> <span class="n">debug</span> <span class="ow">or</span> <span class="n">tracing_enabled_</span> <span class="ow">or</span> <span class="n">tracing_v2_enabled_</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">verbose</span> <span class="ow">or</span> <span class="n">debug</span> <span class="ow">or</span> <span class="n">tracing_v2_enabled_</span><span class="p">:</span>
         <span class="kn">from</span> <span class="nn">langchain_core.tracers.langchain</span> <span class="kn">import</span> <span class="n">LangChainTracer</span>
-        <span class="kn">from</span> <span class="nn">langchain_core.tracers.langchain_v1</span> <span class="kn">import</span> <span class="n">LangChainTracerV1</span>
         <span class="kn">from</span> <span class="nn">langchain_core.tracers.stdout</span> <span class="kn">import</span> <span class="n">ConsoleCallbackHandler</span>
 
         <span class="k">if</span> <span class="n">verbose</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
@@ -2172,16 +2180,6 @@
             <span class="k">for</span> <span class="n">handler</span> <span class="ow">in</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">handlers</span>
         <span class="p">):</span>
             <span class="n">callback_manager</span><span class="o">.</span><span class="n">add_handler</span><span class="p">(</span><span class="n">ConsoleCallbackHandler</span><span class="p">(),</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">tracing_enabled_</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">LangChainTracerV1</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">handler</span> <span class="ow">in</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">handlers</span>
-        <span class="p">):</span>
-            <span class="k">if</span> <span class="n">tracer</span><span class="p">:</span>
-                <span class="n">callback_manager</span><span class="o">.</span><span class="n">add_handler</span><span class="p">(</span><span class="n">tracer</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">handler</span> <span class="o">=</span> <span class="n">LangChainTracerV1</span><span class="p">()</span>
-                <span class="n">handler</span><span class="o">.</span><span class="n">load_session</span><span class="p">(</span><span class="n">tracer_project</span><span class="p">)</span>
-                <span class="n">callback_manager</span><span class="o">.</span><span class="n">add_handler</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">tracing_v2_enabled_</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
             <span class="nb">isinstance</span><span class="p">(</span><span class="n">handler</span><span class="p">,</span> <span class="n">LangChainTracer</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">handler</span> <span class="ow">in</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">handlers</span>
@@ -2226,7 +2224,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 02, 2024.
+          Last updated on Apr 04, 2024.
       </footer>
     </div>
   </div>
