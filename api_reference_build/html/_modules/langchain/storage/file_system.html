@@ -230,14 +230,26 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="LocalFileStore.__init__"><a class="viewcode-back" href="../../../storage/langchain.storage.file_system.LocalFileStore.html#langchain.storage.file_system.LocalFileStore.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="LocalFileStore.__init__"><a class="viewcode-back" href="../../../storage/langchain.storage.file_system.LocalFileStore.html#langchain.storage.file_system.LocalFileStore.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">root_path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">chmod_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chmod_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Implement the BaseStore interface for the local file system.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            root_path (Union[str, Path]): The root path of the file store. All keys are</span>
 <span class="sd">                interpreted as paths relative to this root.</span>
+<span class="sd">            chmod_file: (optional, defaults to `None`) If specified, sets permissions</span>
+<span class="sd">                for newly created files, overriding the current `umask` if needed.</span>
+<span class="sd">            chmod_dir: (optional, defaults to `None`) If specified, sets permissions</span>
+<span class="sd">                for newly created dirs, overriding the current `umask` if needed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">root_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root_path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root_path</span><span class="p">)</span><span class="o">.</span><span class="n">absolute</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chmod_file</span> <span class="o">=</span> <span class="n">chmod_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">chmod_dir</span> <span class="o">=</span> <span class="n">chmod_dir</span></div>
 
     <span class="k">def</span> <span class="nf">_get_full_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the full path for a given key relative to the root path.</span>
@@ -259,6 +271,24 @@
             <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">full_path</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_mkdir_for_store</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Makes a store directory path (including parents) with specified permissions</span>
+
+<span class="sd">        This is needed because `Path.mkdir()` is restricted by the current `umask`,</span>
+<span class="sd">        whereas the explicit `os.chmod()` used here is not.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dir: (Path) The store directory to make</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">dir</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mkdir_for_store</span><span class="p">(</span><span class="nb">dir</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span>
+            <span class="nb">dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chmod_dir</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="nb">dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chmod_dir</span><span class="p">)</span>
 
 <div class="viewcode-block" id="LocalFileStore.mget"><a class="viewcode-back" href="../../../storage/langchain.storage.file_system.LocalFileStore.html#langchain.storage.file_system.LocalFileStore.mget">[docs]</a>    <span class="k">def</span> <span class="nf">mget</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the values associated with the given keys.</span>
@@ -291,8 +321,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">key_value_pairs</span><span class="p">:</span>
             <span class="n">full_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_full_path</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-            <span class="n">full_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="n">full_path</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mkdir_for_store</span><span class="p">(</span><span class="n">full_path</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span>
+            <span class="n">full_path</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">chmod_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="n">full_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">chmod_file</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="LocalFileStore.mdelete"><a class="viewcode-back" href="../../../storage/langchain.storage.file_system.LocalFileStore.html#langchain.storage.file_system.LocalFileStore.mdelete">[docs]</a>    <span class="k">def</span> <span class="nf">mdelete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete the given keys and their associated values.</span>
@@ -328,7 +360,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 04, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>

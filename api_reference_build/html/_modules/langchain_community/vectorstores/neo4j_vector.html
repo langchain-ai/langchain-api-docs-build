@@ -222,6 +222,35 @@
     <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">COSINE</span><span class="p">:</span> <span class="s2">&quot;cosine&quot;</span><span class="p">,</span>
 <span class="p">}</span>
 
+<span class="n">COMPARISONS_TO_NATIVE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;$eq&quot;</span><span class="p">:</span> <span class="s2">&quot;=&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$ne&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;&gt;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$lt&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$lte&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$gt&quot;</span><span class="p">:</span> <span class="s2">&quot;&gt;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$gte&quot;</span><span class="p">:</span> <span class="s2">&quot;&gt;=&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">SPECIAL_CASED_OPERATORS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;$in&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$nin&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$between&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">TEXT_OPERATORS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;$like&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$ilike&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">LOGICAL_OPERATORS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;$and&quot;</span><span class="p">,</span> <span class="s2">&quot;$or&quot;</span><span class="p">}</span>
+
+<span class="n">SUPPORTED_OPERATORS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="nb">set</span><span class="p">(</span><span class="n">COMPARISONS_TO_NATIVE</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">TEXT_OPERATORS</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">LOGICAL_OPERATORS</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">SPECIAL_CASED_OPERATORS</span><span class="p">)</span>
+<span class="p">)</span>
+
 
 <div class="viewcode-block" id="SearchType"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.SearchType.html#langchain_community.vectorstores.neo4j_vector.SearchType">[docs]</a><span class="k">class</span> <span class="nc">SearchType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerator of the Distance strategies.&quot;&quot;&quot;</span>
@@ -325,6 +354,240 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">yaml_str</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">padding</span><span class="si">}{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
     <span class="k">return</span> <span class="n">yaml_str</span></div>
+
+
+<div class="viewcode-block" id="combine_queries"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.combine_queries.html#langchain_community.vectorstores.neo4j_vector.combine_queries">[docs]</a><span class="k">def</span> <span class="nf">combine_queries</span><span class="p">(</span>
+    <span class="n">input_queries</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]],</span> <span class="n">operator</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="c1"># Initialize variables to hold the combined query and parameters</span>
+    <span class="n">combined_query</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">combined_params</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">param_counter</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">query</span><span class="p">,</span> <span class="n">params</span> <span class="ow">in</span> <span class="n">input_queries</span><span class="p">:</span>
+        <span class="c1"># Process each query fragment and its parameters</span>
+        <span class="n">new_query</span> <span class="o">=</span> <span class="n">query</span>
+        <span class="k">for</span> <span class="n">param</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Update the parameter name to ensure uniqueness</span>
+            <span class="k">if</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_counter</span><span class="p">:</span>
+                <span class="n">param_counter</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">param_counter</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="n">new_param_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">param_counter</span><span class="p">[</span><span class="n">param</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+
+            <span class="c1"># Replace the parameter in the query fragment</span>
+            <span class="n">new_query</span> <span class="o">=</span> <span class="n">new_query</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;$</span><span class="si">{</span><span class="n">param</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;$</span><span class="si">{</span><span class="n">new_param_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="c1"># Add the parameter to the combined parameters dictionary</span>
+            <span class="n">combined_params</span><span class="p">[</span><span class="n">new_param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+        <span class="c1"># Combine the query fragments with an AND operator</span>
+        <span class="k">if</span> <span class="n">combined_query</span><span class="p">:</span>
+            <span class="n">combined_query</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">operator</span><span class="si">}</span><span class="s2"> &quot;</span>
+        <span class="n">combined_query</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">new_query</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+    <span class="k">return</span> <span class="n">combined_query</span><span class="p">,</span> <span class="n">combined_params</span></div>
+
+
+<div class="viewcode-block" id="collect_params"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.collect_params.html#langchain_community.vectorstores.neo4j_vector.collect_params">[docs]</a><span class="k">def</span> <span class="nf">collect_params</span><span class="p">(</span>
+    <span class="n">input_data</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Transform the input data into the desired format.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">    - input_data (list of tuples): Input data to transform.</span>
+<span class="sd">      Each tuple contains a string and a dictionary.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">    - tuple: A tuple containing a list of strings and a dictionary.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Initialize variables to hold the output parts</span>
+    <span class="n">query_parts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Loop through each item in the input data</span>
+    <span class="k">for</span> <span class="n">query_part</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">input_data</span><span class="p">:</span>
+        <span class="c1"># Append the query part to the list</span>
+        <span class="n">query_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query_part</span><span class="p">)</span>
+        <span class="c1"># Update the params dictionary with the param dictionary</span>
+        <span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+
+    <span class="c1"># Return the transformed data</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">query_parts</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_handle_field_filter</span><span class="p">(</span>
+    <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">param_number</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a filter for a specific field.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        field: name of field</span>
+<span class="sd">        value: value to filter</span>
+<span class="sd">            If provided as is then this will be an equality filter</span>
+<span class="sd">            If provided as a dictionary then this will be a filter, the key</span>
+<span class="sd">            will be the operator and the value will be the value to filter by</span>
+<span class="sd">        param_number: sequence number of parameters used to map between param</span>
+<span class="sd">           dict and Cypher snippet</span>
+
+<span class="sd">    Returns a tuple of</span>
+<span class="sd">        - Cypher filter snippet</span>
+<span class="sd">        - Dictionary with parameters used in filter snippet</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;field should be a string but got: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="si">}</span><span class="s2"> with value: </span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;$&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Invalid filter condition. Expected a field but got an operator: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Allow [a-zA-Z0-9_], disallow $ for now until we support escape characters</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">isidentifier</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid field name: </span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">. Expected a valid identifier.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="c1"># This is a filter specification</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Invalid filter condition. Expected a value which &quot;</span>
+                <span class="s2">&quot;is a dictionary with a single key that corresponds to an operator &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;but got a dictionary with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2"> keys. The first few &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;keys are: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">keys</span><span class="p">())[:</span><span class="mi">3</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">operator</span><span class="p">,</span> <span class="n">filter_value</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># Verify that that operator is an operator</span>
+        <span class="k">if</span> <span class="n">operator</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SUPPORTED_OPERATORS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Invalid operator: </span><span class="si">{</span><span class="n">operator</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Expected one of </span><span class="si">{</span><span class="n">SUPPORTED_OPERATORS</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># Then we assume an equality operator</span>
+        <span class="n">operator</span> <span class="o">=</span> <span class="s2">&quot;$eq&quot;</span>
+        <span class="n">filter_value</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">if</span> <span class="n">operator</span> <span class="ow">in</span> <span class="n">COMPARISONS_TO_NATIVE</span><span class="p">:</span>
+        <span class="c1"># Then we implement an equality filter</span>
+        <span class="c1"># native is trusted input</span>
+        <span class="n">native</span> <span class="o">=</span> <span class="n">COMPARISONS_TO_NATIVE</span><span class="p">[</span><span class="n">operator</span><span class="p">]</span>
+        <span class="n">query_snippet</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;n.`</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">` </span><span class="si">{</span><span class="n">native</span><span class="si">}</span><span class="s2"> $param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">query_param</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">filter_value</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">query_snippet</span><span class="p">,</span> <span class="n">query_param</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">operator</span> <span class="o">==</span> <span class="s2">&quot;$between&quot;</span><span class="p">:</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">filter_value</span>
+        <span class="n">query_snippet</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;$param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">_low &lt;= n.`</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">` &lt;= $param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">_high&quot;</span>
+        <span class="p">)</span>
+        <span class="n">query_param</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">_low&quot;</span><span class="p">:</span> <span class="n">low</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">_high&quot;</span><span class="p">:</span> <span class="n">high</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">query_snippet</span><span class="p">,</span> <span class="n">query_param</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="n">operator</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;$in&quot;</span><span class="p">,</span> <span class="s2">&quot;$nin&quot;</span><span class="p">,</span> <span class="s2">&quot;$like&quot;</span><span class="p">,</span> <span class="s2">&quot;$ilike&quot;</span><span class="p">}:</span>
+        <span class="c1"># We&#39;ll do force coercion to text</span>
+        <span class="k">if</span> <span class="n">operator</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;$in&quot;</span><span class="p">,</span> <span class="s2">&quot;$nin&quot;</span><span class="p">}:</span>
+            <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">filter_value</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Unsupported type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">val</span><span class="p">)</span><span class="si">}</span><span class="s2"> for value: </span><span class="si">{</span><span class="n">val</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">if</span> <span class="n">operator</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;$in&quot;</span><span class="p">}:</span>
+            <span class="n">query_snippet</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;n.`</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">` IN $param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">query_param</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">filter_value</span><span class="p">}</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">query_snippet</span><span class="p">,</span> <span class="n">query_param</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">operator</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;$nin&quot;</span><span class="p">}:</span>
+            <span class="n">query_snippet</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;n.`</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">` NOT IN $param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">query_param</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">filter_value</span><span class="p">}</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">query_snippet</span><span class="p">,</span> <span class="n">query_param</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">operator</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;$like&quot;</span><span class="p">}:</span>
+            <span class="n">query_snippet</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;n.`</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">` CONTAINS $param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">query_param</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">filter_value</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;%&quot;</span><span class="p">)}</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">query_snippet</span><span class="p">,</span> <span class="n">query_param</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">operator</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;$ilike&quot;</span><span class="p">}:</span>
+            <span class="n">query_snippet</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;toLower(n.`</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">`) CONTAINS $param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">query_param</span> <span class="o">=</span> <span class="p">{</span><span class="sa">f</span><span class="s2">&quot;param_</span><span class="si">{</span><span class="n">param_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">filter_value</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;%&quot;</span><span class="p">)}</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">query_snippet</span><span class="p">,</span> <span class="n">query_param</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="construct_metadata_filter"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.construct_metadata_filter.html#langchain_community.vectorstores.neo4j_vector.construct_metadata_filter">[docs]</a><span class="k">def</span> <span class="nf">construct_metadata_filter</span><span class="p">(</span><span class="nb">filter</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># The only operators allowed at the top level are $AND and $OR</span>
+            <span class="c1"># First check if an operator or a field</span>
+            <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="o">.</span><span class="n">items</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;$&quot;</span><span class="p">):</span>
+                <span class="c1"># Then it&#39;s an operator</span>
+                <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;$and&quot;</span><span class="p">,</span> <span class="s2">&quot;$or&quot;</span><span class="p">]:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Invalid filter condition. Expected $and or $or &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;but got: </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Then it&#39;s a field</span>
+                <span class="k">return</span> <span class="n">_handle_field_filter</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+
+            <span class="c1"># Here we handle the $and and $or operators</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Expected a list, but got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2"> for value: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;$and&quot;</span><span class="p">:</span>
+                <span class="n">and_</span> <span class="o">=</span> <span class="n">combine_queries</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">construct_metadata_filter</span><span class="p">(</span><span class="n">el</span><span class="p">)</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">value</span><span class="p">],</span> <span class="s2">&quot;AND&quot;</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">and_</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">and_</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Invalid filter condition. Expected a dictionary &quot;</span>
+                        <span class="s2">&quot;but got an empty dictionary&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">elif</span> <span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;$or&quot;</span><span class="p">:</span>
+                <span class="n">or_</span> <span class="o">=</span> <span class="n">combine_queries</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">construct_metadata_filter</span><span class="p">(</span><span class="n">el</span><span class="p">)</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">value</span><span class="p">],</span> <span class="s2">&quot;OR&quot;</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">or_</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">or_</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Invalid filter condition. Expected a dictionary &quot;</span>
+                        <span class="s2">&quot;but got an empty dictionary&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Invalid filter condition. Expected $and or $or &quot;</span> <span class="sa">f</span><span class="s2">&quot;but got: </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Then all keys have to be fields (they cannot be operators)</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">filter</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;$&quot;</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Invalid filter condition. Expected a field but got: </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="c1"># These should all be fields and combined using an $and operator</span>
+            <span class="n">and_multiple</span> <span class="o">=</span> <span class="n">collect_params</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="n">_handle_field_filter</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">filter</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">and_multiple</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot; AND &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">and_multiple</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">and_multiple</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Invalid filter condition. Expected a dictionary &quot;</span>
+                    <span class="s2">&quot;but got an empty dictionary&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Got an empty dictionary for filters.&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Neo4jVector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector">[docs]</a><span class="k">class</span> <span class="nc">Neo4jVector</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
@@ -437,6 +700,7 @@
             <span class="p">)</span>
 
         <span class="c1"># Verify if the version support vector index</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_enterprise</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">verify_version</span><span class="p">()</span>
 
         <span class="c1"># Verify that required values are not null</span>
@@ -512,7 +776,8 @@
 <span class="sd">        indexing. Raises a ValueError if the connected Neo4j version is</span>
 <span class="sd">        not supported.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">version</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">&quot;CALL dbms.components()&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;versions&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">db_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">&quot;CALL dbms.components()&quot;</span><span class="p">)</span>
+        <span class="n">version</span> <span class="o">=</span> <span class="n">db_data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;versions&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">if</span> <span class="s2">&quot;aura&quot;</span> <span class="ow">in</span> <span class="n">version</span><span class="p">:</span>
             <span class="n">version_tuple</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">version</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)))</span> <span class="o">+</span> <span class="p">(</span><span class="mi">0</span><span class="p">,)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -523,7 +788,16 @@
         <span class="k">if</span> <span class="n">version_tuple</span> <span class="o">&lt;</span> <span class="n">target_version</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;Version index is only supported in Neo4j version 5.11 or greater&quot;</span>
-            <span class="p">)</span></div>
+            <span class="p">)</span>
+
+        <span class="c1"># Flag for metadata filtering</span>
+        <span class="n">metadata_target_version</span> <span class="o">=</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">18</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">version_tuple</span> <span class="o">&lt;</span> <span class="n">metadata_target_version</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">support_metadata_filter</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">support_metadata_filter</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="c1"># Flag for enterprise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_enterprise</span> <span class="o">=</span> <span class="kc">True</span> <span class="k">if</span> <span class="n">db_data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;edition&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;enterprise&quot;</span> <span class="k">else</span> <span class="kc">False</span></div>
 
 <div class="viewcode-block" id="Neo4jVector.retrieve_existing_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector.retrieve_existing_index">[docs]</a>    <span class="k">def</span> <span class="nf">retrieve_existing_index</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -777,6 +1051,7 @@
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{},</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run similarity search with Neo4jVector.</span>
@@ -790,7 +1065,12 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">query</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Neo4jVector.similarity_search_with_score"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector.similarity_search_with_score">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score</span><span class="p">(</span>
@@ -798,6 +1078,7 @@
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{},</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs most similar to query.</span>
@@ -811,7 +1092,12 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">docs</span></div>
 
@@ -819,6 +1105,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{},</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
@@ -840,6 +1127,33 @@
 <span class="sd">            List[Tuple[Document, float]]: A list of tuples, each containing</span>
 <span class="sd">                                a Document object and its similarity score.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">filter</span><span class="p">:</span>
+            <span class="c1"># Verify that 5.18 or later is used</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">support_metadata_filter</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Metadata filtering is only supported in &quot;</span>
+                    <span class="s2">&quot;Neo4j version 5.18 or greater&quot;</span>
+                <span class="p">)</span>
+            <span class="c1"># Metadata filtering and hybrid doesn&#39;t work</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_type</span> <span class="o">==</span> <span class="n">SearchType</span><span class="o">.</span><span class="n">HYBRID</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Metadata filtering can&#39;t be use in combination with &quot;</span>
+                    <span class="s2">&quot;a hybrid search approach&quot;</span>
+                <span class="p">)</span>
+            <span class="n">parallel_query</span> <span class="o">=</span> <span class="s2">&quot;CYPHER runtime = parallel &quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_enterprise</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">base_index_query</span> <span class="o">=</span> <span class="n">parallel_query</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;MATCH (n:`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">node_label</span><span class="si">}</span><span class="s2">`) WHERE &quot;</span>
+            <span class="n">base_cosine_query</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">&quot; WITH n as node, vector.similarity.cosine(&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;n.`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding_node_property</span><span class="si">}</span><span class="s2">`, &quot;</span>
+                <span class="s2">&quot;$embedding) AS score ORDER BY score DESC LIMIT toInteger($k) &quot;</span>
+            <span class="p">)</span>
+            <span class="n">filter_snippets</span><span class="p">,</span> <span class="n">filter_params</span> <span class="o">=</span> <span class="n">construct_metadata_filter</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+            <span class="n">index_query</span> <span class="o">=</span> <span class="n">base_index_query</span> <span class="o">+</span> <span class="n">filter_snippets</span> <span class="o">+</span> <span class="n">base_cosine_query</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">index_query</span> <span class="o">=</span> <span class="n">_get_search_index_query</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">search_type</span><span class="p">)</span>
+            <span class="n">filter_params</span> <span class="o">=</span> <span class="p">{}</span>
+
         <span class="n">default_retrieval</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;RETURN node.`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">` AS text, score, &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;node </span><span class="se">{{</span><span class="s2">.*, `</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">`: Null, &quot;</span>
@@ -850,7 +1164,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">retrieval_query</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">retrieval_query</span> <span class="k">else</span> <span class="n">default_retrieval</span>
         <span class="p">)</span>
 
-        <span class="n">read_query</span> <span class="o">=</span> <span class="n">_get_search_index_query</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">search_type</span><span class="p">)</span> <span class="o">+</span> <span class="n">retrieval_query</span>
+        <span class="n">read_query</span> <span class="o">=</span> <span class="n">index_query</span> <span class="o">+</span> <span class="n">retrieval_query</span>
         <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_name</span><span class="p">,</span>
             <span class="s2">&quot;k&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span>
@@ -858,6 +1172,7 @@
             <span class="s2">&quot;keyword_index&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">keyword_index_name</span><span class="p">,</span>
             <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="n">remove_lucene_chars</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;query&quot;</span><span class="p">]),</span>
             <span class="o">**</span><span class="n">params</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">filter_params</span><span class="p">,</span>
         <span class="p">}</span>
 
         <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">read_query</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">parameters</span><span class="p">)</span>
@@ -882,6 +1197,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs most similar to embedding vector.</span>
@@ -894,7 +1210,7 @@
 <span class="sd">            List of Documents most similar to the query vector.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="p">]</span></div>
 
@@ -1215,7 +1531,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 04, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>

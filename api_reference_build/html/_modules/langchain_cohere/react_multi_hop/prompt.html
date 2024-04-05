@@ -302,57 +302,57 @@
     <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Renders the &#39;output&#39; part of an Agent&#39;s intermediate step into prompt content.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">)</span>
-    <span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;observation must be a list, a Mapping, or a string&quot;</span><span class="p">)</span>
+    <span class="n">documents</span> <span class="o">=</span> <span class="n">convert_to_documents</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
 
-    <span class="n">rendered_documents</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">rendered_documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">document_prompt</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;Document: </span><span class="si">{index}</span>
 <span class="si">{fields}</span><span class="s2">&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">:</span>
+        <span class="c1"># Render document fields into Key: value strings.</span>
+        <span class="n">fields</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">doc</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;url&quot;</span><span class="p">:</span>
+                <span class="c1"># &#39;url&#39; is a special key which is always upper case.</span>
+                <span class="n">k</span> <span class="o">=</span> <span class="s2">&quot;URL&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># keys are otherwise transformed into title case.</span>
+                <span class="n">k</span> <span class="o">=</span> <span class="n">k</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+            <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="c1"># strings are turned into a key/value pair and a key of &#39;output&#39; is added.</span>
-        <span class="n">observations</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">observations</span><span class="p">}]</span>  <span class="c1"># type: ignore</span>
-
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
-        <span class="c1"># single items are transformed into a list to simplify the rest of the code.</span>
-        <span class="n">observations</span> <span class="o">=</span> <span class="p">[</span><span class="n">observations</span><span class="p">]</span>
-
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="c1"># strings are turned into a key/value pair.</span>
-                <span class="n">doc</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="p">}</span>
-
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;all observation list items must be a Mapping or a string&quot;</span>
-                <span class="p">)</span>
-
-            <span class="c1"># Render document fields into Key: value strings.</span>
-            <span class="n">fields</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">doc</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;url&quot;</span><span class="p">:</span>
-                    <span class="c1"># &#39;url&#39; is a special key which is always upper case.</span>
-                    <span class="n">k</span> <span class="o">=</span> <span class="s2">&quot;URL&quot;</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="c1"># keys are otherwise transformed into title case.</span>
-                    <span class="n">k</span> <span class="o">=</span> <span class="n">k</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
-                <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-            <span class="n">rendered_documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">document_prompt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
-                    <span class="n">fields</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fields</span><span class="p">),</span>
-                <span class="p">)</span>
+        <span class="n">rendered_documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">document_prompt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+                <span class="n">fields</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fields</span><span class="p">),</span>
             <span class="p">)</span>
-            <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="p">)</span>
+        <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
 
     <span class="n">prompt_content</span> <span class="o">=</span> <span class="s2">&quot;&lt;results&gt;</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">rendered_documents</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&lt;/results&gt;&quot;</span>
     <span class="k">return</span> <span class="n">SystemMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">prompt_content</span><span class="p">),</span> <span class="n">index</span></div>
+
+
+<div class="viewcode-block" id="convert_to_documents"><a class="viewcode-back" href="../../../react_multi_hop/langchain_cohere.react_multi_hop.prompt.convert_to_documents.html#langchain_cohere.react_multi_hop.prompt.convert_to_documents">[docs]</a><span class="k">def</span> <span class="nf">convert_to_documents</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Mapping</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Converts observations into a &#39;document&#39; dict&quot;&quot;&quot;</span>
+    <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Mapping</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="c1"># strings are turned into a key/value pair and a key of &#39;output&#39; is added.</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">observations</span><span class="p">}]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+        <span class="c1"># single mappings are transformed into a list to simplify the rest of the code.</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="p">[</span><span class="n">observations</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
+        <span class="c1"># all other types are turned into a key/value pair within a list</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">observations</span><span class="p">}]</span>
+
+    <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="c1"># types that aren&#39;t Mapping are turned into a key/value pair.</span>
+            <span class="n">doc</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="p">}</span>
+        <span class="n">documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">documents</span></div>
 
 
 <div class="viewcode-block" id="render_intermediate_steps"><a class="viewcode-back" href="../../../react_multi_hop/langchain_cohere.react_multi_hop.prompt.render_intermediate_steps.html#langchain_cohere.react_multi_hop.prompt.render_intermediate_steps">[docs]</a><span class="k">def</span> <span class="nf">render_intermediate_steps</span><span class="p">(</span>
@@ -497,7 +497,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 04, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>

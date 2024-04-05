@@ -195,11 +195,16 @@
 <span></span><span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.agents</span> <span class="kn">import</span> <span class="n">AgentAction</span><span class="p">,</span> <span class="n">AgentActionMessageLog</span><span class="p">,</span> <span class="n">AgentFinish</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseOutputParser</span>
+
+<span class="kn">from</span> <span class="nn">langchain_cohere</span> <span class="kn">import</span> <span class="n">CohereCitation</span>
+
+<span class="n">OUTPUT_KEY</span> <span class="o">=</span> <span class="s2">&quot;output&quot;</span>
+<span class="n">GROUNDED_ANSWER_KEY</span> <span class="o">=</span> <span class="s2">&quot;grounded_answer&quot;</span>
 
 
 <div class="viewcode-block" id="CohereToolsReactAgentOutputParser"><a class="viewcode-back" href="../../../react_multi_hop/langchain_cohere.react_multi_hop.parsing.CohereToolsReactAgentOutputParser.html#langchain_cohere.react_multi_hop.parsing.CohereToolsReactAgentOutputParser">[docs]</a><span class="k">class</span> <span class="nc">CohereToolsReactAgentOutputParser</span><span class="p">(</span>
@@ -217,7 +222,13 @@
                 <span class="s2">&quot;cited_docs&quot;</span><span class="p">:</span> <span class="s2">&quot;Cited Documents:&quot;</span><span class="p">,</span>
             <span class="p">}</span>
             <span class="n">parsed_answer</span> <span class="o">=</span> <span class="n">parse_answer_with_prefixes</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">prefix_map</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">AgentFinish</span><span class="p">({</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">parsed_answer</span><span class="p">[</span><span class="s2">&quot;answer&quot;</span><span class="p">]},</span> <span class="n">text</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">AgentFinish</span><span class="p">(</span>
+                <span class="n">return_values</span><span class="o">=</span><span class="p">{</span>
+                    <span class="n">OUTPUT_KEY</span><span class="p">:</span> <span class="n">parsed_answer</span><span class="p">[</span><span class="s2">&quot;answer&quot;</span><span class="p">],</span>
+                    <span class="n">GROUNDED_ANSWER_KEY</span><span class="p">:</span> <span class="n">parsed_answer</span><span class="p">[</span><span class="s2">&quot;grounded_answer&quot;</span><span class="p">],</span>
+                <span class="p">},</span>
+                <span class="n">log</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">elif</span> <span class="nb">any</span><span class="p">([</span><span class="n">x</span> <span class="ow">in</span> <span class="n">text</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;Plan: &quot;</span><span class="p">,</span> <span class="s2">&quot;Reflection: &quot;</span><span class="p">,</span> <span class="s2">&quot;Action: &quot;</span><span class="p">]]):</span>
             <span class="n">completion</span><span class="p">,</span> <span class="n">plan</span><span class="p">,</span> <span class="n">actions</span> <span class="o">=</span> <span class="n">parse_actions</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
             <span class="n">agent_actions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">AgentAction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -343,13 +354,154 @@
 
     <span class="n">parsed_actions</span> <span class="o">=</span> <span class="n">parse_jsonified_tool_use_generation</span><span class="p">(</span><span class="n">actions</span><span class="p">,</span> <span class="s2">&quot;Action:&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">generation</span><span class="p">,</span> <span class="n">plan</span><span class="p">,</span> <span class="n">parsed_actions</span></div>
+
+
+<div class="viewcode-block" id="parse_citations"><a class="viewcode-back" href="../../../react_multi_hop/langchain_cohere.react_multi_hop.parsing.parse_citations.html#langchain_cohere.react_multi_hop.parsing.parse_citations">[docs]</a><span class="k">def</span> <span class="nf">parse_citations</span><span class="p">(</span>
+    <span class="n">grounded_answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Mapping</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">CohereCitation</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Parses a grounded_generation (from parse_actions) and documents (from</span>
+<span class="sd">    convert_to_documents) into a (generation, CohereCitation list) tuple.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">no_markup_answer</span><span class="p">,</span> <span class="n">parsed_answer</span> <span class="o">=</span> <span class="n">_parse_answer_spans</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">)</span>
+    <span class="n">citations</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CohereCitation</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">answer</span> <span class="ow">in</span> <span class="n">parsed_answer</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">document_indexes</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cited_docs&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">document_indexes</span><span class="p">:</span>
+            <span class="c1"># There were no citations for this piece of text.</span>
+            <span class="n">start</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+
+        <span class="c1"># Look up the cited document by index</span>
+        <span class="n">cited_documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Mapping</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">document_indexes</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">):</span>
+                <span class="c1"># The document index doesn&#39;t exist</span>
+                <span class="k">continue</span>
+            <span class="n">cited_documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">documents</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+
+        <span class="n">citations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">CohereCitation</span><span class="p">(</span>
+                <span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">,</span>
+                <span class="n">end</span><span class="o">=</span><span class="n">end</span><span class="p">,</span>
+                <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
+                <span class="n">documents</span><span class="o">=</span><span class="n">cited_documents</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">end</span>
+
+    <span class="k">return</span> <span class="n">no_markup_answer</span><span class="p">,</span> <span class="n">citations</span></div>
+
+
+<span class="k">def</span> <span class="nf">_strip_spans</span><span class="p">(</span><span class="n">answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;removes any &lt;co&gt; tags from a string, including trailing partial tags</span>
+
+<span class="sd">    input: &quot;hi my &lt;co&gt;name&lt;/co&gt; is &lt;co: 1&gt; patrick&lt;/co:3&gt; and &lt;co&quot;</span>
+<span class="sd">    output: &quot;hi my name is patrick and&quot;</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        answer (str): string</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: same string with co tags removed</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">answer</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;co(.*?)&gt;|&lt;/co(.*?)&gt;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">answer</span><span class="p">)</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;&lt;co&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">idx</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="n">answer</span> <span class="o">=</span> <span class="n">answer</span><span class="p">[:</span><span class="n">idx</span><span class="p">]</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;&lt;/&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">idx</span> <span class="o">&gt;</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="n">answer</span> <span class="o">=</span> <span class="n">answer</span><span class="p">[:</span><span class="n">idx</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">answer</span>
+
+
+<span class="k">def</span> <span class="nf">_parse_answer_spans</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]:</span>
+    <span class="n">actual_cites</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;co:(.*?)&gt;&quot;</span><span class="p">,</span> <span class="n">grounded_answer</span><span class="p">):</span>
+        <span class="n">actual_cites</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">))</span>
+    <span class="n">no_markup_answer</span> <span class="o">=</span> <span class="n">_strip_spans</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">)</span>
+
+    <span class="n">current_idx</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">parsed_answer</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">cited_docs_set</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">last_entry_is_open_cite</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">parsed_current_cite_document_idxs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">while</span> <span class="n">current_idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">):</span>
+        <span class="n">current_cite</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;co: (.*?)&gt;&quot;</span><span class="p">,</span> <span class="n">grounded_answer</span><span class="p">[</span><span class="n">current_idx</span><span class="p">:])</span>
+        <span class="k">if</span> <span class="n">current_cite</span><span class="p">:</span>
+            <span class="c1"># previous part</span>
+            <span class="n">parsed_answer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">grounded_answer</span><span class="p">[</span>
+                        <span class="n">current_idx</span> <span class="p">:</span> <span class="n">current_idx</span> <span class="o">+</span> <span class="n">current_cite</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                    <span class="p">]</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
+            <span class="n">current_cite_document_idxs</span> <span class="o">=</span> <span class="n">current_cite</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
+            <span class="n">parsed_current_cite_document_idxs</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">cited_idx</span> <span class="ow">in</span> <span class="n">current_cite_document_idxs</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">cited_idx</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
+                    <span class="n">cited_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cited_idx</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+                    <span class="n">parsed_current_cite_document_idxs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cited_idx</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">cited_idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cited_docs_set</span><span class="p">:</span>
+                        <span class="n">cited_docs_set</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cited_idx</span><span class="p">)</span>
+
+            <span class="n">current_idx</span> <span class="o">+=</span> <span class="n">current_cite</span><span class="o">.</span><span class="n">end</span><span class="p">()</span>
+
+            <span class="n">current_cite_close</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                <span class="sa">r</span><span class="s2">&quot;&lt;/co: &quot;</span> <span class="o">+</span> <span class="n">current_cite</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;&gt;&quot;</span><span class="p">,</span> <span class="n">grounded_answer</span><span class="p">[</span><span class="n">current_idx</span><span class="p">:]</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">current_cite_close</span><span class="p">:</span>
+                <span class="c1"># there might have been issues parsing the ids, so we need to check</span>
+                <span class="c1"># that they are actually ints and available</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parsed_current_cite_document_idxs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">pt</span> <span class="o">=</span> <span class="n">grounded_answer</span><span class="p">[</span>
+                        <span class="n">current_idx</span> <span class="p">:</span> <span class="n">current_idx</span> <span class="o">+</span> <span class="n">current_cite_close</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                    <span class="p">]</span>
+                    <span class="n">parsed_answer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">pt</span><span class="p">,</span> <span class="s2">&quot;cited_docs&quot;</span><span class="p">:</span> <span class="n">parsed_current_cite_document_idxs</span><span class="p">}</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">parsed_answer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">grounded_answer</span><span class="p">[</span>
+                                <span class="n">current_idx</span> <span class="p">:</span> <span class="n">current_idx</span> <span class="o">+</span> <span class="n">current_cite_close</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+                            <span class="p">],</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+
+                <span class="n">current_idx</span> <span class="o">+=</span> <span class="n">current_cite_close</span><span class="o">.</span><span class="n">end</span><span class="p">()</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">last_entry_is_open_cite</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">break</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="c1"># don&#39;t forget about the last one</span>
+    <span class="k">if</span> <span class="n">last_entry_is_open_cite</span><span class="p">:</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">_strip_spans</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">[</span><span class="n">current_idx</span><span class="p">:])</span>
+        <span class="n">parsed_answer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">pt</span><span class="p">,</span> <span class="s2">&quot;cited_docs&quot;</span><span class="p">:</span> <span class="n">parsed_current_cite_document_idxs</span><span class="p">}</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">parsed_answer</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">_strip_spans</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">[</span><span class="n">current_idx</span><span class="p">:])})</span>
+    <span class="k">return</span> <span class="n">no_markup_answer</span><span class="p">,</span> <span class="n">parsed_answer</span>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 04, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>
