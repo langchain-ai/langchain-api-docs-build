@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_core.output_parsers.xml &mdash; 🦜🔗 LangChain 0.1.11</title>
+  <title>langchain_core.output_parsers.xml &mdash; 🦜🔗 LangChain 0.1.14</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_core/output_parsers/xml.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -117,10 +120,16 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
+        </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
@@ -129,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
@@ -143,8 +153,10 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -181,9 +193,12 @@
         
   <h1>Source code for langchain_core.output_parsers.xml</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">xml</span>
 <span class="kn">import</span> <span class="nn">xml.etree.ElementTree</span> <span class="k">as</span> <span class="nn">ET</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">xml.etree.ElementTree</span> <span class="kn">import</span> <span class="n">TreeBuilder</span>
 
+<span class="kn">from</span> <span class="nn">langchain_core.exceptions</span> <span class="kn">import</span> <span class="n">OutputParserException</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.transform</span> <span class="kn">import</span> <span class="n">BaseTransformOutputParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.utils</span> <span class="kn">import</span> <span class="n">AddableDict</span>
@@ -204,6 +219,105 @@
 <span class="s2">```&quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
 
+<span class="k">class</span> <span class="nc">_StreamingParser</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Streaming parser for XML.</span>
+
+<span class="sd">    This implementation is pulled into a class to avoid implementation</span>
+<span class="sd">    drift between transform and atransform of the XMLOutputParser.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parser</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;defusedxml&quot;</span><span class="p">,</span> <span class="s2">&quot;xml&quot;</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the streaming parser.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            parser: Parser to use for XML parsing. Can be either &#39;defusedxml&#39; or &#39;xml&#39;.</span>
+<span class="sd">              See documentation in XMLOutputParser for more information.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">parser</span> <span class="o">==</span> <span class="s2">&quot;defusedxml&quot;</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span> <span class="nn">defusedxml</span> <span class="kn">import</span> <span class="n">ElementTree</span> <span class="k">as</span> <span class="n">DET</span>  <span class="c1"># type: ignore</span>
+            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;defusedxml is not installed. &quot;</span>
+                    <span class="s2">&quot;Please install it to use the defusedxml parser.&quot;</span>
+                    <span class="s2">&quot;You can install it with `pip install defusedxml` &quot;</span>
+                <span class="p">)</span>
+            <span class="n">_parser</span> <span class="o">=</span> <span class="n">DET</span><span class="o">.</span><span class="n">DefusedXMLParser</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">TreeBuilder</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_parser</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pull_parser</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">XMLPullParser</span><span class="p">([</span><span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="s2">&quot;end&quot;</span><span class="p">],</span> <span class="n">_parser</span><span class="o">=</span><span class="n">_parser</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xml_start_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;[a-zA-Z:_]&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_path</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xml_started</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">chunk</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">AddableDict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse a chunk of text.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            chunk: A chunk of text to parse. This can be a string or a BaseMessage.</span>
+
+<span class="sd">        Yields:</span>
+<span class="sd">            AddableDict: A dictionary representing the parsed XML element.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">):</span>
+            <span class="c1"># extract text</span>
+            <span class="n">chunk_content</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">content</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk_content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="c1"># ignore non-string messages (e.g., function calls)</span>
+                <span class="k">return</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunk_content</span>
+        <span class="c1"># add chunk to buffer of unprocessed text</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span> <span class="o">+=</span> <span class="n">chunk</span>
+        <span class="c1"># if xml string hasn&#39;t started yet, continue to next chunk</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">xml_started</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="bp">self</span><span class="o">.</span><span class="n">xml_start_re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">):</span>
+                <span class="c1"># if xml string has started, remove all text before it</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">[</span><span class="n">match</span><span class="o">.</span><span class="n">start</span><span class="p">()</span> <span class="p">:]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xml_started</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span>
+        <span class="c1"># feed buffer to parser</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pull_parser</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buffer</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="c1"># yield all events</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">event</span><span class="p">,</span> <span class="n">elem</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pull_parser</span><span class="o">.</span><span class="n">read_events</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">event</span> <span class="o">==</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span>
+                    <span class="c1"># update current path</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">current_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elem</span><span class="o">.</span><span class="n">tag</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">elif</span> <span class="n">event</span> <span class="o">==</span> <span class="s2">&quot;end&quot;</span><span class="p">:</span>
+                    <span class="c1"># remove last element from current path</span>
+                    <span class="c1">#</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">current_path</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+                    <span class="c1"># yield element</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_path_has_children</span><span class="p">:</span>
+                        <span class="k">yield</span> <span class="n">nested_element</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_path</span><span class="p">,</span> <span class="n">elem</span><span class="p">)</span>
+                    <span class="c1"># prevent yielding of parent element</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_path</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">xml_started</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">except</span> <span class="n">xml</span><span class="o">.</span><span class="n">etree</span><span class="o">.</span><span class="n">ElementTree</span><span class="o">.</span><span class="n">ParseError</span><span class="p">:</span>
+            <span class="c1"># This might be junk at the end of the XML input.</span>
+            <span class="c1"># Let&#39;s check whether the current path is empty.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_path</span><span class="p">:</span>
+                <span class="c1"># If it is empty, we can ignore this error.</span>
+                <span class="k">return</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span>
+
+    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Close the parser.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pull_parser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">xml</span><span class="o">.</span><span class="n">etree</span><span class="o">.</span><span class="n">ElementTree</span><span class="o">.</span><span class="n">ParseError</span><span class="p">:</span>
+            <span class="c1"># Ignore. This will ignore any incomplete XML at the end of the input</span>
+            <span class="k">pass</span>
+
+
 <div class="viewcode-block" id="XMLOutputParser"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.xml.XMLOutputParser.html#langchain_core.output_parsers.xml.XMLOutputParser">[docs]</a><span class="k">class</span> <span class="nc">XMLOutputParser</span><span class="p">(</span><span class="n">BaseTransformOutputParser</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse an output using xml format.&quot;&quot;&quot;</span>
 
@@ -211,12 +325,48 @@
     <span class="n">encoding_matcher</span><span class="p">:</span> <span class="n">re</span><span class="o">.</span><span class="n">Pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
         <span class="sa">r</span><span class="s2">&quot;&lt;([^&gt;]*encoding[^&gt;]*)&gt;\n(.*)&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">MULTILINE</span> <span class="o">|</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span>
     <span class="p">)</span>
+    <span class="n">parser</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;defusedxml&quot;</span><span class="p">,</span> <span class="s2">&quot;xml&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;defusedxml&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parser to use for XML parsing. Can be either &#39;defusedxml&#39; or &#39;xml&#39;.</span>
+<span class="sd">    </span>
+<span class="sd">    * &#39;defusedxml&#39; is the default parser and is used to prevent XML vulnerabilities </span>
+<span class="sd">       present in some distributions of Python&#39;s standard library xml.</span>
+<span class="sd">       `defusedxml` is a wrapper around the standard library parser that</span>
+<span class="sd">       sets up the parser with secure defaults.</span>
+<span class="sd">    * &#39;xml&#39; is the standard library parser.</span>
+<span class="sd">    </span>
+<span class="sd">    Use `xml` only if you are sure that your distribution of the standard library</span>
+<span class="sd">    is not vulnerable to XML vulnerabilities. </span>
+<span class="sd">    </span>
+<span class="sd">    Please review the following resources for more information:</span>
+<span class="sd">    </span>
+<span class="sd">    * https://docs.python.org/3/library/xml.html#xml-vulnerabilities</span>
+<span class="sd">    * https://github.com/tiran/defusedxml </span>
+<span class="sd">    </span>
+<span class="sd">    The standard library relies on libexpat for parsing XML:</span>
+<span class="sd">    https://github.com/libexpat/libexpat </span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="XMLOutputParser.get_format_instructions"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.xml.XMLOutputParser.html#langchain_core.output_parsers.xml.XMLOutputParser.get_format_instructions">[docs]</a>    <span class="k">def</span> <span class="nf">get_format_instructions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">XML_FORMAT_INSTRUCTIONS</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="XMLOutputParser.parse"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.xml.XMLOutputParser.html#langchain_core.output_parsers.xml.XMLOutputParser.parse">[docs]</a>    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]:</span>
+<div class="viewcode-block" id="XMLOutputParser.parse"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.xml.XMLOutputParser.html#langchain_core.output_parsers.xml.XMLOutputParser.parse">[docs]</a>    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]]:</span>
         <span class="c1"># Try to find XML string within triple backticks</span>
+        <span class="c1"># Imports are temporarily placed here to avoid issue with caching on CI</span>
+        <span class="c1"># likely if you&#39;re reading this you can move them to the top of the file</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parser</span> <span class="o">==</span> <span class="s2">&quot;defusedxml&quot;</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span> <span class="nn">defusedxml</span> <span class="kn">import</span> <span class="n">ElementTree</span> <span class="k">as</span> <span class="n">DET</span>  <span class="c1"># type: ignore</span>
+            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;defusedxml is not installed. &quot;</span>
+                    <span class="s2">&quot;Please install it to use the defusedxml parser.&quot;</span>
+                    <span class="s2">&quot;You can install it with `pip install defusedxml`&quot;</span>
+                    <span class="s2">&quot;See https://github.com/tiran/defusedxml for more details&quot;</span>
+                <span class="p">)</span>
+            <span class="n">_ET</span> <span class="o">=</span> <span class="n">DET</span>  <span class="c1"># Use the defusedxml parser</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_ET</span> <span class="o">=</span> <span class="n">ET</span>  <span class="c1"># Use the standard library parser</span>
+
         <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;```(xml)?(.*)```&quot;</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># If match found, use the content within the backticks</span>
@@ -226,98 +376,38 @@
             <span class="n">text</span> <span class="o">=</span> <span class="n">encoding_match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 
         <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">text</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&lt;&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">text</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&lt;&quot;</span><span class="p">))</span> <span class="ow">and</span> <span class="p">(</span>
-            <span class="n">text</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;&gt;&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">text</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;&gt;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
             <span class="n">root</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">fromstring</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_root_to_dict</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not parse output: </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+        <span class="k">except</span> <span class="n">ET</span><span class="o">.</span><span class="n">ParseError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Failed to parse XML format from completion </span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="s2">. Got: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">raise</span> <span class="n">OutputParserException</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">llm_output</span><span class="o">=</span><span class="n">text</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span></div>
 
     <span class="k">def</span> <span class="nf">_transform</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">AddableDict</span><span class="p">]:</span>
-        <span class="n">xml_start_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;[a-zA-Z:_]&quot;</span><span class="p">)</span>
-        <span class="n">parser</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">XMLPullParser</span><span class="p">([</span><span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="s2">&quot;end&quot;</span><span class="p">])</span>
-        <span class="n">xml_started</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="n">current_path</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="n">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">streaming_parser</span> <span class="o">=</span> <span class="n">_StreamingParser</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">input</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">):</span>
-                <span class="c1"># extract text</span>
-                <span class="n">chunk_content</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">content</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk_content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                    <span class="k">continue</span>
-                <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunk_content</span>
-            <span class="c1"># add chunk to buffer of unprocessed text</span>
-            <span class="n">buffer</span> <span class="o">+=</span> <span class="n">chunk</span>
-            <span class="c1"># if xml string hasn&#39;t started yet, continue to next chunk</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">xml_started</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">match</span> <span class="o">:=</span> <span class="n">xml_start_re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">buffer</span><span class="p">):</span>
-                    <span class="c1"># if xml string has started, remove all text before it</span>
-                    <span class="n">buffer</span> <span class="o">=</span> <span class="n">buffer</span><span class="p">[</span><span class="n">match</span><span class="o">.</span><span class="n">start</span><span class="p">()</span> <span class="p">:]</span>
-                    <span class="n">xml_started</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">continue</span>
-            <span class="c1"># feed buffer to parser</span>
-            <span class="n">parser</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span>
-            <span class="n">buffer</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-            <span class="c1"># yield all events</span>
-            <span class="k">for</span> <span class="n">event</span><span class="p">,</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">read_events</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">event</span> <span class="o">==</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span>
-                    <span class="c1"># update current path</span>
-                    <span class="n">current_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elem</span><span class="o">.</span><span class="n">tag</span><span class="p">)</span>
-                    <span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="k">elif</span> <span class="n">event</span> <span class="o">==</span> <span class="s2">&quot;end&quot;</span><span class="p">:</span>
-                    <span class="c1"># remove last element from current path</span>
-                    <span class="n">current_path</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-                    <span class="c1"># yield element</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_path_has_children</span><span class="p">:</span>
-                        <span class="k">yield</span> <span class="n">nested_element</span><span class="p">(</span><span class="n">current_path</span><span class="p">,</span> <span class="n">elem</span><span class="p">)</span>
-                    <span class="c1"># prevent yielding of parent element</span>
-                    <span class="k">if</span> <span class="n">current_path</span><span class="p">:</span>
-                        <span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">True</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">xml_started</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="c1"># close parser</span>
-        <span class="n">parser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">yield from</span> <span class="n">streaming_parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+        <span class="n">streaming_parser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_atransform</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">AddableDict</span><span class="p">]:</span>
-        <span class="n">parser</span> <span class="o">=</span> <span class="n">ET</span><span class="o">.</span><span class="n">XMLPullParser</span><span class="p">([</span><span class="s2">&quot;start&quot;</span><span class="p">,</span> <span class="s2">&quot;end&quot;</span><span class="p">])</span>
-        <span class="n">current_path</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">streaming_parser</span> <span class="o">=</span> <span class="n">_StreamingParser</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="p">)</span>
         <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">input</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">):</span>
-                <span class="c1"># extract text</span>
-                <span class="n">chunk_content</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">content</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk_content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                    <span class="k">continue</span>
-                <span class="n">chunk</span> <span class="o">=</span> <span class="n">chunk_content</span>
-            <span class="c1"># pass chunk to parser</span>
-            <span class="n">parser</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
-            <span class="c1"># yield all events</span>
-            <span class="k">for</span> <span class="n">event</span><span class="p">,</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">parser</span><span class="o">.</span><span class="n">read_events</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">event</span> <span class="o">==</span> <span class="s2">&quot;start&quot;</span><span class="p">:</span>
-                    <span class="c1"># update current path</span>
-                    <span class="n">current_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elem</span><span class="o">.</span><span class="n">tag</span><span class="p">)</span>
-                    <span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="k">elif</span> <span class="n">event</span> <span class="o">==</span> <span class="s2">&quot;end&quot;</span><span class="p">:</span>
-                    <span class="c1"># remove last element from current path</span>
-                    <span class="n">current_path</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-                    <span class="c1"># yield element</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_path_has_children</span><span class="p">:</span>
-                        <span class="k">yield</span> <span class="n">nested_element</span><span class="p">(</span><span class="n">current_path</span><span class="p">,</span> <span class="n">elem</span><span class="p">)</span>
-                    <span class="c1"># prevent yielding of parent element</span>
-                    <span class="n">current_path_has_children</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="c1"># close parser</span>
-        <span class="n">parser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">output</span> <span class="ow">in</span> <span class="n">streaming_parser</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">chunk</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">output</span>
+        <span class="n">streaming_parser</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">_root_to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">ET</span><span class="o">.</span><span class="n">Element</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">_root_to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">ET</span><span class="o">.</span><span class="n">Element</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts xml tree to python dictionary.&quot;&quot;&quot;</span>
-        <span class="n">result</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span><span class="n">root</span><span class="o">.</span><span class="n">tag</span><span class="p">:</span> <span class="p">[]}</span>
+        <span class="k">if</span> <span class="n">root</span><span class="o">.</span><span class="n">text</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\S&quot;</span><span class="p">,</span> <span class="n">root</span><span class="o">.</span><span class="n">text</span><span class="p">)):</span>
+            <span class="c1"># If root text contains any non-whitespace character it</span>
+            <span class="c1"># returns {root.tag: root.text}</span>
+            <span class="k">return</span> <span class="p">{</span><span class="n">root</span><span class="o">.</span><span class="n">tag</span><span class="p">:</span> <span class="n">root</span><span class="o">.</span><span class="n">text</span><span class="p">}</span>
+        <span class="n">result</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">root</span><span class="o">.</span><span class="n">tag</span><span class="p">:</span> <span class="p">[]}</span>
         <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">root</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">child</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">result</span><span class="p">[</span><span class="n">root</span><span class="o">.</span><span class="n">tag</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="n">child</span><span class="o">.</span><span class="n">tag</span><span class="p">:</span> <span class="n">child</span><span class="o">.</span><span class="n">text</span><span class="p">})</span>
@@ -342,7 +432,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 11, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>

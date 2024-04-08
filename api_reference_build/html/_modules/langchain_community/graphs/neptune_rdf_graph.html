@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_community.graphs.neptune_rdf_graph &mdash; 🦜🔗 LangChain 0.1.11</title>
+  <title>langchain_community.graphs.neptune_rdf_graph &mdash; 🦜🔗 LangChain 0.1.14</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_community/graphs/neptune_rdf_graph.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -117,10 +120,16 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
+        </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
@@ -129,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
@@ -143,8 +153,10 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -186,55 +198,25 @@
 
 <span class="kn">import</span> <span class="nn">requests</span>
 
-<span class="n">CLASS_QUERY</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">SELECT DISTINCT ?elem ?com</span>
-<span class="s2">WHERE { </span>
-<span class="s2"> ?instance a ?elem .</span>
-<span class="s2"> OPTIONAL { ?instance rdf:type/rdfs:subClassOf* ?elem } .</span>
-<span class="s2"> #FILTER (isIRI(?elem)) .</span>
-<span class="s2"> OPTIONAL { ?elem rdfs:comment ?com filter (lang(?com) = &quot;en&quot;)}</span>
-<span class="s2">}</span>
-<span class="s2">&quot;&quot;&quot;</span>
-
-<span class="n">REL_QUERY</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">SELECT DISTINCT ?elem ?com</span>
-<span class="s2">WHERE { </span>
-<span class="s2"> ?subj ?elem ?obj . </span>
-<span class="s2"> OPTIONAL { </span>
-<span class="s2">     ?elem rdf:type/rdfs:subPropertyOf* ?proptype .</span>
-<span class="s2">     VALUES  ?proptype  { rdf:Property owl:DatatypeProperty owl:ObjectProperty } .</span>
-<span class="s2"> } . </span>
-<span class="s2"> OPTIONAL { ?elem rdfs:comment ?com filter (lang(?com) = &quot;en&quot;)} </span>
-<span class="s2">}</span>
-<span class="s2">&quot;&quot;&quot;</span>
-
+<span class="c1"># Query to find OWL datatype properties</span>
 <span class="n">DTPROP_QUERY</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">SELECT DISTINCT ?elem ?com</span>
+<span class="s2">SELECT DISTINCT ?elem </span>
 <span class="s2">WHERE { </span>
-<span class="s2"> ?subj ?elem ?obj . </span>
-<span class="s2"> OPTIONAL { </span>
-<span class="s2">     ?elem rdf:type/rdfs:subPropertyOf* ?proptype .</span>
-<span class="s2">     ?proptype  a owl:DatatypeProperty .</span>
-<span class="s2"> } . </span>
-<span class="s2"> OPTIONAL { ?elem rdfs:comment ?com filter (lang(?com) = &quot;en&quot;)} </span>
+<span class="s2"> ?elem a owl:DatatypeProperty . </span>
 <span class="s2">}</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
+<span class="c1"># Query to find OWL object properties</span>
 <span class="n">OPROP_QUERY</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">SELECT DISTINCT ?elem ?com</span>
+<span class="s2">SELECT DISTINCT ?elem </span>
 <span class="s2">WHERE { </span>
-<span class="s2"> ?subj ?elem ?obj . </span>
-<span class="s2"> OPTIONAL { </span>
-<span class="s2">     ?elem rdf:type/rdfs:subPropertyOf* ?proptype .</span>
-<span class="s2">     ?proptype  a owl:ObjectProperty .</span>
-<span class="s2"> } . </span>
-<span class="s2"> OPTIONAL { ?elem rdfs:comment ?com filter (lang(?com) = &quot;en&quot;)} </span>
+<span class="s2"> ?elem a owl:ObjectProperty . </span>
 <span class="s2">}</span>
 <span class="s2">&quot;&quot;&quot;</span>
 
 <span class="n">ELEM_TYPES</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;classes&quot;</span><span class="p">:</span> <span class="n">CLASS_QUERY</span><span class="p">,</span>
-    <span class="s2">&quot;rels&quot;</span><span class="p">:</span> <span class="n">REL_QUERY</span><span class="p">,</span>
+    <span class="s2">&quot;classes&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="s2">&quot;rels&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
     <span class="s2">&quot;dtprops&quot;</span><span class="p">:</span> <span class="n">DTPROP_QUERY</span><span class="p">,</span>
     <span class="s2">&quot;oprops&quot;</span><span class="p">:</span> <span class="n">OPROP_QUERY</span><span class="p">,</span>
 <span class="p">}</span>
@@ -244,32 +226,33 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Neptune wrapper for RDF graph operations.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        host: SPARQL endpoint host for Neptune</span>
-<span class="sd">        port: SPARQL endpoint port for Neptune. Defaults 8182.</span>
+<span class="sd">        host: endpoint for the database instance</span>
+<span class="sd">        port: port number for the database instance, default is 8182</span>
 <span class="sd">        use_iam_auth: boolean indicating IAM auth is enabled in Neptune cluster</span>
-<span class="sd">        region_name: AWS region required if use_iam_auth is True, e.g., us-west-2</span>
-<span class="sd">        hide_comments: whether to include ontology comments in schema for prompt</span>
+<span class="sd">        use_https: whether to use secure connection, default is True</span>
+<span class="sd">        client: optional boto3 Neptune client</span>
+<span class="sd">        credentials_profile_name: optional AWS profile name</span>
+<span class="sd">        region_name: optional AWS region, e.g., us-west-2</span>
+<span class="sd">        service: optional service name, default is neptunedata</span>
+<span class="sd">        sign: optional, whether to sign the request payload, default is True</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
 
 <span class="sd">        graph = NeptuneRdfGraph(</span>
 <span class="sd">            host=&#39;&lt;SPARQL host&#39;&gt;,</span>
-<span class="sd">            port=&lt;SPARQL port&gt;,</span>
-<span class="sd">            use_iam_auth=False</span>
+<span class="sd">            port=&lt;SPARQL port&gt;</span>
 <span class="sd">        )</span>
 <span class="sd">        schema = graph.get_schema()</span>
 
 <span class="sd">        OR</span>
 <span class="sd">        graph = NeptuneRdfGraph(</span>
 <span class="sd">            host=&#39;&lt;SPARQL host&#39;&gt;,</span>
-<span class="sd">            port=&lt;SPARQL port&gt;,</span>
-<span class="sd">            use_iam_auth=False</span>
+<span class="sd">            port=&lt;SPARQL port&gt;</span>
 <span class="sd">        )</span>
 <span class="sd">        schema_elem = graph.get_schema_elements()</span>
-<span class="sd">        ... change schema_elements ...</span>
+<span class="sd">        #... change schema_elements ...</span>
 <span class="sd">        graph.load_schema(schema_elem)</span>
-<span class="sd">        schema = graph.get_schema()</span>
 
 <span class="sd">    *Security note*: Make sure that the database connection uses credentials</span>
 <span class="sd">        that are narrowly-scoped to only include necessary permissions.</span>
@@ -287,27 +270,67 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8182</span><span class="p">,</span>
+        <span class="n">use_https</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">use_iam_auth</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">client</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">credentials_profile_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">region_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">hide_comments</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">service</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;neptunedata&quot;</span><span class="p">,</span>
+        <span class="n">sign</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_iam_auth</span> <span class="o">=</span> <span class="n">use_iam_auth</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">region_name</span> <span class="o">=</span> <span class="n">region_name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">hide_comments</span> <span class="o">=</span> <span class="n">hide_comments</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">query_endpoint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">/sparql&quot;</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_iam_auth</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">client</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">client</span>
+            <span class="k">else</span><span class="p">:</span>
                 <span class="kn">import</span> <span class="nn">boto3</span>
 
-                <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
-            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                    <span class="s2">&quot;Could not import boto3 python package. &quot;</span>
-                    <span class="s2">&quot;Please install it with `pip install boto3`.&quot;</span>
-                <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">credentials_profile_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">Session</span><span class="p">(</span><span class="n">profile_name</span><span class="o">=</span><span class="n">credentials_profile_name</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># use default credentials</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
+
+                <span class="n">client_params</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">if</span> <span class="n">region_name</span><span class="p">:</span>
+                    <span class="n">client_params</span><span class="p">[</span><span class="s2">&quot;region_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">region_name</span>
+
+                <span class="n">protocol</span> <span class="o">=</span> <span class="s2">&quot;https&quot;</span> <span class="k">if</span> <span class="n">use_https</span> <span class="k">else</span> <span class="s2">&quot;http&quot;</span>
+
+                <span class="n">client_params</span><span class="p">[</span><span class="s2">&quot;endpoint_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">protocol</span><span class="si">}</span><span class="s2">://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span>
+
+                <span class="k">if</span> <span class="n">sign</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="n">service</span><span class="p">,</span> <span class="o">**</span><span class="n">client_params</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="kn">from</span> <span class="nn">botocore</span> <span class="kn">import</span> <span class="n">UNSIGNED</span>
+                    <span class="kn">from</span> <span class="nn">botocore.config</span> <span class="kn">import</span> <span class="n">Config</span>
+
+                    <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">client</span><span class="p">(</span>
+                        <span class="n">service</span><span class="p">,</span>
+                        <span class="o">**</span><span class="n">client_params</span><span class="p">,</span>
+                        <span class="n">config</span><span class="o">=</span><span class="n">Config</span><span class="p">(</span><span class="n">signature_version</span><span class="o">=</span><span class="n">UNSIGNED</span><span class="p">),</span>
+                    <span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import boto3 python package. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install boto3`.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;UnknownServiceError&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ModuleNotFoundError</span><span class="p">(</span>
+                    <span class="s2">&quot;NeptuneGraph requires a boto3 version 1.28.38 or greater.&quot;</span>
+                    <span class="s2">&quot;Please install it with `pip install -U boto3`.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Could not load credentials to authenticate with AWS client. &quot;</span>
+                    <span class="s2">&quot;Please check that credentials in the specified &quot;</span>
+                    <span class="s2">&quot;profile name are valid.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
 
         <span class="c1"># Set schema</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">schema</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
@@ -324,6 +347,12 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">get_schema_elements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span>
+
+<div class="viewcode-block" id="NeptuneRdfGraph.get_summary"><a class="viewcode-back" href="../../../graphs/langchain_community.graphs.neptune_rdf_graph.NeptuneRdfGraph.html#langchain_community.graphs.neptune_rdf_graph.NeptuneRdfGraph.get_summary">[docs]</a>    <span class="k">def</span> <span class="nf">get_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Obtain Neptune statistical summary of classes and predicates in the graph.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get_rdf_graph_summary</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">&quot;detailed&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="NeptuneRdfGraph.query"><a class="viewcode-back" href="../../../graphs/langchain_community.graphs.neptune_rdf_graph.NeptuneRdfGraph.html#langchain_community.graphs.neptune_rdf_graph.NeptuneRdfGraph.query">[docs]</a>    <span class="k">def</span> <span class="nf">query</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -379,12 +408,10 @@
         <span class="n">elem_str</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">ELEM_TYPES</span><span class="p">:</span>
             <span class="n">res_list</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">for</span> <span class="n">elem_rec</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="n">elem</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">elem_rec</span> <span class="ow">in</span> <span class="n">schema_elements</span><span class="p">[</span><span class="n">elem</span><span class="p">]:</span>
                 <span class="n">uri</span> <span class="o">=</span> <span class="n">elem_rec</span><span class="p">[</span><span class="s2">&quot;uri&quot;</span><span class="p">]</span>
                 <span class="n">local</span> <span class="o">=</span> <span class="n">elem_rec</span><span class="p">[</span><span class="s2">&quot;local&quot;</span><span class="p">]</span>
                 <span class="n">res_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&lt;</span><span class="si">{</span><span class="n">uri</span><span class="si">}</span><span class="s2">&gt; (</span><span class="si">{</span><span class="n">local</span><span class="si">}</span><span class="s2">)&quot;</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hide_comments</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
-                    <span class="n">res_str</span> <span class="o">=</span> <span class="n">res_str</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;, </span><span class="si">{</span><span class="n">elem_rec</span><span class="p">[</span><span class="s1">&#39;comment&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="n">res_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">res_str</span><span class="p">)</span>
             <span class="n">elem_str</span><span class="p">[</span><span class="n">elem</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">res_list</span><span class="p">)</span>
 
@@ -392,12 +419,12 @@
             <span class="s2">&quot;In the following, each IRI is followed by the local name and &quot;</span>
             <span class="s2">&quot;optionally its description in parentheses. </span><span class="se">\n</span><span class="s2">&quot;</span>
             <span class="s2">&quot;The graph supports the following node types:</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;classes&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;classes&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
             <span class="s2">&quot;The graph supports the following relationships:</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;rels&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;The graph supports the following OWL object properties, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;dtprops&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;The graph supports the following OWL data properties, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;rels&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="s2">&quot;The graph supports the following OWL object properties:</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;dtprops&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="s2">&quot;The graph supports the following OWL data properties:</span><span class="se">\n</span><span class="s2">&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">elem_str</span><span class="p">[</span><span class="s1">&#39;oprops&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span></div>
 
@@ -420,15 +447,40 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
+        <span class="c1"># get summary and build list of classes and rels</span>
+        <span class="n">summary</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_summary</span><span class="p">()</span>
+        <span class="n">reslist</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">summary</span><span class="p">[</span><span class="s2">&quot;payload&quot;</span><span class="p">][</span><span class="s2">&quot;graphSummary&quot;</span><span class="p">][</span><span class="s2">&quot;classes&quot;</span><span class="p">]:</span>
+            <span class="n">uri</span> <span class="o">=</span> <span class="n">c</span>
+            <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_local_name</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+            <span class="n">elem_record</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;uri&quot;</span><span class="p">:</span> <span class="n">uri</span><span class="p">,</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+            <span class="n">reslist</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elem_record</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">][</span><span class="n">tokens</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="s2">&quot;y&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;classes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reslist</span>
+
+        <span class="n">reslist</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">summary</span><span class="p">[</span><span class="s2">&quot;payload&quot;</span><span class="p">][</span><span class="s2">&quot;graphSummary&quot;</span><span class="p">][</span><span class="s2">&quot;predicates&quot;</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">r</span><span class="p">:</span>
+                <span class="n">uri</span> <span class="o">=</span> <span class="n">p</span>
+                <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_local_name</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+                <span class="n">elem_record</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;uri&quot;</span><span class="p">:</span> <span class="n">uri</span><span class="p">,</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
+                <span class="n">reslist</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elem_record</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">]:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">][</span><span class="n">tokens</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="s2">&quot;y&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;rels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reslist</span>
+
+        <span class="c1"># get dtprops and oprops too</span>
         <span class="k">for</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">ELEM_TYPES</span><span class="p">:</span>
-            <span class="n">items</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">ELEM_TYPES</span><span class="p">[</span><span class="n">elem</span><span class="p">])</span>
+            <span class="n">q</span> <span class="o">=</span> <span class="n">ELEM_TYPES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">elem</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">q</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">items</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
             <span class="n">reslist</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">items</span><span class="p">[</span><span class="s2">&quot;results&quot;</span><span class="p">][</span><span class="s2">&quot;bindings&quot;</span><span class="p">]:</span>
                 <span class="n">uri</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;elem&quot;</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
                 <span class="n">tokens</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_local_name</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
                 <span class="n">elem_record</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;uri&quot;</span><span class="p">:</span> <span class="n">uri</span><span class="p">,</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">1</span><span class="p">]}</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">hide_comments</span><span class="p">:</span>
-                    <span class="n">elem_record</span><span class="p">[</span><span class="s2">&quot;comment&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;com&quot;</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="s2">&quot;com&quot;</span> <span class="ow">in</span> <span class="n">r</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
                 <span class="n">reslist</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elem_record</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">tokens</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">]:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">schema_elements</span><span class="p">[</span><span class="s2">&quot;distinct_prefixes&quot;</span><span class="p">][</span><span class="n">tokens</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="s2">&quot;y&quot;</span>
@@ -442,7 +494,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 11, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>

@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_core.utils.function_calling &mdash; 🦜🔗 LangChain 0.1.11</title>
+  <title>langchain_core.utils.function_calling &mdash; 🦜🔗 LangChain 0.1.14</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_core/utils/function_calling.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
         </li>
         <li class="nav-item">
@@ -117,10 +120,16 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
+        </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
@@ -129,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
@@ -143,8 +153,10 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
         <li class="nav-item">
@@ -181,9 +193,11 @@
         
   <h1>Source code for langchain_core.utils.function_calling</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Methods for creating function specs in the style of OpenAI Functions&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -201,6 +215,12 @@
 <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AIMessage</span><span class="p">,</span>
+    <span class="n">BaseMessage</span><span class="p">,</span>
+    <span class="n">HumanMessage</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.json_schema</span> <span class="kn">import</span> <span class="n">dereference_refs</span>
 
@@ -233,13 +253,16 @@
     <span class="n">function</span><span class="p">:</span> <span class="n">FunctionDescription</span></div>
 
 
-<span class="k">def</span> <span class="nf">_rm_titles</span><span class="p">(</span><span class="n">kv</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_rm_titles</span><span class="p">(</span><span class="n">kv</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">prev_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
     <span class="n">new_kv</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kv</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;title&quot;</span><span class="p">:</span>
-            <span class="k">continue</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">prev_key</span> <span class="o">==</span> <span class="s2">&quot;properties&quot;</span> <span class="ow">and</span> <span class="s2">&quot;title&quot;</span> <span class="ow">in</span> <span class="n">v</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="n">new_kv</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">_rm_titles</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="n">new_kv</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">_rm_titles</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="n">new_kv</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">_rm_titles</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">new_kv</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
     <span class="k">return</span> <span class="n">new_kv</span>
@@ -452,7 +475,8 @@
 <span class="sd">    Args:</span>
 <span class="sd">        function: Either a dictionary, a pydantic.BaseModel class, or a Python function.</span>
 <span class="sd">            If a dictionary is passed in, it is assumed to already be a valid OpenAI</span>
-<span class="sd">            function.</span>
+<span class="sd">            function or a JSON schema with top-level &#39;title&#39; and &#39;description&#39; keys</span>
+<span class="sd">            specified.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A dict version of the passed in function which is compatible with the</span>
@@ -460,18 +484,33 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+    <span class="c1"># already in OpenAI function format</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="n">k</span> <span class="ow">in</span> <span class="n">function</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="s2">&quot;parameters&quot;</span><span class="p">)</span>
+    <span class="p">):</span>
         <span class="k">return</span> <span class="n">function</span>
+    <span class="c1"># a JSON schema with title and description</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+        <span class="n">k</span> <span class="ow">in</span> <span class="n">function</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">function</span> <span class="o">=</span> <span class="n">function</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">function</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">function</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">function</span><span class="p">,</span>
+        <span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">convert_pydantic_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">format_tool_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">format_tool_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">convert_python_function_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Unsupported function type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">function</span><span class="p">)</span><span class="si">}</span><span class="s2">. Functions must be passed in&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot; as Dict, pydantic.BaseModel, or Callable.&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Unsupported function</span><span class="se">\n\n</span><span class="si">{</span><span class="n">function</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">Functions must be passed in&quot;</span>
+            <span class="s2">&quot; as Dict, pydantic.BaseModel, or Callable. If they&#39;re a dict they must&quot;</span>
+            <span class="s2">&quot; either be in OpenAI function format or valid JSON schema with top-level&quot;</span>
+            <span class="s2">&quot; &#39;title&#39; and &#39;description&#39; keys.&quot;</span>
         <span class="p">)</span></div>
 
 
@@ -483,23 +522,117 @@
 <span class="sd">    Args:</span>
 <span class="sd">        tool: Either a dictionary, a pydantic.BaseModel class, Python function, or</span>
 <span class="sd">            BaseTool. If a dictionary is passed in, it is assumed to already be a valid</span>
-<span class="sd">            OpenAI tool or OpenAI function.</span>
+<span class="sd">            OpenAI tool, OpenAI function, or a JSON schema with top-level &#39;title&#39; and</span>
+<span class="sd">            &#39;description&#39; keys specified.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A dict version of the passed in tool which is compatible with the</span>
 <span class="sd">            OpenAI tool-calling API.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;type&quot;</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;function&quot;</span> <span class="ow">and</span> <span class="s2">&quot;function&quot;</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">tool</span>
     <span class="n">function</span> <span class="o">=</span> <span class="n">convert_to_openai_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span> <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">function</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="tool_example_to_messages"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.tool_example_to_messages.html#langchain_core.utils.function_calling.tool_example_to_messages">[docs]</a><span class="k">def</span> <span class="nf">tool_example_to_messages</span><span class="p">(</span>
+    <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tool_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">tool_outputs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert an example into a list of messages that can be fed into an LLM.</span>
+
+<span class="sd">    This code is an adapter that converts a single example to a list of messages</span>
+<span class="sd">    that can be fed into a chat model.</span>
+
+<span class="sd">    The list of messages per example corresponds to:</span>
+
+<span class="sd">    1) HumanMessage: contains the content from which content should be extracted.</span>
+<span class="sd">    2) AIMessage: contains the extracted information from the model</span>
+<span class="sd">    3) ToolMessage: contains confirmation to the model that the model requested a tool</span>
+<span class="sd">        correctly.</span>
+
+<span class="sd">    The ToolMessage is required because some chat models are hyper-optimized for agents</span>
+<span class="sd">    rather than for an extraction use case.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        input: string, the user input</span>
+<span class="sd">        tool_calls: List[BaseModel], a list of tool calls represented as Pydantic</span>
+<span class="sd">            BaseModels</span>
+<span class="sd">        tool_outputs: Optional[List[str]], a list of tool call outputs.</span>
+<span class="sd">            Does not need to be provided. If not provided, a placeholder value</span>
+<span class="sd">            will be inserted.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A list of messages</span>
+
+<span class="sd">    Examples:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from typing import List, Optional</span>
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+<span class="sd">            from langchain_openai import ChatOpenAI</span>
+
+<span class="sd">            class Person(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Information about a person.&#39;&#39;&#39;</span>
+<span class="sd">                name: Optional[str] = Field(..., description=&quot;The name of the person&quot;)</span>
+<span class="sd">                hair_color: Optional[str] = Field(</span>
+<span class="sd">                    ..., description=&quot;The color of the peron&#39;s eyes if known&quot;</span>
+<span class="sd">                )</span>
+<span class="sd">                height_in_meters: Optional[str] = Field(</span>
+<span class="sd">                    ..., description=&quot;Height in METERs&quot;</span>
+<span class="sd">                )</span>
+
+<span class="sd">            examples = [</span>
+<span class="sd">                (</span>
+<span class="sd">                    &quot;The ocean is vast and blue. It&#39;s more than 20,000 feet deep.&quot;,</span>
+<span class="sd">                    Person(name=None, height_in_meters=None, hair_color=None),</span>
+<span class="sd">                ),</span>
+<span class="sd">                (</span>
+<span class="sd">                    &quot;Fiona traveled far from France to Spain.&quot;,</span>
+<span class="sd">                    Person(name=&quot;Fiona&quot;, height_in_meters=None, hair_color=None),</span>
+<span class="sd">                ),</span>
+<span class="sd">            ]</span>
+
+
+<span class="sd">            messages = []</span>
+
+<span class="sd">            for txt, tool_call in examples:</span>
+<span class="sd">                messages.extend(</span>
+<span class="sd">                    tool_example_to_messages(txt, [tool_call])</span>
+<span class="sd">                )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="nb">input</span><span class="p">)]</span>
+    <span class="n">openai_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+        <span class="n">openai_tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()),</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="c1"># The name of the function right now corresponds to the name</span>
+                    <span class="c1"># of the pydantic model. This is implicit in the API right now,</span>
+                    <span class="c1"># and will be improved over time.</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                    <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                <span class="p">},</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+        <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="n">openai_tool_calls</span><span class="p">})</span>
+    <span class="p">)</span>
+    <span class="n">tool_outputs</span> <span class="o">=</span> <span class="n">tool_outputs</span> <span class="ow">or</span> <span class="p">[</span><span class="s2">&quot;You have correctly called this tool.&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span>
+        <span class="n">openai_tool_calls</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">output</span><span class="p">,</span> <span class="n">tool_call_dict</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tool_outputs</span><span class="p">,</span> <span class="n">openai_tool_calls</span><span class="p">):</span>
+        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ToolMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">output</span><span class="p">,</span> <span class="n">tool_call_id</span><span class="o">=</span><span class="n">tool_call_dict</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]))</span>  <span class="c1"># type: ignore</span>
+    <span class="k">return</span> <span class="n">messages</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Mar 11, 2024.
+          Last updated on Apr 05, 2024.
       </footer>
     </div>
   </div>
