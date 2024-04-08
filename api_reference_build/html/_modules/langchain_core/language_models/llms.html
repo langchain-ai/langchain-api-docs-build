@@ -309,17 +309,41 @@
     <span class="p">)</span></div>
 
 
+<span class="k">def</span> <span class="nf">_resolve_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseCache</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseCache</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve the cache.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
+        <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">cache</span>
+    <span class="k">elif</span> <span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+    <span class="k">elif</span> <span class="n">cache</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">llm_cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;No global cache was configured. Use `set_llm_cache`.&quot;</span>
+                <span class="s2">&quot;to set a global cache if you want to use a global cache.&quot;</span>
+                <span class="s2">&quot;Otherwise either pass a cache object or set cache to False/None&quot;</span>
+            <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">cache</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+        <span class="n">llm_cache</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported cache value </span><span class="si">{</span><span class="n">cache</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">llm_cache</span>
+
+
 <div class="viewcode-block" id="get_prompts"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.get_prompts.html#langchain_google_vertexai.vision_models.get_prompts">[docs]</a><span class="k">def</span> <span class="nf">get_prompts</span><span class="p">(</span>
-    <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">prompts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">prompts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseCache</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get prompts that are already cached.&quot;&quot;&quot;</span>
     <span class="n">llm_string</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">sorted</span><span class="p">([(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">()]))</span>
     <span class="n">missing_prompts</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">missing_prompt_idxs</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">existing_prompts</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+
+    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">_resolve_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">prompt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">prompts</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">llm_cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">llm_cache</span><span class="p">:</span>
             <span class="n">cache_val</span> <span class="o">=</span> <span class="n">llm_cache</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache_val</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
                 <span class="n">existing_prompts</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">cache_val</span>
@@ -330,14 +354,16 @@
 
 
 <div class="viewcode-block" id="aget_prompts"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.aget_prompts.html#langchain_google_vertexai.vision_models.aget_prompts">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">aget_prompts</span><span class="p">(</span>
-    <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">prompts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">prompts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseCache</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get prompts that are already cached. Async version.&quot;&quot;&quot;</span>
     <span class="n">llm_string</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">sorted</span><span class="p">([(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">()]))</span>
     <span class="n">missing_prompts</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">missing_prompt_idxs</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">existing_prompts</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">_resolve_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">prompt</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">prompts</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">llm_cache</span><span class="p">:</span>
             <span class="n">cache_val</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm_cache</span><span class="o">.</span><span class="n">alookup</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">)</span>
@@ -350,6 +376,7 @@
 
 
 <div class="viewcode-block" id="update_cache"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.update_cache.html#langchain_google_vertexai.vision_models.update_cache">[docs]</a><span class="k">def</span> <span class="nf">update_cache</span><span class="p">(</span>
+    <span class="n">cache</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseCache</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
     <span class="n">existing_prompts</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">],</span>
     <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">missing_prompt_idxs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
@@ -357,7 +384,7 @@
     <span class="n">prompts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Update the cache and get the LLM output.&quot;&quot;&quot;</span>
-    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">_resolve_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">new_results</span><span class="o">.</span><span class="n">generations</span><span class="p">):</span>
         <span class="n">existing_prompts</span><span class="p">[</span><span class="n">missing_prompt_idxs</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">result</span>
         <span class="n">prompt</span> <span class="o">=</span> <span class="n">prompts</span><span class="p">[</span><span class="n">missing_prompt_idxs</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
@@ -368,6 +395,7 @@
 
 
 <div class="viewcode-block" id="aupdate_cache"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.llms.aupdate_cache.html#langchain_google_vertexai.vision_models.aupdate_cache">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">aupdate_cache</span><span class="p">(</span>
+    <span class="n">cache</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseCache</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
     <span class="n">existing_prompts</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">],</span>
     <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">missing_prompt_idxs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
@@ -375,7 +403,7 @@
     <span class="n">prompts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Update the cache and get the LLM output. Async version&quot;&quot;&quot;</span>
-    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">get_llm_cache</span><span class="p">()</span>
+    <span class="n">llm_cache</span> <span class="o">=</span> <span class="n">_resolve_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">new_results</span><span class="o">.</span><span class="n">generations</span><span class="p">):</span>
         <span class="n">existing_prompts</span><span class="p">[</span><span class="n">missing_prompt_idxs</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">result</span>
         <span class="n">prompt</span> <span class="o">=</span> <span class="n">prompts</span><span class="p">[</span><span class="n">missing_prompt_idxs</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
@@ -911,20 +939,11 @@
             <span class="n">llm_string</span><span class="p">,</span>
             <span class="n">missing_prompt_idxs</span><span class="p">,</span>
             <span class="n">missing_prompts</span><span class="p">,</span>
-        <span class="p">)</span> <span class="o">=</span> <span class="n">get_prompts</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">prompts</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;Local cache is not yet supported for &quot;</span> <span class="s2">&quot;LLMs (only chat models)&quot;</span>
-            <span class="p">)</span>
-        <span class="n">disregard_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="n">get_prompts</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">prompts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span>
         <span class="n">new_arg_supported</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_generate</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;run_manager&quot;</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">get_llm_cache</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">disregard_cache</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Asked to cache, but no cache found at `langchain.cache`.&quot;</span>
-                <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">get_llm_cache</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
             <span class="n">run_managers</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_llm_start</span><span class="p">(</span>
                     <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
@@ -959,7 +978,12 @@
                 <span class="n">missing_prompts</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">run_managers</span><span class="p">,</span> <span class="nb">bool</span><span class="p">(</span><span class="n">new_arg_supported</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">)</span>
             <span class="n">llm_output</span> <span class="o">=</span> <span class="n">update_cache</span><span class="p">(</span>
-                <span class="n">existing_prompts</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">,</span> <span class="n">missing_prompt_idxs</span><span class="p">,</span> <span class="n">new_results</span><span class="p">,</span> <span class="n">prompts</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span>
+                <span class="n">existing_prompts</span><span class="p">,</span>
+                <span class="n">llm_string</span><span class="p">,</span>
+                <span class="n">missing_prompt_idxs</span><span class="p">,</span>
+                <span class="n">new_results</span><span class="p">,</span>
+                <span class="n">prompts</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">run_info</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="p">[</span><span class="n">RunInfo</span><span class="p">(</span><span class="n">run_id</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">run_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">run_manager</span> <span class="ow">in</span> <span class="n">run_managers</span><span class="p">]</span>
@@ -1124,21 +1148,14 @@
             <span class="n">llm_string</span><span class="p">,</span>
             <span class="n">missing_prompt_idxs</span><span class="p">,</span>
             <span class="n">missing_prompts</span><span class="p">,</span>
-        <span class="p">)</span> <span class="o">=</span> <span class="k">await</span> <span class="n">aget_prompts</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">prompts</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span> <span class="n">BaseCache</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                <span class="s2">&quot;Local cache is not yet supported for &quot;</span> <span class="s2">&quot;LLMs (only chat models)&quot;</span>
-            <span class="p">)</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="k">await</span> <span class="n">aget_prompts</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">prompts</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">)</span>
 
-        <span class="n">disregard_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span>
+        <span class="c1"># Verify whether the cache is set, and if the cache is set,</span>
+        <span class="c1"># verify whether the cache is available.</span>
         <span class="n">new_arg_supported</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_agenerate</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;run_manager&quot;</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="n">get_llm_cache</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">disregard_cache</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Asked to cache, but no cache found at `langchain.cache`.&quot;</span>
-                <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">get_llm_cache</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
             <span class="n">run_managers</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span>
                 <span class="o">*</span><span class="p">[</span>
                     <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_llm_start</span><span class="p">(</span>
@@ -1187,7 +1204,12 @@
                 <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="p">)</span>
             <span class="n">llm_output</span> <span class="o">=</span> <span class="k">await</span> <span class="n">aupdate_cache</span><span class="p">(</span>
-                <span class="n">existing_prompts</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">,</span> <span class="n">missing_prompt_idxs</span><span class="p">,</span> <span class="n">new_results</span><span class="p">,</span> <span class="n">prompts</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cache</span><span class="p">,</span>
+                <span class="n">existing_prompts</span><span class="p">,</span>
+                <span class="n">llm_string</span><span class="p">,</span>
+                <span class="n">missing_prompt_idxs</span><span class="p">,</span>
+                <span class="n">new_results</span><span class="p">,</span>
+                <span class="n">prompts</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">run_info</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="p">[</span><span class="n">RunInfo</span><span class="p">(</span><span class="n">run_id</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">run_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">run_manager</span> <span class="ow">in</span> <span class="n">run_managers</span><span class="p">]</span>  <span class="c1"># type: ignore[attr-defined]</span>
@@ -1431,7 +1453,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 05, 2024.
+          Last updated on Apr 08, 2024.
       </footer>
     </div>
   </div>

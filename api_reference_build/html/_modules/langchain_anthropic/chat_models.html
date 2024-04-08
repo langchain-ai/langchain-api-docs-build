@@ -250,7 +250,12 @@
 
 <span class="kn">from</span> <span class="nn">langchain_anthropic.output_parsers</span> <span class="kn">import</span> <span class="n">ToolsOutputParser</span>
 
-<span class="n">_message_type_lookups</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;human&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;ai&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">}</span>
+<span class="n">_message_type_lookups</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;human&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ai&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;AIMessageChunk&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;HumanMessageChunk&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
+<span class="p">}</span>
 
 
 <span class="k">def</span> <span class="nf">_format_image</span><span class="p">(</span><span class="n">image_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
@@ -632,7 +637,31 @@
 <span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
 <span class="sd">                their schema dictionary representation.</span>
 <span class="sd">            **kwargs: Any additional parameters to bind.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_anthropic import ChatAnthropic</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+<span class="sd">                class GetWeather(BaseModel):</span>
+<span class="sd">                    &#39;&#39;&#39;Get the current weather in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                    location: str = Field(..., description=&quot;The city and state, e.g. San Francisco, CA&quot;)</span>
+
+
+<span class="sd">                llm = ChatAnthropic(model=&quot;claude-3-opus-20240229&quot;, temperature=0)</span>
+<span class="sd">                llm_with_tools = llm.bind_tools([GetWeather])</span>
+<span class="sd">                llm_with_tools.invoke(&quot;what is the weather like in San Francisco&quot;,)</span>
+<span class="sd">                # -&gt; AIMessage(</span>
+<span class="sd">                #     content=[</span>
+<span class="sd">                #         {&#39;text&#39;: &#39;&lt;thinking&gt;\nBased on the user\&#39;s question, the relevant function to call is GetWeather, which requires the &quot;location&quot; parameter.\n\nThe user has directly specified the location as &quot;San Francisco&quot;. Since San Francisco is a well known city, I can reasonably infer they mean San Francisco, CA without needing the state specified.\n\nAll the required parameters are provided, so I can proceed with the API call.\n&lt;/thinking&gt;&#39;, &#39;type&#39;: &#39;text&#39;},</span>
+<span class="sd">                #         {&#39;text&#39;: None, &#39;type&#39;: &#39;tool_use&#39;, &#39;id&#39;: &#39;toolu_01SCgExKzQ7eqSkMHfygvYuu&#39;, &#39;name&#39;: &#39;GetWeather&#39;, &#39;input&#39;: {&#39;location&#39;: &#39;San Francisco, CA&#39;}}</span>
+<span class="sd">                #     ],</span>
+<span class="sd">                #     response_metadata={&#39;id&#39;: &#39;msg_01GM3zQtoFv8jGQMW7abLnhi&#39;, &#39;model&#39;: &#39;claude-3-opus-20240229&#39;, &#39;stop_reason&#39;: &#39;tool_use&#39;, &#39;stop_sequence&#39;: None, &#39;usage&#39;: {&#39;input_tokens&#39;: 487, &#39;output_tokens&#39;: 145}},</span>
+<span class="sd">                #     id=&#39;run-87b1331e-9251-4a68-acef-f0a018b639cc-0&#39;</span>
+<span class="sd">                # )</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_anthropic_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
@@ -644,6 +673,102 @@
         <span class="n">include_raw</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            schema: The output schema as a dict or a Pydantic class. If a Pydantic class</span>
+<span class="sd">                then the model output will be an object of that class. If a dict then</span>
+<span class="sd">                the model output will be a dict. With a Pydantic class the returned</span>
+<span class="sd">                attributes will be validated, whereas with a dict they will not be.</span>
+<span class="sd">            include_raw: If False then only the parsed structured output is returned. If</span>
+<span class="sd">                an error occurs during model output parsing it will be raised. If True</span>
+<span class="sd">                then both the raw model response (a BaseMessage) and the parsed model</span>
+<span class="sd">                response will be returned. If an error occurs during output parsing it</span>
+<span class="sd">                will be caught and returned as well. The final output is always a dict</span>
+<span class="sd">                with keys &quot;raw&quot;, &quot;parsed&quot;, and &quot;parsing_error&quot;.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A Runnable that takes any ChatModel input. The output type depends on</span>
+<span class="sd">            include_raw and schema.</span>
+
+<span class="sd">            If include_raw is True then output is a dict with keys:</span>
+<span class="sd">                raw: BaseMessage,</span>
+<span class="sd">                parsed: Optional[_DictOrPydantic],</span>
+<span class="sd">                parsing_error: Optional[BaseException],</span>
+
+<span class="sd">            If include_raw is False and schema is a Dict then the runnable outputs a Dict.</span>
+<span class="sd">            If include_raw is False and schema is a Type[BaseModel] then the runnable</span>
+<span class="sd">            outputs a BaseModel.</span>
+
+<span class="sd">        Example: Pydantic schema (include_raw=False):</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_anthropic import ChatAnthropic</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
+
+<span class="sd">                class AnswerWithJustification(BaseModel):</span>
+<span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+<span class="sd">                    answer: str</span>
+<span class="sd">                    justification: str</span>
+
+<span class="sd">                llm = ChatAnthropic(model=&quot;claude-3-opus-20240229&quot;, temperature=0)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification)</span>
+
+<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+
+<span class="sd">                # -&gt; AnswerWithJustification(</span>
+<span class="sd">                #     answer=&#39;They weigh the same&#39;,</span>
+<span class="sd">                #     justification=&#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.&#39;</span>
+<span class="sd">                # )</span>
+
+<span class="sd">        Example:  Pydantic schema (include_raw=True):</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_anthropic import ChatAnthropic</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
+
+<span class="sd">                class AnswerWithJustification(BaseModel):</span>
+<span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+<span class="sd">                    answer: str</span>
+<span class="sd">                    justification: str</span>
+
+<span class="sd">                llm = ChatAnthropic(model=&quot;claude-3-opus-20240229&quot;, temperature=0)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification, include_raw=True)</span>
+
+<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+<span class="sd">                # -&gt; {</span>
+<span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;&#39;, additional_kwargs={&#39;tool_calls&#39;: [{&#39;id&#39;: &#39;call_Ao02pnFYXD6GN1yzc0uXPsvF&#39;, &#39;function&#39;: {&#39;arguments&#39;: &#39;{&quot;answer&quot;:&quot;They weigh the same.&quot;,&quot;justification&quot;:&quot;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.&quot;}&#39;, &#39;name&#39;: &#39;AnswerWithJustification&#39;}, &#39;type&#39;: &#39;function&#39;}]}),</span>
+<span class="sd">                #     &#39;parsed&#39;: AnswerWithJustification(answer=&#39;They weigh the same.&#39;, justification=&#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.&#39;),</span>
+<span class="sd">                #     &#39;parsing_error&#39;: None</span>
+<span class="sd">                # }</span>
+
+<span class="sd">        Example: Dict schema (include_raw=False):</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_anthropic import ChatAnthropic</span>
+
+<span class="sd">                schema = {</span>
+<span class="sd">                    &quot;name&quot;: &quot;AnswerWithJustification&quot;,</span>
+<span class="sd">                    &quot;description&quot;: &quot;An answer to the user question along with justification for the answer.&quot;,</span>
+<span class="sd">                    &quot;input_schema&quot;: {</span>
+<span class="sd">                        &quot;type&quot;: &quot;object&quot;,</span>
+<span class="sd">                        &quot;properties&quot;: {</span>
+<span class="sd">                            &quot;answer&quot;: {&quot;type&quot;: &quot;string&quot;},</span>
+<span class="sd">                            &quot;justification&quot;: {&quot;type&quot;: &quot;string&quot;},</span>
+<span class="sd">                        },</span>
+<span class="sd">                        &quot;required&quot;: [&quot;answer&quot;, &quot;justification&quot;]</span>
+<span class="sd">                    }</span>
+<span class="sd">                }</span>
+<span class="sd">                llm = ChatAnthropic(model=&quot;claude-3-opus-20240229&quot;, temperature=0)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(schema)</span>
+
+<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+<span class="sd">                # -&gt; {</span>
+<span class="sd">                #     &#39;answer&#39;: &#39;They weigh the same&#39;,</span>
+<span class="sd">                #     &#39;justification&#39;: &#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume and density of the two substances differ.&#39;</span>
+<span class="sd">                # }</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">])</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
             <span class="n">output_parser</span> <span class="o">=</span> <span class="n">ToolsOutputParser</span><span class="p">(</span>
@@ -703,7 +828,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 05, 2024.
+          Last updated on Apr 08, 2024.
       </footer>
     </div>
   </div>
