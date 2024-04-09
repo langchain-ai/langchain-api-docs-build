@@ -204,10 +204,18 @@
 
 <span class="sd">    To use, you should have the ``predibase`` python package installed,</span>
 <span class="sd">    and have your Predibase API key.</span>
+
+<span class="sd">    The `model` parameter is the Predibase &quot;serverless&quot; base_model ID</span>
+<span class="sd">    (see https://docs.predibase.com/user-guide/inference/models for the catalog).</span>
+
+<span class="sd">    An optional `adapter_id` parameter is the HuggingFace ID of a fine-tuned LLM</span>
+<span class="sd">    adapter, whose base model is the `model` parameter; the fine-tuned adapter</span>
+<span class="sd">    must be compatible with its base model; otherwise, an error is raised.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">predibase_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>
+    <span class="n">adapter_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
     <span class="n">default_options_for_generation</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="p">{</span>
@@ -232,7 +240,10 @@
             <span class="kn">from</span> <span class="nn">predibase</span> <span class="kn">import</span> <span class="n">PredibaseClient</span>
             <span class="kn">from</span> <span class="nn">predibase.pql</span> <span class="kn">import</span> <span class="n">get_session</span>
             <span class="kn">from</span> <span class="nn">predibase.pql.api</span> <span class="kn">import</span> <span class="n">Session</span>
-            <span class="kn">from</span> <span class="nn">predibase.resource.llm.interface</span> <span class="kn">import</span> <span class="n">LLMDeployment</span>
+            <span class="kn">from</span> <span class="nn">predibase.resource.llm.interface</span> <span class="kn">import</span> <span class="p">(</span>
+                <span class="n">HuggingFaceLLM</span><span class="p">,</span>
+                <span class="n">LLMDeployment</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="kn">from</span> <span class="nn">predibase.resource.llm.response</span> <span class="kn">import</span> <span class="n">GeneratedResponse</span>
 
             <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">(</span>
@@ -249,15 +260,23 @@
         <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Your API key is not correct. Please try again&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
         <span class="n">options</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">kwargs</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_options_for_generation</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_options_for_generation</span>
         <span class="p">)</span>
         <span class="n">base_llm_deployment</span><span class="p">:</span> <span class="n">LLMDeployment</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span>
             <span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;pb://deployments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
-        <span class="n">result</span><span class="p">:</span> <span class="n">GeneratedResponse</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
-            <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
-            <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="n">result</span><span class="p">:</span> <span class="n">GeneratedResponse</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">:</span>
+            <span class="n">adapter_model</span><span class="p">:</span> <span class="n">HuggingFaceLLM</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;hf://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">with_adapter</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">adapter_model</span><span class="p">)</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">response</span>
 
     <span class="nd">@property</span>
@@ -272,7 +291,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 08, 2024.
+          Last updated on Apr 09, 2024.
       </footer>
     </div>
   </div>

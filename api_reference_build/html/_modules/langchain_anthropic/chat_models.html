@@ -437,12 +437,17 @@
     <span class="n">top_p</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Total probability mass of tokens to consider at each step.&quot;&quot;&quot;</span>
 
-    <span class="n">default_request_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Timeout for requests to Anthropic Completion API. Default is 600 seconds.&quot;&quot;&quot;</span>
+    <span class="n">default_request_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;timeout&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Timeout for requests to Anthropic Completion API.&quot;&quot;&quot;</span>
+
+    <span class="c1"># sdk default = 2: https://github.com/anthropics/anthropic-sdk-python?tab=readme-ov-file#retries</span>
+    <span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Number of retries allowed for requests sent to the Anthropic Completion API.&quot;&quot;&quot;</span>
 
     <span class="n">anthropic_api_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https://api.anthropic.com&quot;</span>
 
-    <span class="n">anthropic_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SecretStr</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">anthropic_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SecretStr</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;api_key&quot;</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Automatically read from env var `ANTHROPIC_API_KEY` if not provided.&quot;&quot;&quot;</span>
 
     <span class="n">default_headers</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Headers to pass to the Anthropic clients, will be used for every API call.&quot;&quot;&quot;</span>
@@ -479,16 +484,23 @@
             <span class="ow">or</span> <span class="s2">&quot;https://api.anthropic.com&quot;</span>
         <span class="p">)</span>
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;anthropic_api_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">api_url</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span>
-            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
-            <span class="n">base_url</span><span class="o">=</span><span class="n">api_url</span><span class="p">,</span>
-            <span class="n">default_headers</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;default_headers&quot;</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span>
-            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
-            <span class="n">base_url</span><span class="o">=</span><span class="n">api_url</span><span class="p">,</span>
-            <span class="n">default_headers</span><span class="o">=</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;default_headers&quot;</span><span class="p">),</span>
-        <span class="p">)</span>
+        <span class="n">client_params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="n">api_key</span><span class="p">,</span>
+            <span class="s2">&quot;base_url&quot;</span><span class="p">:</span> <span class="n">api_url</span><span class="p">,</span>
+            <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_retries&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;default_headers&quot;</span><span class="p">:</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;default_headers&quot;</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="c1"># value &lt;= 0 indicates the param should be ignored. None is a meaningful value</span>
+        <span class="c1"># for Anthropic client and treated differently than not specifying the param at</span>
+        <span class="c1"># all.</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_request_timeout&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_request_timeout&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="p">):</span>
+            <span class="n">client_params</span><span class="p">[</span><span class="s2">&quot;timeout&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_request_timeout&quot;</span><span class="p">]</span>
+
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="o">**</span><span class="n">client_params</span><span class="p">)</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span><span class="o">**</span><span class="n">client_params</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
     <span class="k">def</span> <span class="nf">_format_params</span><span class="p">(</span>
@@ -828,7 +840,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 08, 2024.
+          Last updated on Apr 09, 2024.
       </footer>
     </div>
   </div>
