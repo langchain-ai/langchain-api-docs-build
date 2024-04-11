@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_core.output_parsers.openai_tools &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain_core.output_parsers.openai_tools &mdash; 🦜🔗 LangChain 0.1.15</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_core/output_parsers/openai_tools.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -120,9 +123,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -138,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
@@ -153,7 +154,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
@@ -195,13 +195,89 @@
 <span></span><span class="kn">import</span> <span class="nn">copy</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">from</span> <span class="nn">json</span> <span class="kn">import</span> <span class="n">JSONDecodeError</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Type</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.exceptions</span> <span class="kn">import</span> <span class="n">OutputParserException</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span><span class="p">,</span> <span class="n">InvalidToolCall</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseCumulativeTransformOutputParser</span>
-<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.json</span> <span class="kn">import</span> <span class="n">parse_partial_json</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">Generation</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">ValidationError</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.json</span> <span class="kn">import</span> <span class="n">parse_partial_json</span>
+
+
+<div class="viewcode-block" id="parse_tool_call"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.openai_tools.parse_tool_call.html#langchain_core.output_parsers.openai_tools.parse_tool_call">[docs]</a><span class="k">def</span> <span class="nf">parse_tool_call</span><span class="p">(</span>
+    <span class="n">raw_tool_call</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">partial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">return_id</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a single tool call.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;function&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">raw_tool_call</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">partial</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">function_args</span> <span class="o">=</span> <span class="n">parse_partial_json</span><span class="p">(</span>
+                <span class="n">raw_tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>  <span class="c1"># None args raise TypeError</span>
+            <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">function_args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
+                <span class="n">raw_tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">OutputParserException</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Function </span><span class="si">{</span><span class="n">raw_tool_call</span><span class="p">[</span><span class="s1">&#39;function&#39;</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> arguments:</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">raw_tool_call</span><span class="p">[</span><span class="s1">&#39;function&#39;</span><span class="p">][</span><span class="s1">&#39;arguments&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">are not valid JSON. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Received JSONDecodeError </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+    <span class="n">parsed</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">raw_tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">function_args</span> <span class="ow">or</span> <span class="p">{},</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">return_id</span><span class="p">:</span>
+        <span class="n">parsed</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">raw_tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">parsed</span></div>
+
+
+<div class="viewcode-block" id="make_invalid_tool_call"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.openai_tools.make_invalid_tool_call.html#langchain_core.output_parsers.openai_tools.make_invalid_tool_call">[docs]</a><span class="k">def</span> <span class="nf">make_invalid_tool_call</span><span class="p">(</span>
+    <span class="n">raw_tool_call</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">error_msg</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">InvalidToolCall</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create an InvalidToolCall from a raw tool call.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">InvalidToolCall</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">raw_tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+        <span class="n">args</span><span class="o">=</span><span class="n">raw_tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span>
+        <span class="nb">id</span><span class="o">=</span><span class="n">raw_tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
+        <span class="n">error</span><span class="o">=</span><span class="n">error_msg</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="parse_tool_calls"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.openai_tools.parse_tool_calls.html#langchain_core.output_parsers.openai_tools.parse_tool_calls">[docs]</a><span class="k">def</span> <span class="nf">parse_tool_calls</span><span class="p">(</span>
+    <span class="n">raw_tool_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">partial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">return_id</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a list of tool calls.&quot;&quot;&quot;</span>
+    <span class="n">final_tools</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">exceptions</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">raw_tool_calls</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">parsed</span> <span class="o">=</span> <span class="n">parse_tool_call</span><span class="p">(</span>
+                <span class="n">tool_call</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="n">partial</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span> <span class="n">return_id</span><span class="o">=</span><span class="n">return_id</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">parsed</span><span class="p">:</span>
+                <span class="n">final_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">OutputParserException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">exceptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+            <span class="k">continue</span>
+    <span class="k">if</span> <span class="n">exceptions</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">OutputParserException</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">exceptions</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">final_tools</span></div>
 
 
 <div class="viewcode-block" id="JsonOutputToolsParser"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.openai_tools.JsonOutputToolsParser.html#langchain_core.output_parsers.openai_tools.JsonOutputToolsParser">[docs]</a><span class="k">class</span> <span class="nc">JsonOutputToolsParser</span><span class="p">(</span><span class="n">BaseCumulativeTransformOutputParser</span><span class="p">[</span><span class="n">Any</span><span class="p">]):</span>
@@ -234,47 +310,29 @@
                 <span class="s2">&quot;This output parser can only be used with a chat generation.&quot;</span>
             <span class="p">)</span>
         <span class="n">message</span> <span class="o">=</span> <span class="n">generation</span><span class="o">.</span><span class="n">message</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">tool_calls</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">])</span>
-        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">and</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">:</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[</span><span class="nb">dict</span><span class="p">(</span><span class="n">tc</span><span class="p">)</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_id</span><span class="p">:</span>
+                    <span class="n">_</span> <span class="o">=</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">raw_tool_calls</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">])</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">[]</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="n">parse_tool_calls</span><span class="p">(</span>
+                <span class="n">raw_tool_calls</span><span class="p">,</span>
+                <span class="n">partial</span><span class="o">=</span><span class="n">partial</span><span class="p">,</span>
+                <span class="n">strict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">strict</span><span class="p">,</span>
+                <span class="n">return_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="c1"># for backwards compatibility</span>
+        <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+            <span class="n">tc</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tc</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
 
-        <span class="n">final_tools</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">exceptions</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;function&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tool_call</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="k">if</span> <span class="n">partial</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">function_args</span> <span class="o">=</span> <span class="n">parse_partial_json</span><span class="p">(</span>
-                        <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">strict</span>
-                    <span class="p">)</span>
-                <span class="k">except</span> <span class="n">JSONDecodeError</span><span class="p">:</span>
-                    <span class="k">continue</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">function_args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
-                        <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">strict</span>
-                    <span class="p">)</span>
-                <span class="k">except</span> <span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">exceptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Function </span><span class="si">{</span><span class="n">tool_call</span><span class="p">[</span><span class="s1">&#39;function&#39;</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> arguments:</span><span class="se">\n\n</span><span class="s2">&quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool_call</span><span class="p">[</span><span class="s1">&#39;function&#39;</span><span class="p">][</span><span class="s1">&#39;arguments&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">are not valid JSON. &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;Received JSONDecodeError </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-                    <span class="k">continue</span>
-            <span class="n">parsed</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">function_args</span><span class="p">,</span>
-            <span class="p">}</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">return_id</span><span class="p">:</span>
-                <span class="n">parsed</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
-            <span class="n">final_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">exceptions</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">OutputParserException</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">exceptions</span><span class="p">))</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">first_tool_only</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">final_tools</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">final_tools</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="n">final_tools</span></div>
+            <span class="k">return</span> <span class="n">tool_calls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">tool_calls</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">tool_calls</span></div>
 
 <div class="viewcode-block" id="JsonOutputToolsParser.parse"><a class="viewcode-back" href="../../../output_parsers/langchain_core.output_parsers.openai_tools.JsonOutputToolsParser.html#langchain_core.output_parsers.openai_tools.JsonOutputToolsParser.parse">[docs]</a>    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div></div>
@@ -345,7 +403,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 11, 2024.
       </footer>
     </div>
   </div>

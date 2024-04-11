@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_community.vectorstores.tencentvectordb &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain_community.vectorstores.tencentvectordb &mdash; 🦜🔗 LangChain 0.1.15</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_community/vectorstores/tencentvectordb.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -120,9 +123,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -138,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
@@ -153,7 +154,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
@@ -198,17 +198,32 @@
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">cast</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">guard_import</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VectorStore</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.vectorstores.utils</span> <span class="kn">import</span> <span class="n">maximal_marginal_relevance</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="n">META_FIELD_TYPE_UINT64</span> <span class="o">=</span> <span class="s2">&quot;uint64&quot;</span>
+<span class="n">META_FIELD_TYPE_STRING</span> <span class="o">=</span> <span class="s2">&quot;string&quot;</span>
+<span class="n">META_FIELD_TYPE_ARRAY</span> <span class="o">=</span> <span class="s2">&quot;array&quot;</span>
+<span class="n">META_FIELD_TYPE_VECTOR</span> <span class="o">=</span> <span class="s2">&quot;vector&quot;</span>
+
+<span class="n">META_FIELD_TYPES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">META_FIELD_TYPE_UINT64</span><span class="p">,</span>
+    <span class="n">META_FIELD_TYPE_STRING</span><span class="p">,</span>
+    <span class="n">META_FIELD_TYPE_ARRAY</span><span class="p">,</span>
+    <span class="n">META_FIELD_TYPE_VECTOR</span><span class="p">,</span>
+<span class="p">]</span>
 
 
 <div class="viewcode-block" id="ConnectionParams"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.ConnectionParams.html#langchain_community.vectorstores.tencentvectordb.ConnectionParams">[docs]</a><span class="k">class</span> <span class="nc">ConnectionParams</span><span class="p">:</span>
@@ -257,6 +272,57 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span></div></div>
 
 
+<div class="viewcode-block" id="MetaField"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.MetaField.html#langchain_community.vectorstores.tencentvectordb.MetaField">[docs]</a><span class="k">class</span> <span class="nc">MetaField</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MetaData Field for Tencent vector DB.&quot;&quot;&quot;</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">data_type</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">]</span>
+    <span class="n">index</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">enum</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.enum&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_type</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">META_FIELD_TYPES</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unsupported data_type </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">fe</span>
+                <span class="k">for</span> <span class="n">fe</span> <span class="ow">in</span> <span class="n">enum</span><span class="o">.</span><span class="n">FieldType</span>
+                <span class="k">if</span> <span class="n">fe</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_type</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="n">target</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data_type</span> <span class="o">=</span> <span class="n">target</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unsupported data_type </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">enum</span><span class="o">.</span><span class="n">FieldType</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unsupported data_type </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="translate_filter"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.translate_filter.html#langchain_community.vectorstores.tencentvectordb.translate_filter">[docs]</a><span class="k">def</span> <span class="nf">translate_filter</span><span class="p">(</span>
+    <span class="n">lc_filter</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">allowed_fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">langchain.chains.query_constructor.base</span> <span class="kn">import</span> <span class="n">fix_filter_directive</span>
+    <span class="kn">from</span> <span class="nn">langchain.chains.query_constructor.ir</span> <span class="kn">import</span> <span class="n">FilterDirective</span>
+    <span class="kn">from</span> <span class="nn">langchain.chains.query_constructor.parser</span> <span class="kn">import</span> <span class="n">get_parser</span>
+    <span class="kn">from</span> <span class="nn">langchain.retrievers.self_query.tencentvectordb</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="n">TencentVectorDBTranslator</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">tvdb_visitor</span> <span class="o">=</span> <span class="n">TencentVectorDBTranslator</span><span class="p">(</span><span class="n">allowed_fields</span><span class="p">)</span>
+    <span class="n">flt</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+        <span class="n">Optional</span><span class="p">[</span><span class="n">FilterDirective</span><span class="p">],</span>
+        <span class="n">get_parser</span><span class="p">(</span>
+            <span class="n">allowed_comparators</span><span class="o">=</span><span class="n">tvdb_visitor</span><span class="o">.</span><span class="n">allowed_comparators</span><span class="p">,</span>
+            <span class="n">allowed_operators</span><span class="o">=</span><span class="n">tvdb_visitor</span><span class="o">.</span><span class="n">allowed_operators</span><span class="p">,</span>
+            <span class="n">allowed_attributes</span><span class="o">=</span><span class="n">allowed_fields</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">lc_filter</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">flt</span> <span class="o">=</span> <span class="n">fix_filter_directive</span><span class="p">(</span><span class="n">flt</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">flt</span><span class="o">.</span><span class="n">accept</span><span class="p">(</span><span class="n">tvdb_visitor</span><span class="p">)</span> <span class="k">if</span> <span class="n">flt</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span></div>
+
+
 <div class="viewcode-block" id="TencentVectorDB"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.TencentVectorDB.html#langchain_community.vectorstores.tencentvectordb.TencentVectorDB">[docs]</a><span class="k">class</span> <span class="nc">TencentVectorDB</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Tencent VectorDB as a vector store.</span>
 
@@ -274,21 +340,43 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
         <span class="n">connection_params</span><span class="p">:</span> <span class="n">ConnectionParams</span><span class="p">,</span>
-        <span class="n">index_params</span><span class="p">:</span> <span class="n">IndexParams</span> <span class="o">=</span> <span class="n">IndexParams</span><span class="p">(</span><span class="mi">128</span><span class="p">),</span>
+        <span class="n">index_params</span><span class="p">:</span> <span class="n">IndexParams</span> <span class="o">=</span> <span class="n">IndexParams</span><span class="p">(</span><span class="mi">768</span><span class="p">),</span>
         <span class="n">database_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;LangChainDatabase&quot;</span><span class="p">,</span>
         <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;LangChainCollection&quot;</span><span class="p">,</span>
         <span class="n">drop_old</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">collection_description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Collection for LangChain&quot;</span><span class="p">,</span>
+        <span class="n">meta_fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">MetaField</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">t_vdb_embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;bge-base-zh&quot;</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">document</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.document&quot;</span><span class="p">)</span>
         <span class="n">tcvectordb</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb&quot;</span><span class="p">)</span>
+        <span class="n">tcollection</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.collection&quot;</span><span class="p">)</span>
+        <span class="n">enum</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.enum&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">t_vdb_embedding</span><span class="p">:</span>
+            <span class="n">embedding_model</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">model</span>
+                <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">enum</span><span class="o">.</span><span class="n">EmbeddingModel</span>
+                <span class="k">if</span> <span class="n">t_vdb_embedding</span> <span class="o">==</span> <span class="n">model</span><span class="o">.</span><span class="n">model_name</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">embedding_model</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;embedding model `</span><span class="si">{</span><span class="n">t_vdb_embedding</span><span class="si">}</span><span class="s2">` is invalid. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;choices: </span><span class="si">{</span><span class="p">[</span><span class="n">member</span><span class="o">.</span><span class="n">model_name</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">member</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">enum</span><span class="o">.</span><span class="n">EmbeddingModel</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">embedding_model</span> <span class="o">=</span> <span class="n">tcollection</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span>
+                <span class="n">vector_field</span><span class="o">=</span><span class="s2">&quot;vector&quot;</span><span class="p">,</span> <span class="n">field</span><span class="o">=</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">embedding_model</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span> <span class="o">=</span> <span class="n">embedding</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">index_params</span> <span class="o">=</span> <span class="n">index_params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collection_description</span> <span class="o">=</span> <span class="n">collection_description</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vdb_client</span> <span class="o">=</span> <span class="n">tcvectordb</span><span class="o">.</span><span class="n">VectorDBClient</span><span class="p">(</span>
             <span class="n">url</span><span class="o">=</span><span class="n">connection_params</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
             <span class="n">username</span><span class="o">=</span><span class="n">connection_params</span><span class="o">.</span><span class="n">username</span><span class="p">,</span>
             <span class="n">key</span><span class="o">=</span><span class="n">connection_params</span><span class="o">.</span><span class="n">key</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">connection_params</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span> <span class="o">=</span> <span class="n">meta_fields</span>
         <span class="n">db_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vdb_client</span><span class="o">.</span><span class="n">list_databases</span><span class="p">()</span>
         <span class="n">db_exist</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">for</span> <span class="n">db</span> <span class="ow">in</span> <span class="n">db_list</span><span class="p">:</span>
@@ -310,25 +398,18 @@
     <span class="k">def</span> <span class="nf">_create_collection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">enum</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.enum&quot;</span><span class="p">)</span>
         <span class="n">vdb_index</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.index&quot;</span><span class="p">)</span>
-        <span class="n">index_type</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">__members__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span><span class="p">:</span>
-                <span class="n">index_type</span> <span class="o">=</span> <span class="n">v</span>
+
+        <span class="n">index_type</span> <span class="o">=</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">__members__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">index_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;unsupported index_type&quot;</span><span class="p">)</span>
-        <span class="n">metric_type</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">enum</span><span class="o">.</span><span class="n">MetricType</span><span class="o">.</span><span class="n">__members__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">metric_type</span><span class="p">:</span>
-                <span class="n">metric_type</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="n">metric_type</span> <span class="o">=</span> <span class="n">enum</span><span class="o">.</span><span class="n">MetricType</span><span class="o">.</span><span class="n">__members__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">metric_type</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">metric_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;unsupported metric_type&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="n">vdb_index</span><span class="o">.</span><span class="n">HNSWParams</span><span class="p">(</span><span class="n">m</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">efconstruction</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">params</span> <span class="o">=</span> <span class="n">vdb_index</span><span class="o">.</span><span class="n">HNSWParams</span><span class="p">(</span>
-                <span class="n">m</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;M&quot;</span><span class="p">,</span> <span class="mi">16</span><span class="p">),</span>
-                <span class="n">efconstruction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;efConstruction&quot;</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span>
-            <span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">vdb_index</span><span class="o">.</span><span class="n">HNSWParams</span><span class="p">(</span>
+            <span class="n">m</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">params</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;M&quot;</span><span class="p">,</span> <span class="mi">16</span><span class="p">),</span>
+            <span class="n">efconstruction</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">params</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;efConstruction&quot;</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span>
+        <span class="p">)</span>
+
         <span class="n">index</span> <span class="o">=</span> <span class="n">vdb_index</span><span class="o">.</span><span class="n">Index</span><span class="p">(</span>
             <span class="n">vdb_index</span><span class="o">.</span><span class="n">FilterIndex</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">field_id</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">FieldType</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">PRIMARY_KEY</span>
@@ -343,21 +424,48 @@
             <span class="n">vdb_index</span><span class="o">.</span><span class="n">FilterIndex</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">field_text</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">FieldType</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">FILTER</span>
             <span class="p">),</span>
-            <span class="n">vdb_index</span><span class="o">.</span><span class="n">FilterIndex</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">field_metadata</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">FieldType</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">FILTER</span>
-            <span class="p">),</span>
         <span class="p">)</span>
+        <span class="c1"># Add metadata indexes</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">index_meta_fields</span> <span class="o">=</span> <span class="p">[</span><span class="n">field</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span> <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">index_meta_fields</span><span class="p">:</span>
+                <span class="n">ft_index</span> <span class="o">=</span> <span class="n">vdb_index</span><span class="o">.</span><span class="n">FilterIndex</span><span class="p">(</span>
+                    <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">data_type</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">FILTER</span>
+                <span class="p">)</span>
+                <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ft_index</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">index</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
+                <span class="n">vdb_index</span><span class="o">.</span><span class="n">FilterIndex</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">field_metadata</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">FieldType</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">FILTER</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">database</span><span class="o">.</span><span class="n">create_collection</span><span class="p">(</span>
             <span class="n">name</span><span class="o">=</span><span class="n">collection_name</span><span class="p">,</span>
             <span class="n">shard</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">shard</span><span class="p">,</span>
             <span class="n">replicas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index_params</span><span class="o">.</span><span class="n">replicas</span><span class="p">,</span>
-            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Collection for LangChain&quot;</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collection_description</span><span class="p">,</span>
             <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding_model</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Embeddings</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span>
+
+<div class="viewcode-block" id="TencentVectorDB.delete"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.TencentVectorDB.html#langchain_community.vectorstores.tencentvectordb.TencentVectorDB.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">filter_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete documents from the collection.&quot;&quot;&quot;</span>
+        <span class="n">delete_attrs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">ids</span><span class="p">:</span>
+            <span class="n">delete_attrs</span><span class="p">[</span><span class="s2">&quot;ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ids</span>
+        <span class="k">if</span> <span class="n">filter_expr</span><span class="p">:</span>
+            <span class="n">delete_attrs</span><span class="p">[</span><span class="s2">&quot;filter&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">filter_expr</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">**</span><span class="n">delete_attrs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 
 <div class="viewcode-block" id="TencentVectorDB.from_texts"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.TencentVectorDB.html#langchain_community.vectorstores.tencentvectordb.TencentVectorDB.from_texts">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_texts</span><span class="p">(</span>
@@ -370,6 +478,9 @@
         <span class="n">database_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;LangChainDatabase&quot;</span><span class="p">,</span>
         <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;LangChainCollection&quot;</span><span class="p">,</span>
         <span class="n">drop_old</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">collection_description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Collection for LangChain&quot;</span><span class="p">,</span>
+        <span class="n">meta_fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">MetaField</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">t_vdb_embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;bge-base-zh&quot;</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TencentVectorDB</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a collection, indexes it with HNSW, and insert data.&quot;&quot;&quot;</span>
@@ -377,11 +488,24 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;texts is empty&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">connection_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;connection_params is empty&quot;</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
+        <span class="n">enum</span> <span class="o">=</span> <span class="n">guard_import</span><span class="p">(</span><span class="s2">&quot;tcvectordb.model.enum&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">embedding</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t_vdb_embedding</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;embedding and t_vdb_embedding cannot be both None&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">embedding</span><span class="p">:</span>
             <span class="n">embeddings</span> <span class="o">=</span> <span class="n">embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="n">texts</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">])</span>
-        <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="p">[</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">texts</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
-        <span class="n">dimension</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">dimension</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">embedding_model</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">model</span>
+                <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">enum</span><span class="o">.</span><span class="n">EmbeddingModel</span>
+                <span class="k">if</span> <span class="n">t_vdb_embedding</span> <span class="o">==</span> <span class="n">model</span><span class="o">.</span><span class="n">model_name</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">embedding_model</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;embedding model `</span><span class="si">{</span><span class="n">t_vdb_embedding</span><span class="si">}</span><span class="s2">` is invalid. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;choices: </span><span class="si">{</span><span class="p">[</span><span class="n">member</span><span class="o">.</span><span class="n">model_name</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">member</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">enum</span><span class="o">.</span><span class="n">EmbeddingModel</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">dimension</span> <span class="o">=</span> <span class="n">embedding_model</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">_EmbeddingModel__dimensions</span>
         <span class="k">if</span> <span class="n">index_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">index_params</span> <span class="o">=</span> <span class="n">IndexParams</span><span class="p">(</span><span class="n">dimension</span><span class="o">=</span><span class="n">dimension</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -393,6 +517,9 @@
             <span class="n">database_name</span><span class="o">=</span><span class="n">database_name</span><span class="p">,</span>
             <span class="n">collection_name</span><span class="o">=</span><span class="n">collection_name</span><span class="p">,</span>
             <span class="n">drop_old</span><span class="o">=</span><span class="n">drop_old</span><span class="p">,</span>
+            <span class="n">collection_description</span><span class="o">=</span><span class="n">collection_description</span><span class="p">,</span>
+            <span class="n">meta_fields</span><span class="o">=</span><span class="n">meta_fields</span><span class="p">,</span>
+            <span class="n">t_vdb_embedding</span><span class="o">=</span><span class="n">t_vdb_embedding</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">vector_db</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">vector_db</span></div>
@@ -403,35 +530,41 @@
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Insert text data into TencentVectorDB.&quot;&quot;&quot;</span>
         <span class="n">texts</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Nothing to insert, skipping.&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="p">:</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">pks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">total_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)</span>
+        <span class="n">total_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">total_count</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
             <span class="c1"># Grab end index</span>
             <span class="n">docs</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">end</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">total_count</span><span class="p">)</span>
             <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
-                <span class="n">metadata</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">&quot;</span>
-                <span class="k">if</span> <span class="n">metadatas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">metadata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">metadatas</span><span class="p">[</span><span class="nb">id</span><span class="p">])</span>
-                <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Document</span><span class="p">(</span>
-                    <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2">-</span><span class="si">{}</span><span class="s2">-</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time_ns</span><span class="p">(),</span> <span class="nb">hash</span><span class="p">(</span><span class="n">texts</span><span class="p">[</span><span class="nb">id</span><span class="p">]),</span> <span class="nb">id</span><span class="p">),</span>
-                    <span class="n">vector</span><span class="o">=</span><span class="n">embeddings</span><span class="p">[</span><span class="nb">id</span><span class="p">],</span>
-                    <span class="n">text</span><span class="o">=</span><span class="n">texts</span><span class="p">[</span><span class="nb">id</span><span class="p">],</span>
-                    <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+                <span class="n">metadata</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_get_meta</span><span class="p">(</span><span class="n">metadatas</span><span class="p">[</span><span class="nb">id</span><span class="p">])</span> <span class="k">if</span> <span class="n">metadatas</span> <span class="ow">and</span> <span class="n">metadatas</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="k">else</span> <span class="p">{}</span>
                 <span class="p">)</span>
+                <span class="n">doc_id</span> <span class="o">=</span> <span class="n">ids</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="k">if</span> <span class="n">ids</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="n">doc_attrs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">doc_id</span>
+                    <span class="ow">or</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">-</span><span class="si">{}</span><span class="s2">-</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time_ns</span><span class="p">(),</span> <span class="nb">hash</span><span class="p">(</span><span class="n">texts</span><span class="p">[</span><span class="nb">id</span><span class="p">]),</span> <span class="nb">id</span><span class="p">)</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="n">embeddings</span><span class="p">:</span>
+                    <span class="n">doc_attrs</span><span class="p">[</span><span class="s2">&quot;vector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">doc_attrs</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">texts</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span>
+                <span class="n">doc_attrs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
+                <span class="n">doc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Document</span><span class="p">(</span><span class="o">**</span><span class="n">doc_attrs</span><span class="p">)</span>
                 <span class="n">docs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
-                <span class="n">pks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">id</span><span class="p">))</span>
+                <span class="n">pks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_attrs</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">pks</span></div>
 
@@ -461,11 +594,25 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform a search on a query string and return results with score.&quot;&quot;&quot;</span>
         <span class="c1"># Embed the query text.</span>
-        <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span> <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">res</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="p">:</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
+                <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+                <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span>
+                <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="p">[],</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span>
+            <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="TencentVectorDB.similarity_search_by_vector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.TencentVectorDB.html#langchain_community.vectorstores.tencentvectordb.TencentVectorDB.similarity_search_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_by_vector</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -477,10 +624,10 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform a similarity search against the query string.&quot;&quot;&quot;</span>
-        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span> <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">res</span><span class="p">]</span></div>
+        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">]</span></div>
 
 <div class="viewcode-block" id="TencentVectorDB.similarity_search_with_score_by_vector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.TencentVectorDB.html#langchain_community.vectorstores.tencentvectordb.TencentVectorDB.similarity_search_with_score_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score_by_vector</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -488,28 +635,37 @@
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">param</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform a search on a query string and return results with score.&quot;&quot;&quot;</span>
-        <span class="nb">filter</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
-        <span class="n">ef</span> <span class="o">=</span> <span class="mi">10</span> <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">param</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ef&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-        <span class="n">res</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
-            <span class="n">vectors</span><span class="o">=</span><span class="p">[</span><span class="n">embedding</span><span class="p">],</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
-            <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">HNSWSearchParams</span><span class="p">(</span><span class="n">ef</span><span class="o">=</span><span class="n">ef</span><span class="p">),</span>
-            <span class="n">retrieve_vector</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="n">limit</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="c1"># Organize results.</span>
+        <span class="k">if</span> <span class="nb">filter</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">expr</span><span class="p">:</span>
+            <span class="n">expr</span> <span class="o">=</span> <span class="n">translate_filter</span><span class="p">(</span>
+                <span class="nb">filter</span><span class="p">,</span> <span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span> <span class="ow">or</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="n">search_args</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filter&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span> <span class="k">if</span> <span class="n">expr</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">HNSWSearchParams</span><span class="p">(</span><span class="n">ef</span><span class="o">=</span><span class="p">(</span><span class="n">param</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ef&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)),</span>
+            <span class="s2">&quot;retrieve_vector&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span>
+            <span class="s2">&quot;timeout&quot;</span><span class="p">:</span> <span class="n">timeout</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">query</span><span class="p">:</span>
+            <span class="n">search_args</span><span class="p">[</span><span class="s2">&quot;embeddingItems&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">query</span><span class="p">]</span>
+            <span class="n">res</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">searchByText</span><span class="p">(</span><span class="o">**</span><span class="n">search_args</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;documents&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">search_args</span><span class="p">[</span><span class="s2">&quot;vectors&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">embedding</span><span class="p">]</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="o">**</span><span class="n">search_args</span><span class="p">)</span>
+
         <span class="n">ret</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="n">res</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">res</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">ret</span>
         <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">res</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-            <span class="n">meta</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_metadata</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">meta</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">meta</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_meta</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
             <span class="n">doc</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_text</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="n">pair</span> <span class="o">=</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
             <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pair</span><span class="p">)</span>
@@ -527,17 +683,34 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform a search and return results that are reordered by MMR.&quot;&quot;&quot;</span>
-        <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
-            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
-            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
-            <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span>
-            <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span>
-            <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="p">:</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding_func</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_by_vector</span><span class="p">(</span>
+                <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+                <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+                <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+                <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span>
+                <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="c1"># tvdb will do the query embedding</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score</span><span class="p">(</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span> <span class="n">param</span><span class="o">=</span><span class="n">param</span><span class="p">,</span> <span class="n">expr</span><span class="o">=</span><span class="n">expr</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">]</span></div>
+
+    <span class="k">def</span> <span class="nf">_get_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get metadata from the result.&quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span><span class="p">}</span>
+        <span class="k">elif</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_metadata</span><span class="p">):</span>
+            <span class="n">raw_meta</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_metadata</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">raw_meta</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_meta</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">raw_meta</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{}</span>
 
 <div class="viewcode-block" id="TencentVectorDB.max_marginal_relevance_search_by_vector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.tencentvectordb.TencentVectorDB.html#langchain_community.vectorstores.tencentvectordb.TencentVectorDB.max_marginal_relevance_search_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search_by_vector</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -547,16 +720,19 @@
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="n">param</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform a search and return results that are reordered by MMR.&quot;&quot;&quot;</span>
-        <span class="nb">filter</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
-        <span class="n">ef</span> <span class="o">=</span> <span class="mi">10</span> <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">param</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ef&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">filter</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">expr</span><span class="p">:</span>
+            <span class="n">expr</span> <span class="o">=</span> <span class="n">translate_filter</span><span class="p">(</span>
+                <span class="nb">filter</span><span class="p">,</span> <span class="p">[</span><span class="n">f</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta_fields</span> <span class="ow">or</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
+            <span class="p">)</span>
         <span class="n">res</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
             <span class="n">vectors</span><span class="o">=</span><span class="p">[</span><span class="n">embedding</span><span class="p">],</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
-            <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">HNSWSearchParams</span><span class="p">(</span><span class="n">ef</span><span class="o">=</span><span class="n">ef</span><span class="p">),</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">Filter</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span> <span class="k">if</span> <span class="n">expr</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">HNSWSearchParams</span><span class="p">(</span><span class="n">ef</span><span class="o">=</span><span class="p">(</span><span class="n">param</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ef&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)),</span>
             <span class="n">retrieve_vector</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">limit</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
@@ -565,9 +741,7 @@
         <span class="n">documents</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">ordered_result_embeddings</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">res</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-            <span class="n">meta</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_metadata</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">meta</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">meta</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span>
+            <span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_meta</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
             <span class="n">doc</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_text</span><span class="p">),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">meta</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="n">documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
             <span class="n">ordered_result_embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field_vector</span><span class="p">))</span>
@@ -576,21 +750,14 @@
             <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">),</span> <span class="n">ordered_result_embeddings</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span>
         <span class="p">)</span>
         <span class="c1"># Reorder the values and return.</span>
-        <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">new_ordering</span><span class="p">:</span>
-            <span class="c1"># Function can return -1 index</span>
-            <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-                <span class="k">break</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">ret</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">documents</span><span class="p">[</span><span class="n">x</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">ret</span></div></div>
+        <span class="k">return</span> <span class="p">[</span><span class="n">documents</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">new_ordering</span> <span class="k">if</span> <span class="n">x</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 11, 2024.
       </footer>
     </div>
   </div>

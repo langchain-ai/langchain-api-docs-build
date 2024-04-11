@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_core.messages.ai &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain_core.messages.ai &mdash; 🦜🔗 LangChain 0.1.15</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_core/messages/ai.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -120,9 +123,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -138,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
@@ -153,7 +154,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
@@ -192,14 +192,25 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_core.messages.ai</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.messages.base</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseMessage</span><span class="p">,</span>
     <span class="n">BaseMessageChunk</span><span class="p">,</span>
     <span class="n">merge_content</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils._merge</span> <span class="kn">import</span> <span class="n">merge_dicts</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">InvalidToolCall</span><span class="p">,</span>
+    <span class="n">ToolCall</span><span class="p">,</span>
+    <span class="n">ToolCallChunk</span><span class="p">,</span>
+    <span class="n">default_tool_chunk_parser</span><span class="p">,</span>
+    <span class="n">default_tool_parser</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils._merge</span> <span class="kn">import</span> <span class="n">merge_dicts</span><span class="p">,</span> <span class="n">merge_lists</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.json</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">parse_partial_json</span><span class="p">,</span>
+<span class="p">)</span>
 
 
 <div class="viewcode-block" id="AIMessage"><a class="viewcode-back" href="../../../messages/langchain_core.messages.ai.AIMessage.html#langchain_core.messages.ai.AIMessage">[docs]</a><span class="k">class</span> <span class="nc">AIMessage</span><span class="p">(</span><span class="n">BaseMessage</span><span class="p">):</span>
@@ -210,12 +221,47 @@
 <span class="sd">        conversation.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">tool_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ToolCall</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;If provided, tool calls associated with the message.&quot;&quot;&quot;</span>
+    <span class="n">invalid_tool_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">InvalidToolCall</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;If provided, tool calls with parsing errors associated with the message.&quot;&quot;&quot;</span>
+
     <span class="nb">type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ai&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;ai&quot;</span>
 
 <div class="viewcode-block" id="AIMessage.get_lc_namespace"><a class="viewcode-back" href="../../../messages/langchain_core.messages.ai.AIMessage.html#langchain_core.messages.ai.AIMessage.get_lc_namespace">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_lc_namespace</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the namespace of the langchain object.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;langchain&quot;</span><span class="p">,</span> <span class="s2">&quot;schema&quot;</span><span class="p">,</span> <span class="s2">&quot;messages&quot;</span><span class="p">]</span></div></div>
+        <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;langchain&quot;</span><span class="p">,</span> <span class="s2">&quot;schema&quot;</span><span class="p">,</span> <span class="s2">&quot;messages&quot;</span><span class="p">]</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">lc_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attrs to be serialized even if they are derived from other init args.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">,</span>
+            <span class="s2">&quot;invalid_tool_calls&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">invalid_tool_calls</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">_backwards_compat_tool_calls</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">raw_tool_calls</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;additional_kwargs&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">)</span>
+        <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;invalid_tool_calls&quot;</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_call_chunks&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">raw_tool_calls</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">tool_calls</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
+                    <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tool_call_chunks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">default_tool_chunk_parser</span><span class="p">(</span>
+                        <span class="n">raw_tool_calls</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">tool_calls</span><span class="p">,</span> <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="n">default_tool_parser</span><span class="p">(</span><span class="n">raw_tool_calls</span><span class="p">)</span>
+                    <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_calls</span>
+                    <span class="n">values</span><span class="p">[</span><span class="s2">&quot;invalid_tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">invalid_tool_calls</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">pass</span>
+        <span class="k">return</span> <span class="n">values</span></div>
 
 
 <span class="n">AIMessage</span><span class="o">.</span><span class="n">update_forward_refs</span><span class="p">()</span>
@@ -229,10 +275,55 @@
     <span class="c1"># non-chunk variant.</span>
     <span class="nb">type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;AIMessageChunk&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;AIMessageChunk&quot;</span>  <span class="c1"># type: ignore[assignment] # noqa: E501</span>
 
+    <span class="n">tool_call_chunks</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ToolCallChunk</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;If provided, tool call chunks associated with the message.&quot;&quot;&quot;</span>
+
 <div class="viewcode-block" id="AIMessageChunk.get_lc_namespace"><a class="viewcode-back" href="../../../messages/langchain_core.messages.ai.AIMessageChunk.html#langchain_core.messages.ai.AIMessageChunk.get_lc_namespace">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_lc_namespace</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the namespace of the langchain object.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">[</span><span class="s2">&quot;langchain&quot;</span><span class="p">,</span> <span class="s2">&quot;schema&quot;</span><span class="p">,</span> <span class="s2">&quot;messages&quot;</span><span class="p">]</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">lc_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attrs to be serialized even if they are derived from other init args.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">,</span>
+            <span class="s2">&quot;invalid_tool_calls&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">invalid_tool_calls</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">init_tool_calls</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tool_call_chunks&quot;</span><span class="p">]:</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;invalid_tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">return</span> <span class="n">values</span>
+        <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tool_call_chunks&quot;</span><span class="p">]:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">args_</span> <span class="o">=</span> <span class="n">parse_partial_json</span><span class="p">(</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">])</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">args_</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                    <span class="n">tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">ToolCall</span><span class="p">(</span>
+                            <span class="n">name</span><span class="o">=</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                            <span class="n">args</span><span class="o">=</span><span class="n">args_</span><span class="p">,</span>
+                            <span class="nb">id</span><span class="o">=</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Malformed args.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">invalid_tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">InvalidToolCall</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="n">args</span><span class="o">=</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">],</span>
+                        <span class="nb">id</span><span class="o">=</span><span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                        <span class="n">error</span><span class="o">=</span><span class="s2">&quot;Malformed args.&quot;</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_calls</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;invalid_tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">invalid_tool_calls</span>
+        <span class="k">return</span> <span class="n">values</span>
 
     <span class="k">def</span> <span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseMessageChunk</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
@@ -241,15 +332,41 @@
                     <span class="s2">&quot;Cannot concatenate AIMessageChunks with different example values.&quot;</span>
                 <span class="p">)</span>
 
+            <span class="n">content</span> <span class="o">=</span> <span class="n">merge_content</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+            <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">additional_kwargs</span>
+            <span class="p">)</span>
+            <span class="n">response_metadata</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">response_metadata</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Merge tool call chunks</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tool_call_chunks</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">:</span>
+                <span class="n">raw_tool_calls</span> <span class="o">=</span> <span class="n">merge_lists</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+                    <span class="n">other</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">raw_tool_calls</span><span class="p">:</span>
+                    <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">ToolCallChunk</span><span class="p">(</span>
+                            <span class="n">name</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                            <span class="n">args</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">),</span>
+                            <span class="n">index</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
+                            <span class="nb">id</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
+                        <span class="p">)</span>
+                        <span class="k">for</span> <span class="n">rtc</span> <span class="ow">in</span> <span class="n">raw_tool_calls</span>
+                    <span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
+
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
                 <span class="n">example</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example</span><span class="p">,</span>
-                <span class="n">content</span><span class="o">=</span><span class="n">merge_content</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">content</span><span class="p">),</span>
-                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">merge_dicts</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">additional_kwargs</span>
-                <span class="p">),</span>
-                <span class="n">response_metadata</span><span class="o">=</span><span class="n">merge_dicts</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">response_metadata</span>
-                <span class="p">),</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+                <span class="n">response_metadata</span><span class="o">=</span><span class="n">response_metadata</span><span class="p">,</span>
                 <span class="nb">id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
             <span class="p">)</span>
 
@@ -260,7 +377,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 11, 2024.
       </footer>
     </div>
   </div>

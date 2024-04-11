@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_anthropic.chat_models &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain_anthropic.chat_models &mdash; 🦜🔗 LangChain 0.1.15</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_anthropic/chat_models.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -120,9 +123,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../postgres_api_reference.html">postgres</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -138,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../exa_api_reference.html">exa</a>
@@ -153,7 +154,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../pinecone_api_reference.html">pinecone</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
@@ -192,7 +192,8 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_anthropic.chat_models</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">os</span>
+<span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
@@ -248,7 +249,7 @@
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
 
-<span class="kn">from</span> <span class="nn">langchain_anthropic.output_parsers</span> <span class="kn">import</span> <span class="n">ToolsOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain_anthropic.output_parsers</span> <span class="kn">import</span> <span class="n">ToolsOutputParser</span><span class="p">,</span> <span class="n">extract_tool_calls</span>
 
 <span class="n">_message_type_lookups</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;human&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span>
@@ -541,7 +542,24 @@
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate</span><span class="p">(</span>
                 <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">)</span>
-            <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span><span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">and</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">]),</span>
+                        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
+                    <span class="p">}</span>
+                    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">)</span>
+                <span class="p">]</span>
+                <span class="n">message_chunk</span> <span class="o">=</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                    <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                    <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message_chunk</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span><span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">return</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">text</span> <span class="ow">in</span> <span class="n">stream</span><span class="o">.</span><span class="n">text_stream</span><span class="p">:</span>
@@ -563,7 +581,24 @@
             <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_agenerate</span><span class="p">(</span>
                 <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">)</span>
-            <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span><span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">and</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">]),</span>
+                        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
+                    <span class="p">}</span>
+                    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">)</span>
+                <span class="p">]</span>
+                <span class="n">message_chunk</span> <span class="o">=</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                    <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                    <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message_chunk</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span><span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">return</span>
         <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
             <span class="k">async</span> <span class="k">for</span> <span class="n">text</span> <span class="ow">in</span> <span class="n">stream</span><span class="o">.</span><span class="n">text_stream</span><span class="p">:</span>
@@ -580,6 +615,12 @@
         <span class="p">}</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">content</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="nb">any</span><span class="p">(</span><span class="n">block</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span> <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">content</span><span class="p">):</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="n">extract_tool_calls</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span>
@@ -840,7 +881,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 11, 2024.
       </footer>
     </div>
   </div>

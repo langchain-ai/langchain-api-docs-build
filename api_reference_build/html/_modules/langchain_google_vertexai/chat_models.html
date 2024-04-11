@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_google_vertexai.chat_models &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain_google_vertexai.chat_models &mdash; 🦜🔗 LangChain 0.1.15</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_google_vertexai/chat_models.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -120,9 +123,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../postgres_api_reference.html">postgres</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -138,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../exa_api_reference.html">exa</a>
@@ -153,7 +154,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../pinecone_api_reference.html">pinecone</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
@@ -200,7 +200,20 @@
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">cast</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncIterator</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">Type</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+    <span class="n">cast</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">import</span> <span class="nn">proto</span>  <span class="c1"># type: ignore[import-untyped]</span>
 <span class="kn">from</span> <span class="nn">google.cloud.aiplatform_v1beta1.types.content</span> <span class="kn">import</span> <span class="n">Part</span> <span class="k">as</span> <span class="n">GapicPart</span>
@@ -222,13 +235,19 @@
     <span class="n">BaseMessage</span><span class="p">,</span>
     <span class="n">FunctionMessage</span><span class="p">,</span>
     <span class="n">HumanMessage</span><span class="p">,</span>
+    <span class="n">InvalidToolCall</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
+    <span class="n">ToolCall</span><span class="p">,</span>
+    <span class="n">ToolCallChunk</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span><span class="p">,</span> <span class="n">tool</span> <span class="k">as</span> <span class="n">tool_from_callable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_functions</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">JsonOutputFunctionsParser</span><span class="p">,</span>
     <span class="n">PydanticOutputFunctionsParser</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="n">parse_tool_calls</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">root_validator</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span><span class="p">,</span> <span class="n">RunnablePassthrough</span>
@@ -263,6 +282,7 @@
     <span class="n">is_gemini_model</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_google_vertexai.functions_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_format_tool_config</span><span class="p">,</span>
     <span class="n">_format_tools_to_vertex_tool</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -312,7 +332,7 @@
     <span class="n">history</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
     <span class="n">project</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">convert_system_message_to_human</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Content</span><span class="p">]:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Content</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Content</span><span class="p">]]:</span>
     <span class="k">def</span> <span class="nf">_convert_to_prompt</span><span class="p">(</span><span class="n">part</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Part</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">Part</span><span class="o">.</span><span class="n">from_text</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
@@ -336,24 +356,35 @@
         <span class="k">return</span> <span class="p">[</span><span class="n">_convert_to_prompt</span><span class="p">(</span><span class="n">part</span><span class="p">)</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">raw_content</span><span class="p">]</span>
 
     <span class="n">vertex_messages</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">raw_system_message</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">convert_system_message_to_human_content</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">system_instruction</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">message</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">history</span><span class="p">):</span>
-        <span class="k">if</span> <span class="p">(</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">system_instruction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Detected more than one SystemMessage in the list of messages.&quot;</span>
+                    <span class="s2">&quot;Gemini APIs support the insertion of only one SystemMessage.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">convert_system_message_to_human</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;gemini models released from April 2024 support&quot;</span>
+                        <span class="s2">&quot;SystemMessages natively. For best performances,&quot;</span>
+                        <span class="s2">&quot;when working with these models,&quot;</span>
+                        <span class="s2">&quot;set convert_system_message_to_human to False&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">convert_system_message_to_human_content</span> <span class="o">=</span> <span class="n">message</span>
+                    <span class="k">continue</span>
+                <span class="n">system_instruction</span> <span class="o">=</span> <span class="n">Content</span><span class="p">(</span>
+                    <span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">parts</span><span class="o">=</span><span class="n">_convert_to_parts</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+        <span class="k">elif</span> <span class="p">(</span>
             <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span>
             <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="n">convert_system_message_to_human</span>
+            <span class="ow">and</span> <span class="n">convert_system_message_to_human</span>
         <span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;SystemMessages are not yet supported!</span>
-<span class="sd">                </span>
-<span class="sd">To automatically convert the leading SystemMessage to a HumanMessage,</span>
-<span class="sd">set  `convert_system_message_to_human` to True. Example:</span>
-
-<span class="sd">llm = ChatVertexAI(model_name=&quot;gemini-pro&quot;, convert_system_message_to_human=True)</span>
-<span class="sd">&quot;&quot;&quot;</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
-            <span class="n">raw_system_message</span> <span class="o">=</span> <span class="n">message</span>
+            <span class="n">convert_system_message_to_human_content</span> <span class="o">=</span> <span class="n">message</span>
             <span class="k">continue</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
             <span class="n">raw_function_call</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;function_call&quot;</span><span class="p">)</span>
@@ -373,10 +404,28 @@
             <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
             <span class="n">parts</span> <span class="o">=</span> <span class="n">_convert_to_parts</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">FunctionMessage</span><span class="p">):</span>
-            <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
+            <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;function&quot;</span>
             <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span>
                 <span class="n">Part</span><span class="o">.</span><span class="n">from_function_response</span><span class="p">(</span>
                     <span class="n">name</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                    <span class="n">response</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">)</span>
+            <span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+            <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;function&quot;</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">AIMessage</span><span class="p">):</span>
+                <span class="c1"># message.name can be null for ToolMessage</span>
+                <span class="k">if</span> <span class="n">history</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">history</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>  <span class="c1"># type: ignore</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">name</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">Part</span><span class="o">.</span><span class="n">from_function_response</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
                     <span class="n">response</span><span class="o">=</span><span class="p">{</span>
                         <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
                     <span class="p">},</span>
@@ -387,18 +436,18 @@
                 <span class="sa">f</span><span class="s2">&quot;Unexpected message with type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">message</span><span class="p">)</span><span class="si">}</span><span class="s2"> at the position </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">raw_system_message</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">convert_system_message_to_human_content</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;model&quot;</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;SystemMessage should be followed by a HumanMessage and &quot;</span>
                     <span class="s2">&quot;not by AIMessage.&quot;</span>
                 <span class="p">)</span>
-            <span class="n">parts</span> <span class="o">=</span> <span class="n">_convert_to_parts</span><span class="p">(</span><span class="n">raw_system_message</span><span class="p">)</span> <span class="o">+</span> <span class="n">parts</span>
-            <span class="n">raw_system_message</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="n">_convert_to_parts</span><span class="p">(</span><span class="n">convert_system_message_to_human_content</span><span class="p">)</span> <span class="o">+</span> <span class="n">parts</span>
+            <span class="n">convert_system_message_to_human_content</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">vertex_message</span> <span class="o">=</span> <span class="n">Content</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span> <span class="n">parts</span><span class="o">=</span><span class="n">parts</span><span class="p">)</span>
         <span class="n">vertex_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">vertex_message</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">vertex_messages</span>
+    <span class="k">return</span> <span class="n">system_instruction</span><span class="p">,</span> <span class="n">vertex_messages</span>
 
 
 <span class="k">def</span> <span class="nf">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">InputOutputTextPair</span><span class="p">]:</span>
@@ -441,7 +490,22 @@
     <span class="k">return</span> <span class="n">question</span>
 
 
-<span class="k">def</span> <span class="nf">_parse_response_candidate</span><span class="p">(</span><span class="n">response_candidate</span><span class="p">:</span> <span class="s2">&quot;Candidate&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AIMessage</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_get_client_with_sys_instruction</span><span class="p">(</span>
+    <span class="n">client</span><span class="p">:</span> <span class="n">GenerativeModel</span><span class="p">,</span>
+    <span class="n">system_instruction</span><span class="p">:</span> <span class="n">Content</span><span class="p">,</span>
+    <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">):</span>
+    <span class="k">if</span> <span class="n">client</span><span class="o">.</span><span class="n">_system_instruction</span> <span class="o">!=</span> <span class="n">system_instruction</span><span class="p">:</span>
+        <span class="n">client</span> <span class="o">=</span> <span class="n">GenerativeModel</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">client</span>
+
+
+<span class="k">def</span> <span class="nf">_parse_response_candidate</span><span class="p">(</span>
+    <span class="n">response_candidate</span><span class="p">:</span> <span class="s2">&quot;Candidate&quot;</span><span class="p">,</span> <span class="n">streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AIMessage</span><span class="p">:</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">content</span> <span class="o">=</span> <span class="n">response_candidate</span><span class="o">.</span><span class="n">text</span>
     <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
@@ -459,6 +523,52 @@
             <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">function_call_args_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">function_call_args_dict</span><span class="p">}</span>
         <span class="p">)</span>
         <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;function_call&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">function_call</span>
+        <span class="k">if</span> <span class="n">streaming</span><span class="p">:</span>
+            <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">ToolCallChunk</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                    <span class="n">args</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
+                    <span class="nb">id</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())),</span>
+                    <span class="n">index</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">]</span>
+            <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">tool_calls_dicts</span> <span class="o">=</span> <span class="n">parse_tool_calls</span><span class="p">(</span>
+                    <span class="p">[{</span><span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">function_call</span><span class="p">}],</span>
+                    <span class="n">return_id</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">ToolCall</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="n">args</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">],</span>
+                        <span class="nb">id</span><span class="o">=</span><span class="n">tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())),</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls_dicts</span>
+                <span class="p">]</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">InvalidToolCall</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                        <span class="n">args</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
+                        <span class="nb">id</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())),</span>
+                        <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+
+            <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span><span class="p">,</span>
+                <span class="n">invalid_tool_calls</span><span class="o">=</span><span class="n">invalid_tool_calls</span><span class="p">,</span>
+            <span class="p">)</span>
     <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">)</span>
 
 
@@ -469,10 +579,9 @@
     <span class="s2">&quot;Underlying model name.&quot;</span>
     <span class="n">examples</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">convert_system_message_to_human</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to merge any leading SystemMessage into the following HumanMessage.</span>
-<span class="sd">    </span>
-<span class="sd">    Gemini does not support system messages; any unsupported messages will </span>
-<span class="sd">    raise an error.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;[Deprecated] Since new Gemini models support setting a System Message,</span>
+<span class="sd">    setting this parameter to True is discouraged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ChatVertexAI.is_lc_serializable"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI.is_lc_serializable">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">is_lc_serializable</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -551,23 +660,32 @@
             <span class="n">msg_params</span><span class="p">[</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
-            <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
+            <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
                 <span class="n">messages</span><span class="p">,</span>
                 <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
                 <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="n">history_gemini</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_chat</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">history_gemini</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
+                <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
+                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="p">)</span>
 
             <span class="c1"># set param to `functions` until core tool/function calling implemented</span>
             <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
             <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">tool_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
             <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span>
-                    <span class="n">message</span><span class="p">,</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content</span><span class="p">(</span>
+                    <span class="n">history_gemini</span><span class="p">,</span>
                     <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
                     <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
+                    <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
                     <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
@@ -635,22 +753,32 @@
             <span class="n">msg_params</span><span class="p">[</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
-            <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
+            <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
                 <span class="n">messages</span><span class="p">,</span>
                 <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
                 <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="n">history_gemini</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_chat</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">history_gemini</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
+                <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
+                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="c1"># set param to `functions` until core tool/function calling implemented</span>
             <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
             <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">tool_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
             <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message_async</span><span class="p">(</span>
-                    <span class="n">message</span><span class="p">,</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content_async</span><span class="p">(</span>
+                    <span class="n">history_gemini</span><span class="p">,</span>
                     <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
                     <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
+                    <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
                     <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
@@ -695,41 +823,59 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
-            <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
+            <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
                 <span class="n">messages</span><span class="p">,</span>
                 <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
                 <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="n">history_gemini</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_chat</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">history_gemini</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
+                <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
+                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="c1"># set param to `functions` until core tool/function calling implemented</span>
             <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
             <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">tool_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
             <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">responses</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span>
-                    <span class="n">message</span><span class="p">,</span>
+                <span class="n">responses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content</span><span class="p">(</span>
+                    <span class="n">history_gemini</span><span class="p">,</span>
                     <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                     <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                    <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
                     <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
+                    <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
+                    <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">:</span>
-                    <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                    <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                        <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-                    <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                        <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
-                            <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                            <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                        <span class="p">),</span>
-                        <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                            <span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                            <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
-                        <span class="p">),</span>
+                    <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span>
+                        <span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span>
                     <span class="p">)</span>
+                    <span class="n">generation_info</span> <span class="o">=</span> <span class="n">get_generation_info</span><span class="p">(</span>
+                        <span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
+                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
+                        <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                            <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+                            <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                            <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
+                                <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                            <span class="p">),</span>
+                            <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+                        <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
             <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
@@ -761,39 +907,52 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
         <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
+        <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
             <span class="n">messages</span><span class="p">,</span>
             <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
             <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">message</span> <span class="o">=</span> <span class="n">history_gemini</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
-        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-            <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_chat</span><span class="p">(</span><span class="n">history</span><span class="o">=</span><span class="n">history_gemini</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
+            <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
+            <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">tool_config</span> <span class="o">=</span> <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message_async</span><span class="p">(</span>
-                <span class="n">message</span><span class="p">,</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content_async</span><span class="p">(</span>
+                <span class="n">history_gemini</span><span class="p">,</span>
                 <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                 <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
                 <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
+                <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
+                <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
             <span class="p">):</span>
-                <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                    <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-                <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                    <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
-                        <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                        <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                    <span class="p">),</span>
-                    <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                        <span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
-                    <span class="p">),</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">generation_info</span> <span class="o">=</span> <span class="n">get_generation_info</span><span class="p">(</span>
+                    <span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
+                    <span class="n">usage_metadata</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
                 <span class="p">)</span>
+                <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
+                    <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                        <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+                        <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                        <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
+                            <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                            <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                        <span class="p">),</span>
+                        <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+                    <span class="p">)</span>
 
 <div class="viewcode-block" id="ChatVertexAI.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -909,6 +1068,37 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">parser</span></div>
 
+<div class="viewcode-block" id="ChatVertexAI.bind_tools"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind tool-like objects to this chat model.</span>
+
+<span class="sd">        Assumes model is compatible with Vertex tool-calling API.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tools: A list of tool definitions to bind to this chat model.</span>
+<span class="sd">                Can be a pydantic model, callable, or BaseTool. Pydantic</span>
+<span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
+<span class="sd">                their schema dictionary representation.</span>
+<span class="sd">            **kwargs: Any additional parameters to pass to the</span>
+<span class="sd">                :class:`~langchain.runnable.Runnable` constructor.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">schema</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">formatted_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">schema</span><span class="p">):</span>
+                <span class="n">formatted_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tool_from_callable</span><span class="p">(</span><span class="n">schema</span><span class="p">))</span>  <span class="c1"># type: ignore</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Tool must be a BaseTool, Pydantic model, or callable.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">functions</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
     <span class="k">def</span> <span class="nf">_start_chat</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">_ChatHistory</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ChatSession</span><span class="p">,</span> <span class="n">CodeChatSession</span><span class="p">]:</span>
@@ -924,7 +1114,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 11, 2024.
       </footer>
     </div>
   </div>

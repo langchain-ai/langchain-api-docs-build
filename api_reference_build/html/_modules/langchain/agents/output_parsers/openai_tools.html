@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain.agents.output_parsers.openai_tools &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain.agents.output_parsers.openai_tools &mdash; 🦜🔗 LangChain 0.1.15</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain/agents/output_parsers/openai_tools.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -120,9 +123,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../postgres_api_reference.html">postgres</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -138,6 +138,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../exa_api_reference.html">exa</a>
@@ -153,7 +154,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../pinecone_api_reference.html">pinecone</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../../voyageai_api_reference.html">voyageai</a>
@@ -192,73 +192,43 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain.agents.output_parsers.openai_tools</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">from</span> <span class="nn">json</span> <span class="kn">import</span> <span class="n">JSONDecodeError</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">from</span> <span class="nn">langchain_core.agents</span> <span class="kn">import</span> <span class="n">AgentAction</span><span class="p">,</span> <span class="n">AgentActionMessageLog</span><span class="p">,</span> <span class="n">AgentFinish</span>
-<span class="kn">from</span> <span class="nn">langchain_core.exceptions</span> <span class="kn">import</span> <span class="n">OutputParserException</span>
-<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">AIMessage</span><span class="p">,</span>
-    <span class="n">BaseMessage</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.agents</span> <span class="kn">import</span> <span class="n">AgentAction</span><span class="p">,</span> <span class="n">AgentFinish</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">Generation</span>
 
 <span class="kn">from</span> <span class="nn">langchain.agents.agent</span> <span class="kn">import</span> <span class="n">MultiActionAgentOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain.agents.output_parsers.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ToolAgentAction</span><span class="p">,</span>
+    <span class="n">parse_ai_message_to_tool_action</span><span class="p">,</span>
+<span class="p">)</span>
 
-
-<div class="viewcode-block" id="OpenAIToolAgentAction"><a class="viewcode-back" href="../../../../agents/langchain.agents.output_parsers.openai_tools.OpenAIToolAgentAction.html#langchain.agents.output_parsers.openai_tools.OpenAIToolAgentAction">[docs]</a><span class="k">class</span> <span class="nc">OpenAIToolAgentAction</span><span class="p">(</span><span class="n">AgentActionMessageLog</span><span class="p">):</span>
-    <span class="n">tool_call_id</span><span class="p">:</span> <span class="nb">str</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tool call that this message is responding to.&quot;&quot;&quot;</span></div>
+<span class="n">OpenAIToolAgentAction</span> <span class="o">=</span> <span class="n">ToolAgentAction</span>
 
 
 <div class="viewcode-block" id="parse_ai_message_to_openai_tool_action"><a class="viewcode-back" href="../../../../agents/langchain.agents.output_parsers.openai_tools.parse_ai_message_to_openai_tool_action.html#langchain.agents.output_parsers.openai_tools.parse_ai_message_to_openai_tool_action">[docs]</a><span class="k">def</span> <span class="nf">parse_ai_message_to_openai_tool_action</span><span class="p">(</span>
     <span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">AgentAction</span><span class="p">],</span> <span class="n">AgentFinish</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse an AI message potentially containing tool_calls.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected an AI message got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">message</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">AgentFinish</span><span class="p">(</span>
-            <span class="n">return_values</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">},</span> <span class="n">log</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-        <span class="p">)</span>
-
-    <span class="n">actions</span><span class="p">:</span> <span class="n">List</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]:</span>
-        <span class="n">function</span> <span class="o">=</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span>
-        <span class="n">function_name</span> <span class="o">=</span> <span class="n">function</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">_tool_input</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">function</span><span class="p">[</span><span class="s2">&quot;arguments&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">except</span> <span class="n">JSONDecodeError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">OutputParserException</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Could not parse tool input: </span><span class="si">{</span><span class="n">function</span><span class="si">}</span><span class="s2"> because &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;the `arguments` is not valid JSON.&quot;</span>
+    <span class="n">tool_actions</span> <span class="o">=</span> <span class="n">parse_ai_message_to_tool_action</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_actions</span><span class="p">,</span> <span class="n">AgentFinish</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tool_actions</span>
+    <span class="n">final_actions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">AgentAction</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">tool_actions</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">ToolAgentAction</span><span class="p">):</span>
+            <span class="n">final_actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">OpenAIToolAgentAction</span><span class="p">(</span>
+                    <span class="n">tool</span><span class="o">=</span><span class="n">action</span><span class="o">.</span><span class="n">tool</span><span class="p">,</span>
+                    <span class="n">tool_input</span><span class="o">=</span><span class="n">action</span><span class="o">.</span><span class="n">tool_input</span><span class="p">,</span>
+                    <span class="n">log</span><span class="o">=</span><span class="n">action</span><span class="o">.</span><span class="n">log</span><span class="p">,</span>
+                    <span class="n">message_log</span><span class="o">=</span><span class="n">action</span><span class="o">.</span><span class="n">message_log</span><span class="p">,</span>
+                    <span class="n">tool_call_id</span><span class="o">=</span><span class="n">action</span><span class="o">.</span><span class="n">tool_call_id</span><span class="p">,</span>
+                <span class="p">)</span>
             <span class="p">)</span>
-
-        <span class="c1"># HACK HACK HACK:</span>
-        <span class="c1"># The code that encodes tool input into Open AI uses a special variable</span>
-        <span class="c1"># name called `__arg1` to handle old style tools that do not expose a</span>
-        <span class="c1"># schema and expect a single string argument as an input.</span>
-        <span class="c1"># We unpack the argument here if it exists.</span>
-        <span class="c1"># Open AI does not support passing in a JSON array as an argument.</span>
-        <span class="k">if</span> <span class="s2">&quot;__arg1&quot;</span> <span class="ow">in</span> <span class="n">_tool_input</span><span class="p">:</span>
-            <span class="n">tool_input</span> <span class="o">=</span> <span class="n">_tool_input</span><span class="p">[</span><span class="s2">&quot;__arg1&quot;</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">tool_input</span> <span class="o">=</span> <span class="n">_tool_input</span>
-
-        <span class="n">content_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;responded: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
-        <span class="n">log</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Invoking: `</span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2">` with `</span><span class="si">{</span><span class="n">tool_input</span><span class="si">}</span><span class="s2">`</span><span class="se">\n</span><span class="si">{</span><span class="n">content_msg</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
-        <span class="n">actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">OpenAIToolAgentAction</span><span class="p">(</span>
-                <span class="n">tool</span><span class="o">=</span><span class="n">function_name</span><span class="p">,</span>
-                <span class="n">tool_input</span><span class="o">=</span><span class="n">tool_input</span><span class="p">,</span>
-                <span class="n">log</span><span class="o">=</span><span class="n">log</span><span class="p">,</span>
-                <span class="n">message_log</span><span class="o">=</span><span class="p">[</span><span class="n">message</span><span class="p">],</span>
-                <span class="n">tool_call_id</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">actions</span></div>
+            <span class="n">final_actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">final_actions</span></div>
 
 
 <div class="viewcode-block" id="OpenAIToolsAgentOutputParser"><a class="viewcode-back" href="../../../../agents/langchain.agents.output_parsers.openai_tools.OpenAIToolsAgentOutputParser.html#langchain.agents.output_parsers.openai_tools.OpenAIToolsAgentOutputParser">[docs]</a><span class="k">class</span> <span class="nc">OpenAIToolsAgentOutputParser</span><span class="p">(</span><span class="n">MultiActionAgentOutputParser</span><span class="p">):</span>
@@ -293,7 +263,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 11, 2024.
       </footer>
     </div>
   </div>
