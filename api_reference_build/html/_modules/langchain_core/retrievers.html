@@ -245,11 +245,47 @@
 <div class="viewcode-block" id="BaseRetriever"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_core.vectorstores.BaseRetriever">[docs]</a><span class="k">class</span> <span class="nc">BaseRetriever</span><span class="p">(</span><span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">RetrieverInput</span><span class="p">,</span> <span class="n">RetrieverOutput</span><span class="p">],</span> <span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for a Document retrieval system.</span>
 
-<span class="sd">    A retrieval system is defined as something that can take string queries and return</span>
-<span class="sd">        the most &#39;relevant&#39; Documents from some source.</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">    A retrieval system is defined as something that can take string queries and return</span>
+<span class="sd">    the most &#39;relevant&#39; Documents from some source.</span>
+
+<span class="sd">    Usage:</span>
+
+<span class="sd">    A retriever follows the standard Runnable interface, and should be used</span>
+<span class="sd">    via the standard runnable methods of `invoke`, `ainvoke`, `batch`, `abatch`.</span>
+
+<span class="sd">    Implementation:</span>
+
+<span class="sd">    When implementing a custom retriever, the class should implement</span>
+<span class="sd">    the `_get_relevant_documents` method to define the logic for retrieving documents.</span>
+
+<span class="sd">    Optionally, an async native implementations can be provided by overriding the</span>
+<span class="sd">    `_aget_relevant_documents` method.</span>
+
+<span class="sd">    Example: A retriever that returns the first 5 documents from a list of documents</span>
+
 <span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core import Document, BaseRetriever</span>
+<span class="sd">            from typing import List</span>
+
+<span class="sd">            class SimpleRetriever(BaseRetriever):</span>
+<span class="sd">                docs: List[Document]</span>
+<span class="sd">                k: int = 5</span>
+
+<span class="sd">                def _get_relevant_documents(self, query: str) -&gt; List[Document]:</span>
+<span class="sd">                    \&quot;\&quot;\&quot;Return the first k documents from the list of documents\&quot;\&quot;\&quot;</span>
+<span class="sd">                    return self.docs[:self.k]</span>
+
+<span class="sd">                async def _aget_relevant_documents(self, query: str) -&gt; List[Document]:</span>
+<span class="sd">                    \&quot;\&quot;\&quot;(Optional) async native implementation.\&quot;\&quot;\&quot;</span>
+<span class="sd">                    return self.docs[:self.k]</span>
+
+<span class="sd">    Example: A simple retriever based on a scitkit learn vectorizer</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from sklearn.metrics.pairwise import cosine_similarity</span>
 
 <span class="sd">            class TFIDFRetriever(BaseRetriever, BaseModel):</span>
 <span class="sd">                vectorizer: Any</span>
@@ -260,9 +296,7 @@
 <span class="sd">                class Config:</span>
 <span class="sd">                    arbitrary_types_allowed = True</span>
 
-<span class="sd">                def get_relevant_documents(self, query: str) -&gt; List[Document]:</span>
-<span class="sd">                    from sklearn.metrics.pairwise import cosine_similarity</span>
-
+<span class="sd">                def _get_relevant_documents(self, query: str) -&gt; List[Document]:</span>
 <span class="sd">                    # Ip -- (n_docs,x), Op -- (n_docs,n_Feats)</span>
 <span class="sd">                    query_vec = self.vectorizer.transform([query])</span>
 <span class="sd">                    # Op -- (n_docs,1) -- Cosine Sim with each doc</span>
@@ -331,6 +365,24 @@
 <div class="viewcode-block" id="BaseRetriever.invoke"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_core.vectorstores.BaseRetriever.invoke">[docs]</a>    <span class="k">def</span> <span class="nf">invoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke the retriever to get relevant documents.</span>
+
+<span class="sd">        Main entry point for synchronous retriever invocations.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            input: The query string</span>
+<span class="sd">            config: Configuration for the retriever</span>
+<span class="sd">            **kwargs: Additional arguments to pass to the retriever</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of relevant documents</span>
+
+<span class="sd">        Examples:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            retriever.invoke(&quot;query&quot;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_relevant_documents</span><span class="p">(</span>
             <span class="nb">input</span><span class="p">,</span>
@@ -347,6 +399,24 @@
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Asynchronously invoke the retriever to get relevant documents.</span>
+
+<span class="sd">        Main entry point for asynchronous retriever invocations.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            input: The query string</span>
+<span class="sd">            config: Configuration for the retriever</span>
+<span class="sd">            **kwargs: Additional arguments to pass to the retriever</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of relevant documents</span>
+
+<span class="sd">        Examples:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            await retriever.ainvoke(&quot;query&quot;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
         <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aget_relevant_documents</span><span class="p">(</span>
             <span class="nb">input</span><span class="p">,</span>
@@ -397,6 +467,10 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve documents relevant to a query.</span>
+
+<span class="sd">        Users should favor using `.invoke` or `.batch` rather than</span>
+<span class="sd">        `get_relevant_documents directly`.</span>
+
 <span class="sd">        Args:</span>
 <span class="sd">            query: string to find relevant documents for</span>
 <span class="sd">            callbacks: Callback manager or list of callbacks</span>
@@ -406,6 +480,8 @@
 <span class="sd">            metadata: Optional metadata associated with the retriever. Defaults to None</span>
 <span class="sd">                This metadata will be associated with each call to this retriever,</span>
 <span class="sd">                and passed as arguments to the handlers defined in `callbacks`.</span>
+<span class="sd">            run_name: Optional name for the run.</span>
+
 <span class="sd">        Returns:</span>
 <span class="sd">            List of relevant documents</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -454,6 +530,10 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Asynchronously get documents relevant to a query.</span>
+
+<span class="sd">        Users should favor using `.ainvoke` or `.abatch` rather than</span>
+<span class="sd">        `aget_relevant_documents directly`.</span>
+
 <span class="sd">        Args:</span>
 <span class="sd">            query: string to find relevant documents for</span>
 <span class="sd">            callbacks: Callback manager or list of callbacks</span>
@@ -463,6 +543,8 @@
 <span class="sd">            metadata: Optional metadata associated with the retriever. Defaults to None</span>
 <span class="sd">                This metadata will be associated with each call to this retriever,</span>
 <span class="sd">                and passed as arguments to the handlers defined in `callbacks`.</span>
+<span class="sd">            run_name: Optional name for the run.</span>
+
 <span class="sd">        Returns:</span>
 <span class="sd">            List of relevant documents</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -505,7 +587,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 11, 2024.
+          Last updated on Apr 12, 2024.
       </footer>
     </div>
   </div>
