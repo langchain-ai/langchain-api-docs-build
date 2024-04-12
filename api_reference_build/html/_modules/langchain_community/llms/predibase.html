@@ -123,6 +123,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../postgres_api_reference.html">postgres</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -154,6 +157,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
@@ -208,14 +212,18 @@
 <span class="sd">    The `model` parameter is the Predibase &quot;serverless&quot; base_model ID</span>
 <span class="sd">    (see https://docs.predibase.com/user-guide/inference/models for the catalog).</span>
 
-<span class="sd">    An optional `adapter_id` parameter is the HuggingFace ID of a fine-tuned LLM</span>
-<span class="sd">    adapter, whose base model is the `model` parameter; the fine-tuned adapter</span>
-<span class="sd">    must be compatible with its base model; otherwise, an error is raised.</span>
+<span class="sd">    An optional `adapter_id` parameter is the Predibase ID or HuggingFace ID of a</span>
+<span class="sd">    fine-tuned LLM adapter, whose base model is the `model` parameter; the</span>
+<span class="sd">    fine-tuned adapter must be compatible with its base model;</span>
+<span class="sd">    otherwise, an error is raised.  If a Predibase ID references the</span>
+<span class="sd">    fine-tuned adapter, then the `adapter_version` in the adapter repository can</span>
+<span class="sd">    be optionally specified; omitting it defaults to the most recent version.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">predibase_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>
     <span class="n">adapter_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">adapter_version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
     <span class="n">default_options_for_generation</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="p">{</span>
@@ -239,12 +247,16 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">predibase</span> <span class="kn">import</span> <span class="n">PredibaseClient</span>
             <span class="kn">from</span> <span class="nn">predibase.pql</span> <span class="kn">import</span> <span class="n">get_session</span>
-            <span class="kn">from</span> <span class="nn">predibase.pql.api</span> <span class="kn">import</span> <span class="n">Session</span>
+            <span class="kn">from</span> <span class="nn">predibase.pql.api</span> <span class="kn">import</span> <span class="p">(</span>
+                <span class="n">ServerResponseError</span><span class="p">,</span>
+                <span class="n">Session</span><span class="p">,</span>
+            <span class="p">)</span>
             <span class="kn">from</span> <span class="nn">predibase.resource.llm.interface</span> <span class="kn">import</span> <span class="p">(</span>
                 <span class="n">HuggingFaceLLM</span><span class="p">,</span>
                 <span class="n">LLMDeployment</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="kn">from</span> <span class="nn">predibase.resource.llm.response</span> <span class="kn">import</span> <span class="n">GeneratedResponse</span>
+            <span class="kn">from</span> <span class="nn">predibase.resource.model</span> <span class="kn">import</span> <span class="n">Model</span>
 
             <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">(</span>
                 <span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predibase_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
@@ -267,7 +279,20 @@
         <span class="p">)</span>
         <span class="n">result</span><span class="p">:</span> <span class="n">GeneratedResponse</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">:</span>
-            <span class="n">adapter_model</span><span class="p">:</span> <span class="n">HuggingFaceLLM</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;hf://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            Attempt to retrieve the fine-tuned adapter from a Predibase repository.</span>
+<span class="sd">            If absent, then load the fine-tuned adapter from a HuggingFace repository.</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="n">adapter_model</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Model</span><span class="p">,</span> <span class="n">HuggingFaceLLM</span><span class="p">]</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">adapter_model</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">get_model</span><span class="p">(</span>
+                    <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">,</span>
+                    <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_version</span><span class="p">,</span>
+                    <span class="n">model_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">ServerResponseError</span><span class="p">:</span>
+                <span class="c1"># Predibase does not recognize the adapter ID (query HuggingFace).</span>
+                <span class="n">adapter_model</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;hf://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">with_adapter</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">adapter_model</span><span class="p">)</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
                 <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
                 <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>

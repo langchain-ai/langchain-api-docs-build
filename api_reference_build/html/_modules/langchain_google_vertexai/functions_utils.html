@@ -123,6 +123,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../pinecone_api_reference.html">pinecone</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../postgres_api_reference.html">postgres</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../robocorp_api_reference.html">robocorp</a>
         </li>
         <li class="nav-item">
@@ -154,6 +157,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../pinecone_api_reference.html">pinecone</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
@@ -227,7 +231,7 @@
     <span class="p">}</span>
 
 
-<span class="k">def</span> <span class="nf">_format_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="n">BaseTool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionDescription</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_format_base_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="n">BaseTool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionDescription</span><span class="p">:</span>
     <span class="s2">&quot;Format tool into the Vertex function API.&quot;</span>
     <span class="k">if</span> <span class="n">tool</span><span class="o">.</span><span class="n">args_schema</span><span class="p">:</span>
         <span class="n">schema</span> <span class="o">=</span> <span class="n">tool</span><span class="o">.</span><span class="n">args_schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()</span>
@@ -251,24 +255,31 @@
         <span class="p">}</span>
 
 
+<span class="k">def</span> <span class="nf">_format_tool_to_vertex_function</span><span class="p">(</span>
+    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseTool</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="nb">dict</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionDescription</span><span class="p">:</span>
+    <span class="s2">&quot;Format tool into the Vertex function declaration.&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_format_base_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_format_pydantic_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">_get_parameters_from_schema</span><span class="p">(</span><span class="n">tool</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">]),</span>
+        <span class="p">}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported tool call type </span><span class="si">{</span><span class="n">tool</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">_format_tools_to_vertex_tool</span><span class="p">(</span>
     <span class="n">tools</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseTool</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">VertexTool</span><span class="p">]:</span>
-    <span class="s2">&quot;Format tool into the Vertex Tool instance.&quot;</span>
+    <span class="s2">&quot;Format tools into the Vertex Tool instance.&quot;</span>
     <span class="n">function_declarations</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
-            <span class="n">func</span> <span class="o">=</span> <span class="n">_format_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
-            <span class="n">func</span> <span class="o">=</span> <span class="n">_format_pydantic_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="n">func</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">_get_parameters_from_schema</span><span class="p">(</span><span class="n">tool</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">]),</span>
-            <span class="p">}</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported tool call type </span><span class="si">{</span><span class="n">tool</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">_format_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
         <span class="n">function_declarations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FunctionDeclaration</span><span class="p">(</span><span class="o">**</span><span class="n">func</span><span class="p">))</span>
 
     <span class="k">return</span> <span class="p">[</span><span class="n">VertexTool</span><span class="p">(</span><span class="n">function_declarations</span><span class="o">=</span><span class="n">function_declarations</span><span class="p">)]</span>

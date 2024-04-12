@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_postgres.checkpoint &mdash; 🦜🔗 LangChain 0.1.14</title>
+  <title>langchain_postgres.checkpoint &mdash; 🦜🔗 LangChain 0.1.16</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_postgres/checkpoint.html" />
 
@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../chroma_api_reference.html">chroma</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../cohere_api_reference.html">cohere</a>
         </li>
         <li class="nav-item">
@@ -138,6 +141,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../exa_api_reference.html">exa</a>
@@ -240,7 +244,43 @@
         <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Checkpoint</span><span class="p">,</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">))</span></div></div>
 
 
-<div class="viewcode-block" id="PostgresCheckpoint"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint">[docs]</a><span class="k">class</span> <span class="nc">PostgresCheckpoint</span><span class="p">(</span><span class="n">BaseCheckpointSaver</span><span class="p">):</span>
+<span class="nd">@contextmanager</span>
+<span class="k">def</span> <span class="nf">_get_sync_connection</span><span class="p">(</span>
+    <span class="n">connection</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="n">ConnectionPool</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the connection to the Postgres database.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="n">connection</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">ConnectionPool</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">conn</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Invalid sync connection object. Please initialize the check pointer &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;with an appropriate sync connection object. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="nd">@asynccontextmanager</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_get_async_connection</span><span class="p">(</span>
+    <span class="n">connection</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="n">AsyncConnectionPool</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the connection to the Postgres database.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">):</span>
+        <span class="k">yield</span> <span class="n">connection</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">AsyncConnectionPool</span><span class="p">):</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">conn</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Invalid async connection object. Please initialize the check pointer &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;with an appropriate async connection object. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="PostgresSaver"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver">[docs]</a><span class="k">class</span> <span class="nc">PostgresSaver</span><span class="p">(</span><span class="n">BaseCheckpointSaver</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;LangGraph checkpoint saver for Postgres.</span>
 
 <span class="sd">    This implementation of a checkpoint saver uses a Postgres database to save</span>
@@ -253,8 +293,8 @@
 
 <span class="sd">    Usage:</span>
 
-<span class="sd">    1. First time use: create schema in the database using the `create_schema` method or</span>
-<span class="sd">       the async version `acreate_schema` method.</span>
+<span class="sd">    1. First time use: create schema in the database using the `create_tables` method or</span>
+<span class="sd">       the async version `acreate_tables` method.</span>
 <span class="sd">    2. Create a PostgresCheckpoint object with a serializer and an appropriate</span>
 <span class="sd">       connection object.</span>
 <span class="sd">       It&#39;s recommended to use a connection pool object for the connection.</span>
@@ -383,80 +423,66 @@
     <span class="nd">@contextmanager</span>
     <span class="k">def</span> <span class="nf">_get_sync_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the connection to the Postgres database.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sync_connection</span><span class="p">,</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync_connection</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sync_connection</span><span class="p">,</span> <span class="n">ConnectionPool</span><span class="p">):</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">sync_connection</span><span class="o">.</span><span class="n">connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="n">conn</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Invalid sync connection object. Please initialize the check pointer &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;with an appropriate sync connection object. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sync_connection</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
-            <span class="p">)</span>
+        <span class="k">with</span> <span class="n">_get_sync_connection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sync_connection</span><span class="p">)</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">connection</span>
 
     <span class="nd">@asynccontextmanager</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_get_async_connection</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncGenerator</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the connection to the Postgres database.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_connection</span><span class="p">,</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_connection</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_connection</span><span class="p">,</span> <span class="n">AsyncConnectionPool</span><span class="p">):</span>
-            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_connection</span><span class="o">.</span><span class="n">connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="n">conn</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Invalid async connection object. Please initialize the check pointer &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;with an appropriate async connection object. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_connection</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
-            <span class="p">)</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">_get_async_connection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_connection</span><span class="p">)</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">connection</span>
 
-<div class="viewcode-block" id="PostgresCheckpoint.create_schema"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.create_schema">[docs]</a>    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">create_schema</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="PostgresSaver.create_tables"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.create_tables">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">create_tables</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="n">ConnectionPool</span><span class="p">],</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the schema for the checkpoint saver.&quot;&quot;&quot;</span>
-        <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
-            <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">                CREATE TABLE IF NOT EXISTS checkpoints (</span>
-<span class="sd">                    thread_id TEXT NOT NULL,</span>
-<span class="sd">                    checkpoint BYTEA NOT NULL,</span>
-<span class="sd">                    thread_ts TIMESTAMPTZ NOT NULL,</span>
-<span class="sd">                    parent_ts TIMESTAMPTZ,</span>
-<span class="sd">                    PRIMARY KEY (thread_id, thread_ts)</span>
-<span class="sd">                );</span>
-<span class="sd">                &quot;&quot;&quot;</span>
-            <span class="p">)</span></div>
+        <span class="k">with</span> <span class="n">_get_sync_connection</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
+                <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    CREATE TABLE IF NOT EXISTS checkpoints (</span>
+<span class="sd">                        thread_id TEXT NOT NULL,</span>
+<span class="sd">                        checkpoint BYTEA NOT NULL,</span>
+<span class="sd">                        thread_ts TIMESTAMPTZ NOT NULL,</span>
+<span class="sd">                        parent_ts TIMESTAMPTZ,</span>
+<span class="sd">                        PRIMARY KEY (thread_id, thread_ts)</span>
+<span class="sd">                    );</span>
+<span class="sd">                    &quot;&quot;&quot;</span>
+                <span class="p">)</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.acreate_schema"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.acreate_schema">[docs]</a>    <span class="nd">@staticmethod</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">acreate_schema</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="PostgresSaver.acreate_tables"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.acreate_tables">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">acreate_tables</span><span class="p">(</span>
+        <span class="n">connection</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="n">AsyncConnectionPool</span><span class="p">],</span> <span class="o">/</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the schema for the checkpoint saver.&quot;&quot;&quot;</span>
-        <span class="k">async</span> <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
-            <span class="k">await</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">                CREATE TABLE IF NOT EXISTS checkpoints (</span>
-<span class="sd">                    thread_id TEXT NOT NULL,</span>
-<span class="sd">                    checkpoint BYTEA NOT NULL,</span>
-<span class="sd">                    thread_ts TIMESTAMPTZ NOT NULL,</span>
-<span class="sd">                    parent_ts TIMESTAMPTZ,</span>
-<span class="sd">                    PRIMARY KEY (thread_id, thread_ts)</span>
-<span class="sd">                );</span>
-<span class="sd">                &quot;&quot;&quot;</span>
-            <span class="p">)</span></div>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">_get_async_connection</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    CREATE TABLE IF NOT EXISTS checkpoints (</span>
+<span class="sd">                        thread_id TEXT NOT NULL,</span>
+<span class="sd">                        checkpoint BYTEA NOT NULL,</span>
+<span class="sd">                        thread_ts TIMESTAMPTZ NOT NULL,</span>
+<span class="sd">                        parent_ts TIMESTAMPTZ,</span>
+<span class="sd">                        PRIMARY KEY (thread_id, thread_ts)</span>
+<span class="sd">                    );</span>
+<span class="sd">                    &quot;&quot;&quot;</span>
+                <span class="p">)</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.drop_schema"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.drop_schema">[docs]</a>    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">drop_schema</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="PostgresSaver.drop_tables"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.drop_tables">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">drop_tables</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">Connection</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop the table for the checkpoint saver.&quot;&quot;&quot;</span>
         <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
             <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DROP TABLE IF EXISTS checkpoints;&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.adrop_schema"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.adrop_schema">[docs]</a>    <span class="nd">@staticmethod</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">adrop_schema</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="PostgresSaver.adrop_tables"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.adrop_tables">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">adrop_tables</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">psycopg</span><span class="o">.</span><span class="n">AsyncConnection</span><span class="p">,</span> <span class="o">/</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop the table for the checkpoint saver.&quot;&quot;&quot;</span>
         <span class="k">async</span> <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
             <span class="k">await</span> <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;DROP TABLE IF EXISTS checkpoints;&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.put"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.put">[docs]</a>    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">:</span> <span class="n">Checkpoint</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunnableConfig</span><span class="p">:</span>
+<div class="viewcode-block" id="PostgresSaver.put"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.put">[docs]</a>    <span class="k">def</span> <span class="nf">put</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">:</span> <span class="n">Checkpoint</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunnableConfig</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Put the checkpoint for the given configuration.</span>
 
 <span class="sd">        Args:</span>
@@ -499,7 +525,7 @@
             <span class="p">},</span>
         <span class="p">}</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.aput"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.aput">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aput</span><span class="p">(</span>
+<div class="viewcode-block" id="PostgresSaver.aput"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.aput">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aput</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span> <span class="n">checkpoint</span><span class="p">:</span> <span class="n">Checkpoint</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RunnableConfig</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Put the checkpoint for the given configuration.</span>
@@ -543,7 +569,7 @@
             <span class="p">},</span>
         <span class="p">}</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.list"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.list">[docs]</a>    <span class="k">def</span> <span class="nf">list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<div class="viewcode-block" id="PostgresSaver.list"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.list">[docs]</a>    <span class="k">def</span> <span class="nf">list</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get all the checkpoints for the given configuration.&quot;&quot;&quot;</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_sync_connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
@@ -576,7 +602,7 @@
                         <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
                     <span class="p">)</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.alist"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.alist">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">alist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">]:</span>
+<div class="viewcode-block" id="PostgresSaver.alist"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.alist">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">alist</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get all the checkpoints for the given configuration.&quot;&quot;&quot;</span>
         <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_async_connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
             <span class="k">async</span> <span class="k">with</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cur</span><span class="p">:</span>
@@ -609,7 +635,7 @@
                         <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
                     <span class="p">)</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.get_tuple"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.get_tuple">[docs]</a>    <span class="k">def</span> <span class="nf">get_tuple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">]:</span>
+<div class="viewcode-block" id="PostgresSaver.get_tuple"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.get_tuple">[docs]</a>    <span class="k">def</span> <span class="nf">get_tuple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the checkpoint tuple for the given configuration.</span>
 
 <span class="sd">        Args:</span>
@@ -683,7 +709,7 @@
                         <span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span></div>
 
-<div class="viewcode-block" id="PostgresCheckpoint.aget_tuple"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresCheckpoint.html#langchain_postgres.checkpoint.PostgresCheckpoint.aget_tuple">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aget_tuple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">]:</span>
+<div class="viewcode-block" id="PostgresSaver.aget_tuple"><a class="viewcode-back" href="../../checkpoint/langchain_postgres.checkpoint.PostgresSaver.html#langchain_postgres.checkpoint.PostgresSaver.aget_tuple">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aget_tuple</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CheckpointTuple</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the checkpoint tuple for the given configuration.</span>
 
 <span class="sd">        Args:</span>
@@ -763,7 +789,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 09, 2024.
+          Last updated on Apr 12, 2024.
       </footer>
     </div>
   </div>
