@@ -197,8 +197,8 @@
         
   <h1>Source code for langchain_cohere.chat_models</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">lru_cache</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
@@ -241,7 +241,7 @@
     <span class="n">PydanticToolsParser</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">PrivateAttr</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 
@@ -250,6 +250,9 @@
     <span class="n">_format_to_cohere_tools</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_cohere.llms</span> <span class="kn">import</span> <span class="n">BaseCohere</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">cohere.types</span> <span class="kn">import</span> <span class="n">ListModelsResponse</span>  <span class="c1"># noqa: F401</span>
 
 
 <div class="viewcode-block" id="get_role"><a class="viewcode-back" href="../../chat_models/langchain_cohere.chat_models.get_role.html#langchain_cohere.chat_models.get_role">[docs]</a><span class="k">def</span> <span class="nf">get_role</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -346,46 +349,44 @@
 
 
 <div class="viewcode-block" id="ChatCohere"><a class="viewcode-back" href="../../chat_models/langchain_cohere.chat_models.ChatCohere.html#langchain_cohere.chat_models.ChatCohere">[docs]</a><span class="k">class</span> <span class="nc">ChatCohere</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">,</span> <span class="n">BaseCohere</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;`Cohere` chat large language models.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Implements the BaseChatModel (and BaseLanguageModel) interface with Cohere&#39;s large</span>
+<span class="sd">    language models.</span>
 
-<span class="sd">    To use, you should have the ``cohere`` python package installed, and the</span>
-<span class="sd">    environment variable ``COHERE_API_KEY`` set with your API key, or pass</span>
-<span class="sd">    it as a named parameter to the constructor.</span>
+<span class="sd">    Find out more about us at https://cohere.com and https://huggingface.co/CohereForAI</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">    This implementation uses the Chat API - see https://docs.cohere.com/reference/chat</span>
+
+<span class="sd">    To use this you&#39;ll need to a Cohere API key - either pass it to cohere_api_key</span>
+<span class="sd">    parameter or set the COHERE_API_KEY environment variable.</span>
+
+<span class="sd">    API keys are available on https://cohere.com - it&#39;s free to sign up and trial API</span>
+<span class="sd">    keys work with this implementation.</span>
+
+<span class="sd">    Basic Example:</span>
 <span class="sd">        .. code-block:: python</span>
 
 <span class="sd">            from langchain_cohere import ChatCohere</span>
 <span class="sd">            from langchain_core.messages import HumanMessage</span>
 
-<span class="sd">            chat = ChatCohere(cohere_api_key=&quot;my-api-key&quot;)</span>
+<span class="sd">            llm = ChatCohere(cohere_api_key=&quot;{API KEY}&quot;)</span>
 
-<span class="sd">            messages = [HumanMessage(content=&quot;knock knock&quot;)]</span>
-<span class="sd">            chat.invoke(messages)</span>
+<span class="sd">            message = [HumanMessage(content=&quot;Hello, can you introduce yourself?&quot;)]</span>
+
+<span class="sd">            print(llm.invoke(message).content)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">preamble</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">_default_model_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">)</span>  <span class="c1"># Used internally to cache API calls to list models.</span>
 
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
 
         <span class="n">allow_population_by_field_name</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">arbitrary_types_allowed</span> <span class="o">=</span> <span class="kc">True</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return type of chat model.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="s2">&quot;cohere-chat&quot;</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_default_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the default parameters for calling Cohere API.&quot;&quot;&quot;</span>
-        <span class="n">base_params</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
-            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
-            <span class="s2">&quot;preamble&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">preamble</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">base_params</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
 
 <div class="viewcode-block" id="ChatCohere.bind_tools"><a class="viewcode-back" href="../../chat_models/langchain_cohere.chat_models.ChatCohere.html#langchain_cohere.chat_models.ChatCohere.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -425,6 +426,20 @@
             <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">output_parser</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return type of chat model.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;cohere-chat&quot;</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_default_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the default parameters for calling Cohere API.&quot;&quot;&quot;</span>
+        <span class="n">base_params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">base_params</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -623,17 +638,26 @@
             <span class="p">]</span>
         <span class="p">)</span>
 
-    <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_get_default_model</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">default_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">endpoint</span><span class="o">=</span><span class="s2">&quot;chat&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
-        <span class="p">)</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetches the current default model name.&quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">default_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">endpoint</span><span class="o">=</span><span class="s2">&quot;chat&quot;</span><span class="p">)</span>  <span class="c1"># type: &quot;ListModelsResponse&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">response</span><span class="o">.</span><span class="n">models</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;invalid cohere list models response&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">response</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;invalid cohere list models response&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
 
 <div class="viewcode-block" id="ChatCohere.get_num_tokens"><a class="viewcode-back" href="../../chat_models/langchain_cohere.chat_models.ChatCohere.html#langchain_cohere.chat_models.ChatCohere.get_num_tokens">[docs]</a>    <span class="k">def</span> <span class="nf">get_num_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate number of tokens.&quot;&quot;&quot;</span>
-        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
-        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span>
+        <span class="k">else</span><span class="p">:</span>
             <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_model</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span> <span class="o">=</span> <span class="n">model</span>
+
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">tokenize</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="n">tokens</span><span class="p">)</span></div></div>
 
 
@@ -670,7 +694,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 16, 2024.
+          Last updated on Apr 17, 2024.
       </footer>
     </div>
   </div>

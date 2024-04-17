@@ -196,179 +196,130 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_community.llms.octoai_endpoint</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span>
 
-<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
-<span class="kn">from</span> <span class="nn">langchain_core.language_models.llms</span> <span class="kn">import</span> <span class="n">LLM</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span><span class="p">,</span> <span class="n">root_validator</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">SecretStr</span><span class="p">,</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">convert_to_secret_str</span><span class="p">,</span> <span class="n">get_from_dict_or_env</span>
 
-<span class="kn">from</span> <span class="nn">langchain_community.llms.utils</span> <span class="kn">import</span> <span class="n">enforce_stop_tokens</span>
+<span class="kn">from</span> <span class="nn">langchain_community.llms.openai</span> <span class="kn">import</span> <span class="n">BaseOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain_community.utils.openai</span> <span class="kn">import</span> <span class="n">is_openai_v1</span>
+
+<span class="n">DEFAULT_BASE_URL</span> <span class="o">=</span> <span class="s2">&quot;https://text.octoai.run/v1/&quot;</span>
+<span class="n">DEFAULT_MODEL</span> <span class="o">=</span> <span class="s2">&quot;codellama-7b-instruct&quot;</span>
 
 
-<div class="viewcode-block" id="OctoAIEndpoint"><a class="viewcode-back" href="../../../llms/langchain_community.llms.octoai_endpoint.OctoAIEndpoint.html#langchain_community.llms.octoai_endpoint.OctoAIEndpoint">[docs]</a><span class="k">class</span> <span class="nc">OctoAIEndpoint</span><span class="p">(</span><span class="n">LLM</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;OctoAI LLM Endpoints.</span>
+<div class="viewcode-block" id="OctoAIEndpoint"><a class="viewcode-back" href="../../../llms/langchain_community.llms.octoai_endpoint.OctoAIEndpoint.html#langchain_community.llms.octoai_endpoint.OctoAIEndpoint">[docs]</a><span class="k">class</span> <span class="nc">OctoAIEndpoint</span><span class="p">(</span><span class="n">BaseOpenAI</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OctoAI LLM Endpoints - OpenAI compatible.</span>
 
-<span class="sd">    OctoAIEndpoint is a class to interact with OctoAI</span>
-<span class="sd">     Compute Service large language model endpoints.</span>
+<span class="sd">    OctoAIEndpoint is a class to interact with OctoAI Compute Service large</span>
+<span class="sd">    language model endpoints.</span>
 
-<span class="sd">    To use, you should have the ``octoai`` python package installed, and the</span>
-<span class="sd">    environment variable ``OCTOAI_API_TOKEN`` set with your API token, or pass</span>
-<span class="sd">    it as a named parameter to the constructor.</span>
+<span class="sd">    To use, you should have the environment variable ``OCTOAI_API_TOKEN`` set</span>
+<span class="sd">    with your API token, or pass it as a named parameter to the constructor.</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
 
 <span class="sd">            from langchain_community.llms.octoai_endpoint  import OctoAIEndpoint</span>
-<span class="sd">            OctoAIEndpoint(</span>
-<span class="sd">                octoai_api_token=&quot;octoai-api-key&quot;,</span>
-<span class="sd">                endpoint_url=&quot;https://text.octoai.run/v1/chat/completions&quot;,</span>
-<span class="sd">                model_kwargs={</span>
-<span class="sd">                    &quot;model&quot;: &quot;llama-2-13b-chat-fp16&quot;,</span>
-<span class="sd">                    &quot;messages&quot;: [</span>
-<span class="sd">                        {</span>
-<span class="sd">                            &quot;role&quot;: &quot;system&quot;,</span>
-<span class="sd">                            &quot;content&quot;: &quot;Below is an instruction that describes a task.</span>
-<span class="sd">                                Write a response that completes the request.&quot;</span>
-<span class="sd">                        }</span>
-<span class="sd">                    ],</span>
-<span class="sd">                    &quot;stream&quot;: False,</span>
-<span class="sd">                    &quot;max_tokens&quot;: 256,</span>
-<span class="sd">                    &quot;presence_penalty&quot;: 0,</span>
-<span class="sd">                    &quot;temperature&quot;: 0.1,</span>
-<span class="sd">                    &quot;top_p&quot;: 0.9</span>
-<span class="sd">                }</span>
+
+<span class="sd">            llm = OctoAIEndpoint(</span>
+<span class="sd">                model=&quot;llama-2-13b-chat-fp16&quot;,</span>
+<span class="sd">                max_tokens=200,</span>
+<span class="sd">                presence_penalty=0,</span>
+<span class="sd">                temperature=0.1,</span>
+<span class="sd">                top_p=0.9,</span>
 <span class="sd">            )</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">endpoint_url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Endpoint URL to use.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Key word arguments to pass to the model.&quot;&quot;&quot;</span>
+    <span class="n">octoai_api_base</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="n">DEFAULT_BASE_URL</span><span class="p">)</span>
+    <span class="n">octoai_api_token</span><span class="p">:</span> <span class="n">SecretStr</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="n">DEFAULT_MODEL</span><span class="p">)</span>
 
-    <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Keyword arguments to pass to the model.&quot;&quot;&quot;</span>
-
-    <span class="n">octoai_api_token</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;OCTOAI API Token&quot;&quot;&quot;</span>
-
-    <span class="n">streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to generate a stream of tokens asynchronously&quot;&quot;&quot;</span>
-
-    <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
-
-        <span class="n">extra</span> <span class="o">=</span> <span class="n">Extra</span><span class="o">.</span><span class="n">forbid</span>
-
-    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">allow_reuse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that api key and python package exists in environment.&quot;&quot;&quot;</span>
-        <span class="n">octoai_api_token</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;octoai_api_token&quot;</span><span class="p">,</span> <span class="s2">&quot;OCTOAI_API_TOKEN&quot;</span>
-        <span class="p">)</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;endpoint_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;endpoint_url&quot;</span><span class="p">,</span> <span class="s2">&quot;ENDPOINT_URL&quot;</span>
-        <span class="p">)</span>
-
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">octoai_api_token</span>
-        <span class="k">return</span> <span class="n">values</span>
+<div class="viewcode-block" id="OctoAIEndpoint.is_lc_serializable"><a class="viewcode-back" href="../../../llms/langchain_community.llms.octoai_endpoint.OctoAIEndpoint.html#langchain_community.llms.octoai_endpoint.OctoAIEndpoint.is_lc_serializable">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">is_lc_serializable</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
 
     <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the identifying parameters.&quot;&quot;&quot;</span>
-        <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="o">**</span><span class="p">{</span><span class="s2">&quot;endpoint_url&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">endpoint_url</span><span class="p">},</span>
-            <span class="o">**</span><span class="p">{</span><span class="s2">&quot;model_kwargs&quot;</span><span class="p">:</span> <span class="n">_model_kwargs</span><span class="p">},</span>
+    <span class="k">def</span> <span class="nf">_invocation_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the parameters used to invoke the model.&quot;&quot;&quot;</span>
+
+        <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span><span class="p">,</span>
         <span class="p">}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_openai_v1</span><span class="p">():</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">octoai_api_token</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+                    <span class="s2">&quot;api_base&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">octoai_api_base</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_invocation_params</span><span class="p">}</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return type of llm.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="s2">&quot;octoai_endpoint&quot;</span>
 
-    <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Call out to OctoAI&#39;s inference endpoint.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            prompt: The prompt to pass into the model.</span>
-<span class="sd">            stop: Optional list of stop words to use when generating.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            The string generated by the model.</span>
-
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that api key and python package exists in environment.&quot;&quot;&quot;</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_base&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
+            <span class="n">values</span><span class="p">,</span>
+            <span class="s2">&quot;octoai_api_base&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;OCTOAI_API_BASE&quot;</span><span class="p">,</span>
+            <span class="n">default</span><span class="o">=</span><span class="n">DEFAULT_BASE_URL</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">convert_to_secret_str</span><span class="p">(</span>
+            <span class="n">get_from_dict_or_env</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="s2">&quot;octoai_api_token&quot;</span><span class="p">,</span> <span class="s2">&quot;OCTOAI_API_TOKEN&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
+            <span class="n">values</span><span class="p">,</span>
+            <span class="s2">&quot;model_name&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MODEL_NAME&quot;</span><span class="p">,</span>
+            <span class="n">default</span><span class="o">=</span><span class="n">DEFAULT_MODEL</span><span class="p">,</span>
+        <span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">octoai</span> <span class="kn">import</span> <span class="n">client</span>
+            <span class="kn">import</span> <span class="nn">openai</span>
 
-            <span class="c1"># Initialize the OctoAI client</span>
-            <span class="n">octoai_client</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">octoai_api_token</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="s2">&quot;model&quot;</span> <span class="ow">in</span> <span class="n">_model_kwargs</span><span class="p">:</span>
-                <span class="n">parameter_payload</span> <span class="o">=</span> <span class="n">_model_kwargs</span>
-
-                <span class="n">sys_msg</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="k">if</span> <span class="s2">&quot;messages&quot;</span> <span class="ow">in</span> <span class="n">parameter_payload</span><span class="p">:</span>
-                    <span class="n">msgs</span> <span class="o">=</span> <span class="n">parameter_payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;messages&quot;</span><span class="p">,</span> <span class="p">[])</span>
-                    <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">msgs</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
-                            <span class="n">sys_msg</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">)</span>
-
-                <span class="c1"># Reset messages list</span>
-                <span class="n">parameter_payload</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-
-                <span class="c1"># Append system message if exists</span>
-                <span class="k">if</span> <span class="n">sys_msg</span><span class="p">:</span>
-                    <span class="n">parameter_payload</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">sys_msg</span><span class="p">}</span>
-                    <span class="p">)</span>
-
-                <span class="c1"># Append user message</span>
-                <span class="n">parameter_payload</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">}</span>
-                <span class="p">)</span>
-
-                <span class="c1"># Send the request using the OctoAI client</span>
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">output</span> <span class="o">=</span> <span class="n">octoai_client</span><span class="o">.</span><span class="n">infer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">endpoint_url</span><span class="p">,</span> <span class="n">parameter_payload</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">output</span> <span class="ow">and</span> <span class="s2">&quot;choices&quot;</span> <span class="ow">in</span> <span class="n">output</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                        <span class="n">text</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">text</span> <span class="o">=</span> <span class="s2">&quot;Error: Invalid response format or empty choices.&quot;</span>
-                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error during API call: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-
+            <span class="k">if</span> <span class="n">is_openai_v1</span><span class="p">():</span>
+                <span class="n">client_params</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_token&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+                    <span class="s2">&quot;base_url&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_base&quot;</span><span class="p">],</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client&quot;</span><span class="p">):</span>
+                    <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">OpenAI</span><span class="p">(</span><span class="o">**</span><span class="n">client_params</span><span class="p">)</span><span class="o">.</span><span class="n">completions</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;async_client&quot;</span><span class="p">):</span>
+                    <span class="n">values</span><span class="p">[</span><span class="s2">&quot;async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">AsyncOpenAI</span><span class="p">(</span>
+                        <span class="o">**</span><span class="n">client_params</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">completions</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Prepare the payload JSON</span>
-                <span class="n">parameter_payload</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;inputs&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span> <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">_model_kwargs</span><span class="p">}</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_base&quot;</span><span class="p">]</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;octoai_api_token&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">Completion</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import openai python package. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install openai`.&quot;</span>
+            <span class="p">)</span>
 
-                <span class="c1"># Send the request using the OctoAI client</span>
-                <span class="n">resp_json</span> <span class="o">=</span> <span class="n">octoai_client</span><span class="o">.</span><span class="n">infer</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">endpoint_url</span><span class="p">,</span> <span class="n">parameter_payload</span><span class="p">)</span>
-                <span class="n">text</span> <span class="o">=</span> <span class="n">resp_json</span><span class="p">[</span><span class="s2">&quot;generated_text&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;endpoint_url&quot;</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model_kwargs&quot;</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;`endpoint_url` was deprecated, please use `octoai_api_base`.&quot;</span>
+            <span class="p">)</span>
 
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="c1"># Handle any errors raised by the inference endpoint</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error raised by the inference endpoint: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-
-        <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Apply stop tokens when making calls to OctoAI</span>
-            <span class="n">text</span> <span class="o">=</span> <span class="n">enforce_stop_tokens</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">text</span></div>
+        <span class="k">return</span> <span class="n">values</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 16, 2024.
+          Last updated on Apr 17, 2024.
       </footer>
     </div>
   </div>
