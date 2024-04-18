@@ -132,6 +132,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../together_api_reference.html">together</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../upstage_api_reference.html">upstage</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
@@ -160,6 +163,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../upstage_api_reference.html">upstage</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
@@ -293,11 +297,12 @@
 
 
 <span class="k">def</span> <span class="nf">_merge_messages</span><span class="p">(</span>
-    <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+    <span class="n">messages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">SystemMessage</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge runs of human/tool messages into single human messages with content blocks.&quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
     <span class="n">merged</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">curr</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">:</span>
+        <span class="n">curr</span> <span class="o">=</span> <span class="n">curr</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">deep</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">curr</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">curr</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="n">curr</span> <span class="o">=</span> <span class="n">HumanMessage</span><span class="p">(</span>
@@ -389,6 +394,18 @@
                     <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span><span class="p">:</span>
                         <span class="n">item</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                         <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
+                        <span class="n">text</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                        <span class="c1"># Only add non-empty strings for now as empty ones are not</span>
+                        <span class="c1"># accepted.</span>
+                        <span class="c1"># https://github.com/anthropics/anthropic-sdk-python/issues/461</span>
+                        <span class="k">if</span> <span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+                            <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                                <span class="p">{</span>
+                                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
+                                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">text</span><span class="p">,</span>
+                                <span class="p">}</span>
+                            <span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
@@ -951,7 +968,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 17, 2024.
+          Last updated on Apr 18, 2024.
       </footer>
     </div>
   </div>

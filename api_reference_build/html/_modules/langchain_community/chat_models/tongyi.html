@@ -132,6 +132,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../upstage_api_reference.html">upstage</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
@@ -160,6 +163,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../upstage_api_reference.html">upstage</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
@@ -231,6 +235,10 @@
     <span class="n">SystemMessage</span><span class="p">,</span>
     <span class="n">SystemMessageChunk</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">make_invalid_tool_call</span><span class="p">,</span>
+    <span class="n">parse_tool_call</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ChatGeneration</span><span class="p">,</span>
     <span class="n">ChatGenerationChunk</span><span class="p">,</span>
@@ -269,8 +277,28 @@
             <span class="k">else</span> <span class="n">HumanMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
         <span class="p">)</span>
     <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span><span class="p">:</span>
+        <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s2">&quot;tool_calls&quot;</span> <span class="ow">in</span> <span class="n">_dict</span><span class="p">:</span>
+            <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]}</span>
+            <span class="k">for</span> <span class="n">raw_tool_call</span> <span class="ow">in</span> <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parse_tool_call</span><span class="p">(</span><span class="n">raw_tool_call</span><span class="p">,</span> <span class="n">return_id</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">invalid_tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">make_invalid_tool_call</span><span class="p">(</span><span class="n">raw_tool_call</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+                    <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">return</span> <span class="p">(</span>
-            <span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span> <span class="k">if</span> <span class="n">is_chunk</span> <span class="k">else</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
+            <span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_chunk</span>
+            <span class="k">else</span> <span class="n">AIMessage</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span><span class="p">,</span>
+                <span class="n">invalid_tool_calls</span><span class="o">=</span><span class="n">invalid_tool_calls</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="p">)</span>
     <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;system&quot;</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">(</span>
@@ -650,7 +678,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 17, 2024.
+          Last updated on Apr 18, 2024.
       </footer>
     </div>
   </div>

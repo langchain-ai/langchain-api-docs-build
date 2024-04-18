@@ -132,6 +132,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../upstage_api_reference.html">upstage</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
@@ -160,6 +163,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../upstage_api_reference.html">upstage</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
           </div>
         </li>
@@ -226,6 +230,8 @@
 
 <span class="n">CVST</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;CVST&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="s2">&quot;Cassandra&quot;</span><span class="p">)</span>
 
+<span class="n">_NOT_SET</span> <span class="o">=</span> <span class="nb">object</span><span class="p">()</span>
+
 
 <div class="viewcode-block" id="Cassandra"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra">[docs]</a><span class="k">class</span> <span class="nc">Cassandra</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrapper around Apache Cassandra(R) for vector-store workloads.</span>
@@ -246,6 +252,13 @@
 <span class="sd">                keyspace = &#39;my_keyspace&#39;  # the keyspace should exist already</span>
 <span class="sd">                table_name = &#39;my_vector_store&#39;</span>
 <span class="sd">                vectorstore = Cassandra(embeddings, session, keyspace, table_name)</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        embedding: Embedding function to use.</span>
+<span class="sd">        session: Cassandra driver session.</span>
+<span class="sd">        keyspace: Cassandra key space.</span>
+<span class="sd">        table_name: Cassandra table.</span>
+<span class="sd">        ttl_seconds: Optional time-to-live for the added texts.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_embedding_dimension</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
@@ -301,18 +314,13 @@
     <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Embeddings</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span>
 
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_dont_flip_the_cos_score</span><span class="p">(</span><span class="n">distance</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-        <span class="c1"># the identity</span>
-        <span class="k">return</span> <span class="n">distance</span>
-
     <span class="k">def</span> <span class="nf">_select_relevance_score_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">float</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        The underlying VectorTable already returns a &quot;score proper&quot;,</span>
 <span class="sd">        i.e. one in [0, 1] where higher means more *similar*,</span>
 <span class="sd">        so here the final score transformation is not reversing the interval:</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dont_flip_the_cos_score</span>
+        <span class="k">return</span> <span class="k">lambda</span> <span class="n">score</span><span class="p">:</span> <span class="n">score</span>
 
 <div class="viewcode-block" id="Cassandra.delete_collection"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.delete_collection">[docs]</a>    <span class="k">def</span> <span class="nf">delete_collection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -322,7 +330,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Cassandra.clear"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Empty the collection.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Empty the table.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Cassandra.delete_by_document_id"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.delete_by_document_id">[docs]</a>    <span class="k">def</span> <span class="nf">delete_by_document_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">document_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -359,12 +367,11 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run more texts through the embeddings and add to the vectorstore.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            texts (Iterable[str]): Texts to add to the vectorstore.</span>
-<span class="sd">            metadatas (Optional[List[dict]], optional): Optional list of metadatas.</span>
-<span class="sd">            ids (Optional[List[str]], optional): Optional list of IDs.</span>
-<span class="sd">            batch_size (int): Number of concurrent requests to send to the server.</span>
-<span class="sd">            ttl_seconds (Optional[int], optional): Optional time-to-live</span>
-<span class="sd">                for the added texts.</span>
+<span class="sd">            texts: Texts to add to the vectorstore.</span>
+<span class="sd">            metadatas: Optional list of metadatas.</span>
+<span class="sd">            ids: Optional list of IDs.</span>
+<span class="sd">            batch_size: Number of concurrent requests to send to the server.</span>
+<span class="sd">            ttl_seconds: Optional time-to-live for the added texts.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List[str]: List of IDs of the added texts.</span>
@@ -535,8 +542,8 @@
 <span class="sd">            k: Number of Documents to return.</span>
 <span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
-<span class="sd">                        of diversity among the results with 0 corresponding</span>
-<span class="sd">                        to maximum diversity and 1 to minimum diversity.</span>
+<span class="sd">                of diversity among the results with 0 corresponding to maximum</span>
+<span class="sd">                diversity and 1 to minimum diversity.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -587,9 +594,9 @@
 <span class="sd">            k: Number of Documents to return.</span>
 <span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
-<span class="sd">                        of diversity among the results with 0 corresponding</span>
-<span class="sd">                        to maximum diversity and 1 to minimum diversity.</span>
-<span class="sd">                        Optional.</span>
+<span class="sd">                of diversity among the results with 0 corresponding to maximum</span>
+<span class="sd">                diversity and 1 to minimum diversity.</span>
+<span class="sd">                Defaults to 0.5.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -608,55 +615,93 @@
         <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">_NOT_SET</span><span class="p">,</span>
+        <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+        <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CVST</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Cassandra vectorstore from raw texts.</span>
 
-<span class="sd">        No support for specifying text IDs</span>
+<span class="sd">        Args:</span>
+<span class="sd">            texts: Texts to add to the vectorstore.</span>
+<span class="sd">            embedding: Embedding function to use.</span>
+<span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
+<span class="sd">            session: Cassandra driver session (required).</span>
+<span class="sd">            keyspace: Cassandra key space (required).</span>
+<span class="sd">            table_name: Cassandra table (required).</span>
+<span class="sd">            ids: Optional list of IDs associated with the texts.</span>
+<span class="sd">            batch_size: Number of concurrent requests to send to the server.</span>
+<span class="sd">                Defaults to 16.</span>
+<span class="sd">            ttl_seconds: Optional time-to-live for the added texts.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            a Cassandra vectorstore.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;session&quot;</span><span class="p">]</span>
-        <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;keyspace&quot;</span><span class="p">]</span>
-        <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;table_name&quot;</span><span class="p">]</span>
-        <span class="n">cassandraStore</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+        <span class="k">if</span> <span class="n">session</span> <span class="ow">is</span> <span class="n">_NOT_SET</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;session parameter is required&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">keyspace</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;keyspace parameter is required&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">table_name</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;table_name parameter is required&quot;</span><span class="p">)</span>
+        <span class="n">store</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
             <span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
             <span class="n">keyspace</span><span class="o">=</span><span class="n">keyspace</span><span class="p">,</span>
             <span class="n">table_name</span><span class="o">=</span><span class="n">table_name</span><span class="p">,</span>
+            <span class="n">ttl_seconds</span><span class="o">=</span><span class="n">ttl_seconds</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">cassandraStore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">cassandraStore</span></div>
+        <span class="n">store</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
+            <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">store</span></div>
 
 <div class="viewcode-block" id="Cassandra.from_documents"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.from_documents">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_documents</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">CVST</span><span class="p">],</span>
         <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">_NOT_SET</span><span class="p">,</span>
+        <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+        <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CVST</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Cassandra vectorstore from a document list.</span>
 
-<span class="sd">        No support for specifying text IDs</span>
+<span class="sd">        Args:</span>
+<span class="sd">            documents: Documents to add to the vectorstore.</span>
+<span class="sd">            embedding: Embedding function to use.</span>
+<span class="sd">            session: Cassandra driver session (required).</span>
+<span class="sd">            keyspace: Cassandra key space (required).</span>
+<span class="sd">            table_name: Cassandra table (required).</span>
+<span class="sd">            ids: Optional list of IDs associated with the documents.</span>
+<span class="sd">            batch_size: Number of concurrent requests to send to the server.</span>
+<span class="sd">                Defaults to 16.</span>
+<span class="sd">            ttl_seconds: Optional time-to-live for the added documents.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            a Cassandra vectorstore.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
         <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
-        <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;session&quot;</span><span class="p">]</span>
-        <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;keyspace&quot;</span><span class="p">]</span>
-        <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;table_name&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_texts</span><span class="p">(</span>
             <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span>
-            <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+            <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
             <span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
             <span class="n">keyspace</span><span class="o">=</span><span class="n">keyspace</span><span class="p">,</span>
             <span class="n">table_name</span><span class="o">=</span><span class="n">table_name</span><span class="p">,</span>
+            <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">ttl_seconds</span><span class="o">=</span><span class="n">ttl_seconds</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 </pre></div>
 
@@ -664,7 +709,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 17, 2024.
+          Last updated on Apr 18, 2024.
       </footer>
     </div>
   </div>
