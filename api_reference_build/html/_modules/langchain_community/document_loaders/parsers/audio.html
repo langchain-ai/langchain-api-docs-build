@@ -531,13 +531,145 @@
                 <span class="n">page_content</span><span class="o">=</span><span class="n">res</span><span class="o">.</span><span class="n">normalized_text</span><span class="p">,</span>
                 <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">blob</span><span class="o">.</span><span class="n">source</span><span class="p">},</span>
             <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="FasterWhisperParser"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.audio.FasterWhisperParser.html#langchain_community.document_loaders.parsers.audio.FasterWhisperParser">[docs]</a><span class="k">class</span> <span class="nc">FasterWhisperParser</span><span class="p">(</span><span class="n">BaseBlobParser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transcribe and parse audio files with faster-whisper.</span>
+
+<span class="sd">    faster-whisper is a reimplementation of OpenAI&#39;s Whisper model using CTranslate2,</span>
+<span class="sd">    which is up to 4 times faster than openai/whisper for the same accuracy while using</span>
+<span class="sd">    less memory. The efficiency can be further improved with 8-bit quantization on both</span>
+<span class="sd">    CPU and GPU.</span>
+
+<span class="sd">    It can automatically detect the following 14 languages and transcribe the text</span>
+<span class="sd">    into their respective languages: en, zh, fr, de, ja, ko, ru, es, th, it, pt, vi,</span>
+<span class="sd">    ar, tr.</span>
+
+<span class="sd">    The gitbub repository for faster-whisper is :</span>
+<span class="sd">    https://github.com/SYSTRAN/faster-whisper</span>
+
+<span class="sd">    Example: Load a YouTube video and transcribe the video speech into a document.</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain.document_loaders.generic import GenericLoader</span>
+<span class="sd">            from langchain_community.document_loaders.parsers.audio</span>
+<span class="sd">                import FasterWhisperParser</span>
+<span class="sd">            from langchain.document_loaders.blob_loaders.youtube_audio</span>
+<span class="sd">                import YoutubeAudioLoader</span>
+
+
+<span class="sd">            url=&quot;https://www.youtube.com/watch?v=your_video&quot;</span>
+<span class="sd">            save_dir=&quot;your_dir/&quot;</span>
+<span class="sd">            loader = GenericLoader(</span>
+<span class="sd">                YoutubeAudioLoader([url],save_dir),</span>
+<span class="sd">                FasterWhisperParser()</span>
+<span class="sd">            )</span>
+<span class="sd">            docs = loader.load()</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="FasterWhisperParser.__init__"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.audio.FasterWhisperParser.html#langchain_community.document_loaders.parsers.audio.FasterWhisperParser.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+        <span class="n">model_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the parser.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            device: It can be &quot;cuda&quot; or &quot;cpu&quot; based on the available device.</span>
+<span class="sd">            model_size: There are four model sizes to choose from: &quot;base&quot;, &quot;small&quot;,</span>
+<span class="sd">                        &quot;medium&quot;, and &quot;large-v3&quot;, based on the available GPU memory.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">torch</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;torch package not found, please install it with `pip install torch`&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Determine the device to use</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span>
+
+        <span class="c1"># Determine the model_size</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span> <span class="o">=</span> <span class="s2">&quot;base&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Set the model_size based on the available memory</span>
+            <span class="n">mem</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">get_device_properties</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">total_memory</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1024</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mem</span> <span class="o">&lt;</span> <span class="mi">1000</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span> <span class="o">=</span> <span class="s2">&quot;base&quot;</span>
+            <span class="k">elif</span> <span class="n">mem</span> <span class="o">&lt;</span> <span class="mi">3000</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span> <span class="o">=</span> <span class="s2">&quot;small&quot;</span>
+            <span class="k">elif</span> <span class="n">mem</span> <span class="o">&lt;</span> <span class="mi">5000</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span> <span class="o">=</span> <span class="s2">&quot;medium&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span> <span class="o">=</span> <span class="s2">&quot;large-v3&quot;</span>
+        <span class="c1"># If the user has assigned a model size, then use the assigned size</span>
+        <span class="k">if</span> <span class="n">model_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">model_size</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;base&quot;</span><span class="p">,</span> <span class="s2">&quot;small&quot;</span><span class="p">,</span> <span class="s2">&quot;medium&quot;</span><span class="p">,</span> <span class="s2">&quot;large-v3&quot;</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span> <span class="o">=</span> <span class="n">model_size</span></div>
+
+<div class="viewcode-block" id="FasterWhisperParser.lazy_parse"><a class="viewcode-back" href="../../../../document_loaders/langchain_community.document_loaders.parsers.audio.FasterWhisperParser.html#langchain_community.document_loaders.parsers.audio.FasterWhisperParser.lazy_parse">[docs]</a>    <span class="k">def</span> <span class="nf">lazy_parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blob</span><span class="p">:</span> <span class="n">Blob</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Lazily parse the blob.&quot;&quot;&quot;</span>
+
+        <span class="kn">import</span> <span class="nn">io</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">pydub</span> <span class="kn">import</span> <span class="n">AudioSegment</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;pydub package not found, please install it with `pip install pydub`&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">faster_whisper</span> <span class="kn">import</span> <span class="n">WhisperModel</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;faster_whisper package not found, please install it with &quot;</span>
+                <span class="s2">&quot;`pip install faster-whisper`&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># get the audio</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">):</span>
+            <span class="c1"># blob contains the audio</span>
+            <span class="n">audio</span> <span class="o">=</span> <span class="n">AudioSegment</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">blob</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">:</span>
+            <span class="c1"># Audio file from disk</span>
+            <span class="n">audio</span> <span class="o">=</span> <span class="n">AudioSegment</span><span class="o">.</span><span class="n">from_file</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unable to get audio from blob&quot;</span><span class="p">)</span>
+
+        <span class="n">file_obj</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">audio</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;mp3&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+
+        <span class="c1"># Transcribe</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">WhisperModel</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">compute_type</span><span class="o">=</span><span class="s2">&quot;float16&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">segments</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">transcribe</span><span class="p">(</span><span class="n">file_obj</span><span class="p">,</span> <span class="n">beam_size</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">segments</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">Document</span><span class="p">(</span>
+                <span class="n">page_content</span><span class="o">=</span><span class="n">segment</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">blob</span><span class="o">.</span><span class="n">source</span><span class="p">,</span>
+                    <span class="s2">&quot;timestamps&quot;</span><span class="p">:</span> <span class="s2">&quot;[</span><span class="si">%.2f</span><span class="s2">s -&gt; </span><span class="si">%.2f</span><span class="s2">s]&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">segment</span><span class="o">.</span><span class="n">end</span><span class="p">),</span>
+                    <span class="s2">&quot;language&quot;</span><span class="p">:</span> <span class="n">info</span><span class="o">.</span><span class="n">language</span><span class="p">,</span>
+                    <span class="s2">&quot;probability&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">%d%%</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="nb">round</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">language_probability</span> <span class="o">*</span> <span class="mi">100</span><span class="p">),</span>
+                    <span class="o">**</span><span class="n">blob</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 18, 2024.
+          Last updated on Apr 19, 2024.
       </footer>
     </div>
   </div>

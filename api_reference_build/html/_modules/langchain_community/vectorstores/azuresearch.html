@@ -854,7 +854,32 @@
             <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">azure_search</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">azure_search</span></div></div>
+        <span class="k">return</span> <span class="n">azure_search</span></div>
+
+<div class="viewcode-block" id="AzureSearch.as_retriever"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.azuresearch.AzureSearch.html#langchain_community.vectorstores.azuresearch.AzureSearch.as_retriever">[docs]</a>    <span class="k">def</span> <span class="nf">as_retriever</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AzureSearchVectorStoreRetriever</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return AzureSearchVectorStoreRetriever initialized from this VectorStore.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            search_type (Optional[str]): Defines the type of search that</span>
+<span class="sd">                the Retriever should perform.</span>
+<span class="sd">                Can be &quot;similarity&quot; (default), &quot;hybrid&quot;, or</span>
+<span class="sd">                    &quot;semantic_hybrid&quot;.</span>
+<span class="sd">            search_kwargs (Optional[Dict]): Keyword arguments to pass to the</span>
+<span class="sd">                search function. Can include things like:</span>
+<span class="sd">                    k: Amount of documents to return (Default: 4)</span>
+<span class="sd">                    score_threshold: Minimum relevance threshold</span>
+<span class="sd">                        for similarity_score_threshold</span>
+<span class="sd">                    fetch_k: Amount of documents to pass to MMR algorithm (Default: 20)</span>
+<span class="sd">                    lambda_mult: Diversity of results returned by MMR;</span>
+<span class="sd">                        1 for minimum diversity and 0 for maximum. (Default: 0.5)</span>
+<span class="sd">                    filter: Filter by document metadata</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            AzureSearchVectorStoreRetriever: Retriever class for VectorStore.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tags</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="n">tags</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_retriever_tags</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">AzureSearchVectorStoreRetriever</span><span class="p">(</span><span class="n">vectorstore</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="n">tags</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="AzureSearchVectorStoreRetriever"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.azuresearch.AzureSearchVectorStoreRetriever.html#langchain_community.vectorstores.azuresearch.AzureSearchVectorStoreRetriever">[docs]</a><span class="k">class</span> <span class="nc">AzureSearchVectorStoreRetriever</span><span class="p">(</span><span class="n">BaseRetriever</span><span class="p">):</span>
@@ -878,8 +903,13 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate search type.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="s2">&quot;search_type&quot;</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
             <span class="n">search_type</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;search_type&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">search_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;similarity&quot;</span><span class="p">,</span> <span class="s2">&quot;hybrid&quot;</span><span class="p">,</span> <span class="s2">&quot;semantic_hybrid&quot;</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;search_type of </span><span class="si">{</span><span class="n">search_type</span><span class="si">}</span><span class="s2"> not allowed.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">search_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="n">allowed_search_types</span> <span class="o">:=</span> <span class="p">(</span><span class="s2">&quot;similarity&quot;</span><span class="p">,</span> <span class="s2">&quot;hybrid&quot;</span><span class="p">,</span> <span class="s2">&quot;semantic_hybrid&quot;</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;search_type of </span><span class="si">{</span><span class="n">search_type</span><span class="si">}</span><span class="s2"> not allowed. Valid values are: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">allowed_search_types</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
     <span class="k">def</span> <span class="nf">_get_relevant_documents</span><span class="p">(</span>
@@ -913,7 +943,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 18, 2024.
+          Last updated on Apr 19, 2024.
       </footer>
     </div>
   </div>

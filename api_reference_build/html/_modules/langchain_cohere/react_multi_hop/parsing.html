@@ -203,7 +203,7 @@
 <span></span><span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">MutableMapping</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.agents</span> <span class="kn">import</span> <span class="n">AgentAction</span><span class="p">,</span> <span class="n">AgentActionMessageLog</span><span class="p">,</span> <span class="n">AgentFinish</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span>
@@ -365,7 +365,7 @@
 
 
 <div class="viewcode-block" id="parse_citations"><a class="viewcode-back" href="../../../react_multi_hop/langchain_cohere.react_multi_hop.parsing.parse_citations.html#langchain_cohere.react_multi_hop.parsing.parse_citations">[docs]</a><span class="k">def</span> <span class="nf">parse_citations</span><span class="p">(</span>
-    <span class="n">grounded_answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Mapping</span><span class="p">]</span>
+    <span class="n">grounded_answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">MutableMapping</span><span class="p">]</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">CohereCitation</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Parses a grounded_generation (from parse_actions) and documents (from</span>
@@ -375,6 +375,10 @@
     <span class="n">no_markup_answer</span><span class="p">,</span> <span class="n">parsed_answer</span> <span class="o">=</span> <span class="n">_parse_answer_spans</span><span class="p">(</span><span class="n">grounded_answer</span><span class="p">)</span>
     <span class="n">citations</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CohereCitation</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">start</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Add an id field to each document. This may be useful for future deduplication.</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">)):</span>
+        <span class="n">documents</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">documents</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="sa">f</span><span class="s2">&quot;doc_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
 
     <span class="k">for</span> <span class="n">answer</span> <span class="ow">in</span> <span class="n">parsed_answer</span><span class="p">:</span>
         <span class="n">text</span> <span class="o">=</span> <span class="n">answer</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
@@ -387,11 +391,13 @@
 
         <span class="c1"># Look up the cited document by index</span>
         <span class="n">cited_documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Mapping</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">cited_document_ids</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">document_indexes</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">):</span>
                 <span class="c1"># The document index doesn&#39;t exist</span>
                 <span class="k">continue</span>
             <span class="n">cited_documents</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">documents</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+            <span class="n">cited_document_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">documents</span><span class="p">[</span><span class="n">index</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">])</span>
 
         <span class="n">citations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">CohereCitation</span><span class="p">(</span>
@@ -399,6 +405,7 @@
                 <span class="n">end</span><span class="o">=</span><span class="n">end</span><span class="p">,</span>
                 <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
                 <span class="n">documents</span><span class="o">=</span><span class="n">cited_documents</span><span class="p">,</span>
+                <span class="n">document_ids</span><span class="o">=</span><span class="nb">set</span><span class="p">(</span><span class="n">cited_document_ids</span><span class="p">),</span>
             <span class="p">)</span>
         <span class="p">)</span>
         <span class="n">start</span> <span class="o">=</span> <span class="n">end</span>
@@ -509,7 +516,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 18, 2024.
+          Last updated on Apr 19, 2024.
       </footer>
     </div>
   </div>

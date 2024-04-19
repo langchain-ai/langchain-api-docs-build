@@ -259,16 +259,11 @@
 <span class="sd">        keyspace: Cassandra key space.</span>
 <span class="sd">        table_name: Cassandra table.</span>
 <span class="sd">        ttl_seconds: Optional time-to-live for the added texts.</span>
+<span class="sd">        body_index_options: Optional options used to create the body index.</span>
+<span class="sd">            Eg. body_index_options = [cassio.table.cql.STANDARD_ANALYZER]</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_embedding_dimension</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_filter_to_metadata</span><span class="p">(</span><span class="n">filter_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="n">filter_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">{}</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">filter_dict</span>
 
     <span class="k">def</span> <span class="nf">_get_embedding_dimension</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding_dimension</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -284,6 +279,8 @@
         <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">body_index_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">cassio.table</span> <span class="kn">import</span> <span class="n">MetadataVectorCassandraTable</span>
@@ -301,6 +298,10 @@
         <span class="c1">#</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_embedding_dimension</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">body_index_options</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;body_index_options&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">body_index_options</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">MetadataVectorCassandraTable</span><span class="p">(</span>
             <span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
             <span class="n">keyspace</span><span class="o">=</span><span class="n">keyspace</span><span class="p">,</span>
@@ -308,6 +309,7 @@
             <span class="n">vector_dimension</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_embedding_dimension</span><span class="p">(),</span>
             <span class="n">metadata_indexing</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span>
             <span class="n">primary_key_type</span><span class="o">=</span><span class="s2">&quot;TEXT&quot;</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
     <span class="nd">@property</span>
@@ -414,22 +416,30 @@
         <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs most similar to embedding vector.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            embedding (str): Embedding to look up documents similar to.</span>
-<span class="sd">            k (int): Number of Documents to return. Defaults to 4.</span>
+<span class="sd">            embedding: Embedding to look up documents similar to.</span>
+<span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
+<span class="sd">            filter: Filter on the metadata to apply.</span>
+<span class="sd">            body_search: Document textual search terms to apply.</span>
+<span class="sd">                Only supported by Astra DB at the moment.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of (Document, score, id), the most similar to the query vector.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">search_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="nb">filter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">filter</span>
+        <span class="k">if</span> <span class="n">body_search</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;body_search&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">body_search</span>
         <span class="c1">#</span>
         <span class="n">hits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">metric_ann_search</span><span class="p">(</span>
             <span class="n">vector</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
             <span class="n">n</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
             <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;cos&quot;</span><span class="p">,</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">search_metadata</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="c1"># We stick to &#39;cos&#39; distance as it can be normalized on a 0-1 axis</span>
         <span class="c1"># (1=most relevant), as required by this class&#39; contract.</span>
@@ -450,12 +460,14 @@
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
         <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_id_by_vector</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding_vector</span><span class="p">,</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
             <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">body_search</span><span class="o">=</span><span class="n">body_search</span><span class="p">,</span>
         <span class="p">)</span></div>
 
     <span class="c1"># id-unaware search facilities</span>
@@ -464,12 +476,16 @@
         <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs most similar to embedding vector.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            embedding (str): Embedding to look up documents similar to.</span>
-<span class="sd">            k (int): Number of Documents to return. Defaults to 4.</span>
+<span class="sd">            embedding: Embedding to look up documents similar to.</span>
+<span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
+<span class="sd">            filter: Filter on the metadata to apply.</span>
+<span class="sd">            body_search: Document textual search terms to apply.</span>
+<span class="sd">                Only supported by Astra DB at the moment.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of (Document, score), the most similar to the query vector.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -479,6 +495,7 @@
                 <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
                 <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
                 <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+                <span class="n">body_search</span><span class="o">=</span><span class="n">body_search</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">]</span></div>
 
@@ -487,6 +504,7 @@
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
@@ -494,6 +512,7 @@
             <span class="n">embedding_vector</span><span class="p">,</span>
             <span class="n">k</span><span class="p">,</span>
             <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">body_search</span><span class="o">=</span><span class="n">body_search</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Cassandra.similarity_search_by_vector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.similarity_search_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_by_vector</span><span class="p">(</span>
@@ -501,6 +520,7 @@
         <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">[</span>
@@ -509,6 +529,7 @@
                 <span class="n">embedding</span><span class="p">,</span>
                 <span class="n">k</span><span class="p">,</span>
                 <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+                <span class="n">body_search</span><span class="o">=</span><span class="n">body_search</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">]</span></div>
 
@@ -517,12 +538,14 @@
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
         <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
             <span class="n">embedding_vector</span><span class="p">,</span>
             <span class="n">k</span><span class="p">,</span>
             <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">body_search</span><span class="o">=</span><span class="n">body_search</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Cassandra.max_marginal_relevance_search_by_vector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.max_marginal_relevance_search_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search_by_vector</span><span class="p">(</span>
@@ -532,6 +555,7 @@
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs selected using the maximal marginal relevance.</span>
@@ -539,22 +563,31 @@
 <span class="sd">        among selected documents.</span>
 <span class="sd">        Args:</span>
 <span class="sd">            embedding: Embedding to look up documents similar to.</span>
-<span class="sd">            k: Number of Documents to return.</span>
+<span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
 <span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
+<span class="sd">                Defaults to 20.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
 <span class="sd">                of diversity among the results with 0 corresponding to maximum</span>
 <span class="sd">                diversity and 1 to minimum diversity.</span>
+<span class="sd">                Defaults to 0.5.</span>
+<span class="sd">            filter: Filter on the metadata to apply.</span>
+<span class="sd">            body_search: Document textual search terms to apply.</span>
+<span class="sd">                Only supported by Astra DB at the moment.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">search_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+        <span class="n">_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="nb">filter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_kwargs</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">filter</span>
+        <span class="k">if</span> <span class="n">body_search</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_kwargs</span><span class="p">[</span><span class="s2">&quot;body_search&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">body_search</span>
 
         <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">metric_ann_search</span><span class="p">(</span>
                 <span class="n">vector</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
                 <span class="n">n</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
                 <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;cos&quot;</span><span class="p">,</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="n">search_metadata</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">_kwargs</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
         <span class="c1"># let the mmr utility pick the *indices* in the above array</span>
@@ -584,6 +617,7 @@
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_search</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs selected using the maximal marginal relevance.</span>
@@ -591,12 +625,16 @@
 <span class="sd">        among selected documents.</span>
 <span class="sd">        Args:</span>
 <span class="sd">            query: Text to look up documents similar to.</span>
-<span class="sd">            k: Number of Documents to return.</span>
+<span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
 <span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
+<span class="sd">                Defaults to 20.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
 <span class="sd">                of diversity among the results with 0 corresponding to maximum</span>
 <span class="sd">                diversity and 1 to minimum diversity.</span>
 <span class="sd">                Defaults to 0.5.</span>
+<span class="sd">            filter: Filter on the metadata to apply.</span>
+<span class="sd">            body_search: Document textual search terms to apply.</span>
+<span class="sd">                Only supported by Astra DB at the moment.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -607,6 +645,7 @@
             <span class="n">fetch_k</span><span class="p">,</span>
             <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
             <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">body_search</span><span class="o">=</span><span class="n">body_search</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="Cassandra.from_texts"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.cassandra.Cassandra.html#langchain_community.vectorstores.cassandra.Cassandra.from_texts">[docs]</a>    <span class="nd">@classmethod</span>
@@ -622,6 +661,7 @@
         <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
         <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_index_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CVST</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Cassandra vectorstore from raw texts.</span>
@@ -637,6 +677,8 @@
 <span class="sd">            batch_size: Number of concurrent requests to send to the server.</span>
 <span class="sd">                Defaults to 16.</span>
 <span class="sd">            ttl_seconds: Optional time-to-live for the added texts.</span>
+<span class="sd">            body_index_options: Optional options used to create the body index.</span>
+<span class="sd">                Eg. body_index_options = [cassio.table.cql.STANDARD_ANALYZER]</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            a Cassandra vectorstore.</span>
@@ -653,6 +695,7 @@
             <span class="n">keyspace</span><span class="o">=</span><span class="n">keyspace</span><span class="p">,</span>
             <span class="n">table_name</span><span class="o">=</span><span class="n">table_name</span><span class="p">,</span>
             <span class="n">ttl_seconds</span><span class="o">=</span><span class="n">ttl_seconds</span><span class="p">,</span>
+            <span class="n">body_index_options</span><span class="o">=</span><span class="n">body_index_options</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">store</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
             <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span>
@@ -671,6 +714,7 @@
         <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
         <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">body_index_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CVST</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Cassandra vectorstore from a document list.</span>
@@ -685,6 +729,8 @@
 <span class="sd">            batch_size: Number of concurrent requests to send to the server.</span>
 <span class="sd">                Defaults to 16.</span>
 <span class="sd">            ttl_seconds: Optional time-to-live for the added documents.</span>
+<span class="sd">            body_index_options: Optional options used to create the body index.</span>
+<span class="sd">                Eg. body_index_options = [cassio.table.cql.STANDARD_ANALYZER]</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            a Cassandra vectorstore.</span>
@@ -701,6 +747,7 @@
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
             <span class="n">ttl_seconds</span><span class="o">=</span><span class="n">ttl_seconds</span><span class="p">,</span>
+            <span class="n">body_index_options</span><span class="o">=</span><span class="n">body_index_options</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 </pre></div>
@@ -709,7 +756,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 18, 2024.
+          Last updated on Apr 19, 2024.
       </footer>
     </div>
   </div>
