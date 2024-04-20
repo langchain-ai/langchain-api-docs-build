@@ -270,31 +270,50 @@
 <span class="n">DEFAULT_SEARCH_TYPE</span> <span class="o">=</span> <span class="n">SearchType</span><span class="o">.</span><span class="n">VECTOR</span>
 
 
-<span class="k">def</span> <span class="nf">_get_search_index_query</span><span class="p">(</span><span class="n">search_type</span><span class="p">:</span> <span class="n">SearchType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="n">type_to_query_map</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">SearchType</span><span class="o">.</span><span class="n">VECTOR</span><span class="p">:</span> <span class="p">(</span>
-            <span class="s2">&quot;CALL db.index.vector.queryNodes($index, $k, $embedding) YIELD node, score &quot;</span>
-        <span class="p">),</span>
-        <span class="n">SearchType</span><span class="o">.</span><span class="n">HYBRID</span><span class="p">:</span> <span class="p">(</span>
-            <span class="s2">&quot;CALL { &quot;</span>
-            <span class="s2">&quot;CALL db.index.vector.queryNodes($index, $k, $embedding) &quot;</span>
-            <span class="s2">&quot;YIELD node, score &quot;</span>
-            <span class="s2">&quot;WITH collect({node:node, score:score}) AS nodes, max(score) AS max &quot;</span>
-            <span class="s2">&quot;UNWIND nodes AS n &quot;</span>
-            <span class="c1"># We use 0 as min</span>
-            <span class="s2">&quot;RETURN n.node AS node, (n.score / max) AS score UNION &quot;</span>
-            <span class="s2">&quot;CALL db.index.fulltext.queryNodes($keyword_index, $query, {limit: $k}) &quot;</span>
-            <span class="s2">&quot;YIELD node, score &quot;</span>
-            <span class="s2">&quot;WITH collect({node:node, score:score}) AS nodes, max(score) AS max &quot;</span>
-            <span class="s2">&quot;UNWIND nodes AS n &quot;</span>
-            <span class="c1"># We use 0 as min</span>
-            <span class="s2">&quot;RETURN n.node AS node, (n.score / max) AS score &quot;</span>
-            <span class="s2">&quot;} &quot;</span>
-            <span class="c1"># dedup</span>
-            <span class="s2">&quot;WITH node, max(score) AS score ORDER BY score DESC LIMIT $k &quot;</span>
-        <span class="p">),</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="n">type_to_query_map</span><span class="p">[</span><span class="n">search_type</span><span class="p">]</span>
+<div class="viewcode-block" id="IndexType"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.IndexType.html#langchain_community.vectorstores.neo4j_vector.IndexType">[docs]</a><span class="k">class</span> <span class="nc">IndexType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enumerator of the index types.&quot;&quot;&quot;</span>
+
+    <span class="n">NODE</span> <span class="o">=</span> <span class="s2">&quot;NODE&quot;</span>
+    <span class="n">RELATIONSHIP</span> <span class="o">=</span> <span class="s2">&quot;RELATIONSHIP&quot;</span></div>
+
+
+<span class="n">DEFAULT_INDEX_TYPE</span> <span class="o">=</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">NODE</span>
+
+
+<span class="k">def</span> <span class="nf">_get_search_index_query</span><span class="p">(</span>
+    <span class="n">search_type</span><span class="p">:</span> <span class="n">SearchType</span><span class="p">,</span> <span class="n">index_type</span><span class="p">:</span> <span class="n">IndexType</span> <span class="o">=</span> <span class="n">DEFAULT_INDEX_TYPE</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">NODE</span><span class="p">:</span>
+        <span class="n">type_to_query_map</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">SearchType</span><span class="o">.</span><span class="n">VECTOR</span><span class="p">:</span> <span class="p">(</span>
+                <span class="s2">&quot;CALL db.index.vector.queryNodes($index, $k, $embedding) &quot;</span>
+                <span class="s2">&quot;YIELD node, score &quot;</span>
+            <span class="p">),</span>
+            <span class="n">SearchType</span><span class="o">.</span><span class="n">HYBRID</span><span class="p">:</span> <span class="p">(</span>
+                <span class="s2">&quot;CALL { &quot;</span>
+                <span class="s2">&quot;CALL db.index.vector.queryNodes($index, $k, $embedding) &quot;</span>
+                <span class="s2">&quot;YIELD node, score &quot;</span>
+                <span class="s2">&quot;WITH collect({node:node, score:score}) AS nodes, max(score) AS max &quot;</span>
+                <span class="s2">&quot;UNWIND nodes AS n &quot;</span>
+                <span class="c1"># We use 0 as min</span>
+                <span class="s2">&quot;RETURN n.node AS node, (n.score / max) AS score UNION &quot;</span>
+                <span class="s2">&quot;CALL db.index.fulltext.queryNodes($keyword_index, $query, &quot;</span>
+                <span class="s2">&quot;{limit: $k}) YIELD node, score &quot;</span>
+                <span class="s2">&quot;WITH collect({node:node, score:score}) AS nodes, max(score) AS max &quot;</span>
+                <span class="s2">&quot;UNWIND nodes AS n &quot;</span>
+                <span class="c1"># We use 0 as min</span>
+                <span class="s2">&quot;RETURN n.node AS node, (n.score / max) AS score &quot;</span>
+                <span class="s2">&quot;} &quot;</span>
+                <span class="c1"># dedup</span>
+                <span class="s2">&quot;WITH node, max(score) AS score ORDER BY score DESC LIMIT $k &quot;</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">type_to_query_map</span><span class="p">[</span><span class="n">search_type</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="s2">&quot;CALL db.index.vector.queryRelationships($index, $k, $embedding) &quot;</span>
+            <span class="s2">&quot;YIELD relationship, score &quot;</span>
+        <span class="p">)</span>
 
 
 <div class="viewcode-block" id="check_if_not_null"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.check_if_not_null.html#langchain_community.vectorstores.neo4j_vector.check_if_not_null">[docs]</a><span class="k">def</span> <span class="nf">check_if_not_null</span><span class="p">(</span><span class="n">props</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -665,6 +684,7 @@
         <span class="n">pre_delete_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">retrieval_query</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
         <span class="n">relevance_score_fn</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">index_type</span><span class="p">:</span> <span class="n">IndexType</span> <span class="o">=</span> <span class="n">DEFAULT_INDEX_TYPE</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">neo4j</span>
@@ -743,6 +763,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">override_relevance_score_fn</span> <span class="o">=</span> <span class="n">relevance_score_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">retrieval_query</span> <span class="o">=</span> <span class="n">retrieval_query</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">search_type</span> <span class="o">=</span> <span class="n">search_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_index_type</span> <span class="o">=</span> <span class="n">index_type</span>
         <span class="c1"># Calculate embedding dimension</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding_dimension</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="s2">&quot;foo&quot;</span><span class="p">))</span>
 
@@ -817,7 +838,7 @@
         <span class="c1"># Flag for enterprise</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_is_enterprise</span> <span class="o">=</span> <span class="kc">True</span> <span class="k">if</span> <span class="n">db_data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;edition&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;enterprise&quot;</span> <span class="k">else</span> <span class="kc">False</span></div>
 
-<div class="viewcode-block" id="Neo4jVector.retrieve_existing_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector.retrieve_existing_index">[docs]</a>    <span class="k">def</span> <span class="nf">retrieve_existing_index</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<div class="viewcode-block" id="Neo4jVector.retrieve_existing_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector.retrieve_existing_index">[docs]</a>    <span class="k">def</span> <span class="nf">retrieve_existing_index</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Check if the vector index exists in the Neo4j database</span>
 <span class="sd">        and returns its embedding dimension.</span>
@@ -832,11 +853,11 @@
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="n">index_information</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-            <span class="s2">&quot;SHOW INDEXES YIELD name, type, labelsOrTypes, properties, options &quot;</span>
-            <span class="s2">&quot;WHERE type = &#39;VECTOR&#39; AND (name = $index_name &quot;</span>
+            <span class="s2">&quot;SHOW INDEXES YIELD name, type, entityType, labelsOrTypes, &quot;</span>
+            <span class="s2">&quot;properties, options WHERE type = &#39;VECTOR&#39; AND (name = $index_name &quot;</span>
             <span class="s2">&quot;OR (labelsOrTypes[0] = $node_label AND &quot;</span>
             <span class="s2">&quot;properties[0] = $embedding_node_property)) &quot;</span>
-            <span class="s2">&quot;RETURN name, labelsOrTypes, properties, options &quot;</span><span class="p">,</span>
+            <span class="s2">&quot;RETURN name, entityType, labelsOrTypes, properties, options &quot;</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="p">{</span>
                 <span class="s2">&quot;index_name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_name</span><span class="p">,</span>
                 <span class="s2">&quot;node_label&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">node_label</span><span class="p">,</span>
@@ -849,13 +870,14 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">index_name</span> <span class="o">=</span> <span class="n">index_information</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">node_label</span> <span class="o">=</span> <span class="n">index_information</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;labelsOrTypes&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">embedding_node_property</span> <span class="o">=</span> <span class="n">index_information</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;properties&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_index_type</span> <span class="o">=</span> <span class="n">index_information</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;entityType&quot;</span><span class="p">]</span>
             <span class="n">embedding_dimension</span> <span class="o">=</span> <span class="n">index_information</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;options&quot;</span><span class="p">][</span><span class="s2">&quot;indexConfig&quot;</span><span class="p">][</span>
                 <span class="s2">&quot;vector.dimensions&quot;</span>
             <span class="p">]</span>
 
-            <span class="k">return</span> <span class="n">embedding_dimension</span>
+            <span class="k">return</span> <span class="n">embedding_dimension</span><span class="p">,</span> <span class="n">index_information</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;entityType&quot;</span><span class="p">]</span>
         <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span></div>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span></div>
 
 <div class="viewcode-block" id="Neo4jVector.retrieve_existing_fts_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector.retrieve_existing_fts_index">[docs]</a>    <span class="k">def</span> <span class="nf">retrieve_existing_fts_index</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">text_node_properties</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -956,7 +978,13 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="c1"># Check if the vector index already exists</span>
-        <span class="n">embedding_dimension</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+        <span class="n">embedding_dimension</span><span class="p">,</span> <span class="n">index_type</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+
+        <span class="c1"># Raise error if relationship index type</span>
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s2">&quot;RELATIONSHIP&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Data ingestion is not supported with relationship vector index.&quot;</span>
+            <span class="p">)</span>
 
         <span class="c1"># If the vector index doesn&#39;t exist yet</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">embedding_dimension</span><span class="p">:</span>
@@ -1178,14 +1206,21 @@
             <span class="n">index_query</span> <span class="o">=</span> <span class="n">base_index_query</span> <span class="o">+</span> <span class="n">filter_snippets</span> <span class="o">+</span> <span class="n">base_cosine_query</span>
 
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">index_query</span> <span class="o">=</span> <span class="n">_get_search_index_query</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">search_type</span><span class="p">)</span>
+            <span class="n">index_query</span> <span class="o">=</span> <span class="n">_get_search_index_query</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">search_type</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_type</span><span class="p">)</span>
             <span class="n">filter_params</span> <span class="o">=</span> <span class="p">{}</span>
 
-        <span class="n">default_retrieval</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;RETURN node.`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">` AS text, score, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;node </span><span class="se">{{</span><span class="s2">.*, `</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">`: Null, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding_node_property</span><span class="si">}</span><span class="s2">`: Null, id: Null </span><span class="se">}}</span><span class="s2"> AS metadata&quot;</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_type</span> <span class="o">==</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">RELATIONSHIP</span><span class="p">:</span>
+            <span class="n">default_retrieval</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RETURN relationship.`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">` AS text, score, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;relationship </span><span class="se">{{</span><span class="s2">.*, `</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">`: Null, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding_node_property</span><span class="si">}</span><span class="s2">`: Null, id: Null </span><span class="se">}}</span><span class="s2"> AS metadata&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">default_retrieval</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;RETURN node.`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">` AS text, score, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;node </span><span class="se">{{</span><span class="s2">.*, `</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">text_node_property</span><span class="si">}</span><span class="s2">`: Null, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding_node_property</span><span class="si">}</span><span class="s2">`: Null, id: Null </span><span class="se">}}</span><span class="s2"> AS metadata&quot;</span>
+            <span class="p">)</span>
 
         <span class="n">retrieval_query</span> <span class="o">=</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">retrieval_query</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">retrieval_query</span> <span class="k">else</span> <span class="n">default_retrieval</span>
@@ -1343,7 +1378,15 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="n">embedding_dimension</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+        <span class="n">embedding_dimension</span><span class="p">,</span> <span class="n">index_type</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+
+        <span class="c1"># Raise error if relationship index type</span>
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s2">&quot;RELATIONSHIP&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Relationship vector index is not supported with &quot;</span>
+                <span class="s2">&quot;`from_existing_index` method. Please use the &quot;</span>
+                <span class="s2">&quot;`from_existing_relationship_index` method.&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">embedding_dimension</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1373,6 +1416,61 @@
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="s2">&quot;Vector and keyword index don&#39;t index the same node label&quot;</span>
                     <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">store</span></div>
+
+<div class="viewcode-block" id="Neo4jVector.from_existing_relationship_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.neo4j_vector.Neo4jVector.html#langchain_community.vectorstores.neo4j_vector.Neo4jVector.from_existing_relationship_index">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_existing_relationship_index</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Neo4jVector</span><span class="p">],</span>
+        <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
+        <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">search_type</span><span class="p">:</span> <span class="n">SearchType</span> <span class="o">=</span> <span class="n">DEFAULT_SEARCH_TYPE</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Neo4jVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get instance of an existing Neo4j relationship vector index.</span>
+<span class="sd">        This method will return the instance of the store without</span>
+<span class="sd">        inserting any new embeddings.</span>
+<span class="sd">        Neo4j credentials are required in the form of `url`, `username`,</span>
+<span class="sd">        and `password` and optional `database` parameters along with</span>
+<span class="sd">        the `index_name` definition.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">search_type</span> <span class="o">==</span> <span class="n">SearchType</span><span class="o">.</span><span class="n">HYBRID</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Hybrid search is not supported in combination &quot;</span>
+                <span class="s2">&quot;with relationship vector index&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">store</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+            <span class="n">index_name</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">embedding_dimension</span><span class="p">,</span> <span class="n">index_type</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">embedding_dimension</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The specified vector index name does not exist. &quot;</span>
+                <span class="s2">&quot;Make sure to check if you spelled it correctly&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Raise error if relationship index type</span>
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s2">&quot;NODE&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Node vector index is not supported with &quot;</span>
+                <span class="s2">&quot;`from_existing_relationship_index` method. Please use the &quot;</span>
+                <span class="s2">&quot;`from_existing_index` method.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Check if embedding function and vector index dimensions match</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">store</span><span class="o">.</span><span class="n">embedding_dimension</span> <span class="o">==</span> <span class="n">embedding_dimension</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The provided embedding function and vector index &quot;</span>
+                <span class="s2">&quot;dimensions do not match.</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Embedding function dimension: </span><span class="si">{</span><span class="n">store</span><span class="o">.</span><span class="n">embedding_dimension</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Vector index dimension: </span><span class="si">{</span><span class="n">embedding_dimension</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">store</span></div>
 
@@ -1468,7 +1566,15 @@
         <span class="p">)</span>
 
         <span class="c1"># Check if the vector index already exists</span>
-        <span class="n">embedding_dimension</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+        <span class="n">embedding_dimension</span><span class="p">,</span> <span class="n">index_type</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">retrieve_existing_index</span><span class="p">()</span>
+
+        <span class="c1"># Raise error if relationship index type</span>
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s2">&quot;RELATIONSHIP&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;`from_existing_graph` method does not support &quot;</span>
+                <span class="s2">&quot; existing relationship vector index. &quot;</span>
+                <span class="s2">&quot;Please use `from_existing_relationship_index` method&quot;</span>
+            <span class="p">)</span>
 
         <span class="c1"># If the vector index doesn&#39;t exist yet</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">embedding_dimension</span><span class="p">:</span>
@@ -1558,7 +1664,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 19, 2024.
+          Last updated on Apr 20, 2024.
       </footer>
     </div>
   </div>
