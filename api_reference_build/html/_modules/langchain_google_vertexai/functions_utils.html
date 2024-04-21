@@ -200,27 +200,34 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_google_vertexai.functions_utils</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Literal</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Type</span><span class="p">,</span>
+    <span class="n">TypedDict</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.exceptions</span> <span class="kn">import</span> <span class="n">OutputParserException</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseOutputParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">Generation</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
+<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">tool</span> <span class="k">as</span> <span class="n">callable_as_lc_tool</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">FunctionDescription</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.json_schema</span> <span class="kn">import</span> <span class="n">dereference_refs</span>
-<span class="kn">from</span> <span class="nn">vertexai.generative_models</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore</span>
-    <span class="n">FunctionDeclaration</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">vertexai.generative_models</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">Tool</span> <span class="k">as</span> <span class="n">VertexTool</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">vertexai.generative_models</span> <span class="kn">import</span> <span class="n">FunctionDeclaration</span>  <span class="c1"># type: ignore</span>
+<span class="kn">from</span> <span class="nn">vertexai.generative_models</span> <span class="kn">import</span> <span class="n">Tool</span> <span class="k">as</span> <span class="n">VertexTool</span>
 
 <span class="c1"># FIXME: vertexai is not exporting ToolConfig</span>
-<span class="kn">from</span> <span class="nn">vertexai.generative_models._generative_models</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore</span>
-    <span class="n">ToolConfig</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">vertexai.generative_models._generative_models</span> <span class="kn">import</span> <span class="n">ToolConfig</span>  <span class="c1"># type: ignore</span>
 
 
 <span class="k">def</span> <span class="nf">_format_pydantic_to_vertex_function</span><span class="p">(</span>
@@ -259,8 +266,8 @@
         <span class="p">}</span>
 
 
-<span class="k">def</span> <span class="nf">_format_tool_to_vertex_function</span><span class="p">(</span>
-    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseTool</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="nb">dict</span><span class="p">],</span>
+<span class="k">def</span> <span class="nf">_format_to_vertex_function_dict</span><span class="p">(</span>
+    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">BaseTool</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">FunctionDeclaration</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionDescription</span><span class="p">:</span>
     <span class="s2">&quot;Format tool into the Vertex function declaration.&quot;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
@@ -273,25 +280,62 @@
             <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
             <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">_get_parameters_from_schema</span><span class="p">(</span><span class="n">tool</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">]),</span>
         <span class="p">}</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">FunctionDeclaration</span><span class="p">):</span>
+        <span class="n">tool_dict</span> <span class="o">=</span> <span class="n">tool</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">FunctionDescription</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">tool_dict</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+            <span class="n">description</span><span class="o">=</span><span class="n">tool_dict</span><span class="p">[</span><span class="s2">&quot;description&quot;</span><span class="p">],</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">tool_dict</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">tool</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_format_base_tool_to_vertex_function</span><span class="p">(</span><span class="n">callable_as_lc_tool</span><span class="p">()(</span><span class="n">tool</span><span class="p">))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported tool call type </span><span class="si">{</span><span class="n">tool</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_format_tools_to_vertex_tool</span><span class="p">(</span>
-    <span class="n">tools</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">BaseTool</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">VertexTool</span><span class="p">]:</span>
+<span class="n">_FunctionDeclarationLike</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span>
+    <span class="n">BaseTool</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">FunctionDeclaration</span>
+<span class="p">]</span>
+
+
+<span class="k">class</span> <span class="nc">_VertexToolDict</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">function_declarations</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">FunctionDescription</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_format_functions_to_vertex_tool_dict</span><span class="p">(</span>
+    <span class="n">functions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">_FunctionDeclarationLike</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_VertexToolDict</span><span class="p">:</span>
     <span class="s2">&quot;Format tools into the Vertex Tool instance.&quot;</span>
-    <span class="n">function_declarations</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">:</span>
-        <span class="n">func</span> <span class="o">=</span> <span class="n">_format_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
-        <span class="n">function_declarations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FunctionDeclaration</span><span class="p">(</span><span class="o">**</span><span class="n">func</span><span class="p">))</span>
-
-    <span class="k">return</span> <span class="p">[</span><span class="n">VertexTool</span><span class="p">(</span><span class="n">function_declarations</span><span class="o">=</span><span class="n">function_declarations</span><span class="p">)]</span>
+    <span class="n">function_declarations</span> <span class="o">=</span> <span class="p">[</span><span class="n">_format_to_vertex_function_dict</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">functions</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">_VertexToolDict</span><span class="p">(</span><span class="n">function_declarations</span><span class="o">=</span><span class="n">function_declarations</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_format_tool_config</span><span class="p">(</span><span class="n">tool_config</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ToolConfig</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">_format_to_vertex_tool</span><span class="p">(</span>
+    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">VertexTool</span><span class="p">,</span> <span class="n">_VertexToolDict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">_FunctionDeclarationLike</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VertexTool</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">VertexTool</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tool</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)):</span>
+        <span class="n">tool</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_format_functions_to_vertex_tool_dict</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">tool</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">VertexTool</span><span class="p">(</span>
+            <span class="n">function_declarations</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">FunctionDeclaration</span><span class="p">(</span><span class="o">**</span><span class="n">fd</span><span class="p">)</span> <span class="k">for</span> <span class="n">fd</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">]</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected tool value:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_format_tool_config</span><span class="p">(</span><span class="n">tool_config</span><span class="p">:</span> <span class="n">_ToolConfigDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ToolConfig</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
     <span class="k">if</span> <span class="s2">&quot;function_calling_config&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tool_config</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Invalid ToolConfig, missing &#39;function_calling_config&#39; key. Received:</span><span class="se">\n\n</span><span class="s2">&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool_config</span><span class="si">=}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
     <span class="k">return</span> <span class="n">ToolConfig</span><span class="p">(</span>
         <span class="n">function_calling_config</span><span class="o">=</span><span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="p">(</span>
             <span class="o">**</span><span class="n">tool_config</span><span class="p">[</span><span class="s2">&quot;function_calling_config&quot;</span><span class="p">]</span>
@@ -397,13 +441,69 @@
 
 <div class="viewcode-block" id="PydanticFunctionsOutputParser.parse"><a class="viewcode-back" href="../../functions_utils/langchain_google_vertexai.functions_utils.PydanticFunctionsOutputParser.html#langchain_google_vertexai.functions_utils.PydanticFunctionsOutputParser.parse">[docs]</a>    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseModel</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Can only parse messages&quot;</span><span class="p">)</span></div></div>
+
+
+<span class="k">class</span> <span class="nc">_FunctionCallingConfigDict</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">mode</span><span class="p">:</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span>
+    <span class="n">allowed_function_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
+
+
+<span class="k">class</span> <span class="nc">_ToolConfigDict</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">function_calling_config</span><span class="p">:</span> <span class="n">_FunctionCallingConfigDict</span>
+
+
+<span class="n">_ToolChoiceType</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span>
+    <span class="nb">dict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">],</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">]</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_tool_choice_to_tool_config</span><span class="p">(</span>
+    <span class="n">tool_choice</span><span class="p">:</span> <span class="n">_ToolChoiceType</span><span class="p">,</span>
+    <span class="n">all_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_ToolConfigDict</span><span class="p">:</span>
+    <span class="n">allowed_function_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">or</span> <span class="n">tool_choice</span> <span class="o">==</span> <span class="s2">&quot;any&quot;</span><span class="p">:</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span><span class="o">.</span><span class="n">ANY</span>
+        <span class="n">allowed_function_names</span> <span class="o">=</span> <span class="n">all_names</span>
+    <span class="k">elif</span> <span class="n">tool_choice</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span><span class="o">.</span><span class="n">AUTO</span>
+    <span class="k">elif</span> <span class="n">tool_choice</span> <span class="o">==</span> <span class="s2">&quot;none&quot;</span><span class="p">:</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span><span class="o">.</span><span class="n">NONE</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span><span class="o">.</span><span class="n">ANY</span>
+        <span class="n">allowed_function_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">tool_choice</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span><span class="o">.</span><span class="n">ANY</span>
+        <span class="n">allowed_function_names</span> <span class="o">=</span> <span class="n">tool_choice</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;mode&quot;</span> <span class="ow">in</span> <span class="n">tool_choice</span><span class="p">:</span>
+            <span class="n">mode</span> <span class="o">=</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;mode&quot;</span><span class="p">]</span>
+            <span class="n">allowed_function_names</span> <span class="o">=</span> <span class="n">tool_choice</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allowed_function_names&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="s2">&quot;function_calling_config&quot;</span> <span class="ow">in</span> <span class="n">tool_choice</span><span class="p">:</span>
+            <span class="n">mode</span> <span class="o">=</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;function_calling_config&quot;</span><span class="p">][</span><span class="s2">&quot;mode&quot;</span><span class="p">]</span>
+            <span class="n">allowed_function_names</span> <span class="o">=</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;function_calling_config&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="s2">&quot;allowed_function_names&quot;</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unrecognized tool choice format:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool_choice</span><span class="si">=}</span><span class="se">\n\n</span><span class="s2">Should match &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;VertexAI ToolConfig or FunctionCallingConfig format.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unrecognized tool choice format:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool_choice</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_ToolConfigDict</span><span class="p">(</span>
+        <span class="n">function_calling_config</span><span class="o">=</span><span class="n">_FunctionCallingConfigDict</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span>
+            <span class="n">allowed_function_names</span><span class="o">=</span><span class="n">allowed_function_names</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 20, 2024.
+          Last updated on Apr 21, 2024.
       </footer>
     </div>
   </div>

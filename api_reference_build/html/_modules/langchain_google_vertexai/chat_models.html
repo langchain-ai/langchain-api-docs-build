@@ -221,6 +221,9 @@
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
     <span class="n">cast</span><span class="p">,</span>
+    <span class="n">Literal</span><span class="p">,</span>
+    <span class="n">TypedDict</span><span class="p">,</span>
+    <span class="n">overload</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="kn">import</span> <span class="nn">proto</span>  <span class="c1"># type: ignore[import-untyped]</span>
@@ -249,7 +252,6 @@
     <span class="n">ToolCallChunk</span><span class="p">,</span>
     <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span><span class="p">,</span> <span class="n">tool</span> <span class="k">as</span> <span class="n">tool_from_callable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_functions</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">JsonOutputFunctionsParser</span><span class="p">,</span>
@@ -264,9 +266,13 @@
     <span class="n">Content</span><span class="p">,</span>
     <span class="n">GenerativeModel</span><span class="p">,</span>
     <span class="n">Part</span><span class="p">,</span>
+    <span class="n">Tool</span> <span class="k">as</span> <span class="n">VertexTool</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">vertexai.generative_models._generative_models</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore</span>
     <span class="n">ToolConfig</span><span class="p">,</span>
+    <span class="n">SafetySettingsType</span><span class="p">,</span>
+    <span class="n">GenerationConfigType</span><span class="p">,</span>
+    <span class="n">GenerationResponse</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">vertexai.language_models</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore</span>
     <span class="n">ChatMessage</span><span class="p">,</span>
@@ -288,14 +294,20 @@
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_google_vertexai._image_utils</span> <span class="kn">import</span> <span class="n">ImageBytesLoader</span>
 <span class="kn">from</span> <span class="nn">langchain_google_vertexai._utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">create_retry_decorator</span><span class="p">,</span>
     <span class="n">get_generation_info</span><span class="p">,</span>
     <span class="n">is_codey_model</span><span class="p">,</span>
     <span class="n">is_gemini_model</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_google_vertexai.functions_utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_format_tool_config</span><span class="p">,</span>
-    <span class="n">_format_tool_to_vertex_function</span><span class="p">,</span>
-    <span class="n">_format_tools_to_vertex_tool</span><span class="p">,</span>
+    <span class="n">_ToolConfigDict</span><span class="p">,</span>
+    <span class="n">_tool_choice_to_tool_config</span><span class="p">,</span>
+    <span class="n">_ToolChoiceType</span><span class="p">,</span>
+    <span class="n">_FunctionDeclarationLike</span><span class="p">,</span>
+    <span class="n">_VertexToolDict</span><span class="p">,</span>
+    <span class="n">_format_to_vertex_tool</span><span class="p">,</span>
+    <span class="n">_format_functions_to_vertex_tool_dict</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -307,6 +319,13 @@
 
     <span class="n">history</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChatMessage</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
     <span class="n">context</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">class</span> <span class="nc">_GeminiGenerateContentKwargs</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+    <span class="n">generation_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GenerationConfigType</span><span class="p">]</span>
+    <span class="n">safety_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SafetySettingsType</span><span class="p">]</span>
+    <span class="n">tools</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">VertexTool</span><span class="p">]]</span>
+    <span class="n">tool_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ToolConfig</span><span class="p">]</span>
 
 
 <span class="k">def</span> <span class="nf">_parse_chat_history</span><span class="p">(</span><span class="n">history</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">_ChatHistory</span><span class="p">:</span>
@@ -504,17 +523,18 @@
     <span class="k">return</span> <span class="n">question</span>
 
 
-<span class="k">def</span> <span class="nf">_get_client_with_sys_instruction</span><span class="p">(</span>
-    <span class="n">client</span><span class="p">:</span> <span class="n">GenerativeModel</span><span class="p">,</span>
-    <span class="n">system_instruction</span><span class="p">:</span> <span class="n">Content</span><span class="p">,</span>
-    <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-<span class="p">):</span>
-    <span class="k">if</span> <span class="n">client</span><span class="o">.</span><span class="n">_system_instruction</span> <span class="o">!=</span> <span class="n">system_instruction</span><span class="p">:</span>
-        <span class="n">client</span> <span class="o">=</span> <span class="n">GenerativeModel</span><span class="p">(</span>
-            <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
-            <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">client</span>
+<span class="nd">@overload</span>
+<span class="k">def</span> <span class="nf">_parse_response_candidate</span><span class="p">(</span>
+    <span class="n">response_candidate</span><span class="p">:</span> <span class="s2">&quot;Candidate&quot;</span><span class="p">,</span> <span class="n">streaming</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AIMessage</span><span class="p">:</span>
+    <span class="o">...</span>
+
+
+<span class="nd">@overload</span>
+<span class="k">def</span> <span class="nf">_parse_response_candidate</span><span class="p">(</span>
+    <span class="n">response_candidate</span><span class="p">:</span> <span class="s2">&quot;Candidate&quot;</span><span class="p">,</span> <span class="n">streaming</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AIMessageChunk</span><span class="p">:</span>
+    <span class="o">...</span>
 
 
 <span class="k">def</span> <span class="nf">_parse_response_candidate</span><span class="p">(</span>
@@ -527,9 +547,8 @@
     <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">response_candidate</span><span class="o">.</span><span class="n">content</span><span class="o">.</span><span class="n">parts</span><span class="p">:</span>
-        <span class="n">text</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">text</span> <span class="o">=</span> <span class="n">part</span><span class="o">.</span><span class="n">text</span>
+            <span class="n">text</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">part</span><span class="o">.</span><span class="n">text</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="n">text</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -605,6 +624,72 @@
     <span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">_completion_with_retry</span><span class="p">(</span>
+    <span class="n">generation_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">check_stream_response_for_candidates</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Use tenacity to retry the completion call.&quot;&quot;&quot;</span>
+    <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">create_retry_decorator</span><span class="p">(</span>
+        <span class="n">max_retries</span><span class="o">=</span><span class="n">max_retries</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span>
+    <span class="p">)</span>
+
+    <span class="nd">@retry_decorator</span>
+    <span class="k">def</span> <span class="nf">_completion_with_retry_inner</span><span class="p">(</span><span class="n">generation_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">generation_method</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">check_stream_response_for_candidates</span><span class="p">:</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Got 0 candidates from generations.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">response</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">response</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Got 0 candidates from generations.&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">_completion_with_retry_inner</span><span class="p">(</span><span class="n">generation_method</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_acompletion_with_retry</span><span class="p">(</span>
+    <span class="n">generation_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">check_stream_response_for_candidates</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Use tenacity to retry the completion call.&quot;&quot;&quot;</span>
+    <span class="n">retry_decorator</span> <span class="o">=</span> <span class="n">create_retry_decorator</span><span class="p">(</span>
+        <span class="n">max_retries</span><span class="o">=</span><span class="n">max_retries</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span>
+    <span class="p">)</span>
+
+    <span class="nd">@retry_decorator</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_completion_with_retry_inner</span><span class="p">(</span>
+        <span class="n">generation_method</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">generation_method</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">check_stream_response_for_candidates</span><span class="p">:</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Got 0 candidates from generations.&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">response</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">response</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Got 0 candidates from generations.&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="k">await</span> <span class="n">_completion_with_retry_inner</span><span class="p">(</span><span class="n">generation_method</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="ChatVertexAI"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI">[docs]</a><span class="k">class</span> <span class="nc">ChatVertexAI</span><span class="p">(</span><span class="n">_VertexAICommon</span><span class="p">,</span> <span class="n">BaseChatModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;`Vertex AI` Chat large language models API.&quot;&quot;&quot;</span>
 
@@ -619,6 +704,10 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;[Deprecated] Since new Gemini models support setting a System Message,</span>
 <span class="sd">    setting this parameter to True is discouraged.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">check_stream_response_for_candidates</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieves all chunks from streaming response and check all of them </span>
+<span class="sd">    have candidates. If not, retries.</span>
+<span class="sd">    It makes streaming mode essentially useless.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ChatVertexAI.is_lc_serializable"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI.is_lc_serializable">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">is_lc_serializable</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -671,13 +760,9 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_is_gemini_advanced</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mf">1.0</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">True</span>
-        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-            <span class="k">pass</span>
-        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
-            <span class="k">pass</span>
-        <span class="k">return</span> <span class="kc">False</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mf">1.0</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">_generate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -702,80 +787,60 @@
 <span class="sd">        Raises:</span>
 <span class="sd">            ValueError: if the last message in the list is not from human.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">should_stream</span> <span class="o">=</span> <span class="n">stream</span> <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span>
-        <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">should_stream</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">stream_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span>
-                    <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-                <span class="p">)</span>
-                <span class="k">return</span> <span class="n">generate_from_stream</span><span class="p">(</span><span class="n">stream_iter</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stream</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">or</span> <span class="p">(</span><span class="n">stream</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">streaming</span><span class="p">):</span>
+            <span class="n">stream_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span>
+                <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">generate_from_stream</span><span class="p">(</span><span class="n">stream_iter</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_non_gemini</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
+        <span class="n">client</span><span class="p">,</span> <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_client_and_contents</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">_completion_with_retry</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">generate_content</span><span class="p">,</span>
+                <span class="n">max_retries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="n">contents</span><span class="o">=</span><span class="n">contents</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">params</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_response_to_chat_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_generate_non_gemini</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">examples</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;examples&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">examples</span>
         <span class="n">msg_params</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="s2">&quot;candidate_count&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
             <span class="n">msg_params</span><span class="p">[</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
-            <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
-                <span class="n">messages</span><span class="p">,</span>
-                <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
-                <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
+        <span class="k">if</span> <span class="n">examples</span><span class="p">:</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+            <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_chat</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">_completion_with_retry</span><span class="p">(</span>
+                <span class="n">chat</span><span class="o">.</span><span class="n">send_message</span><span class="p">,</span>
+                <span class="n">max_retries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">question</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">msg_params</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
-                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
-                <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
-                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">ChatGeneration</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
+                <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
+                    <span class="n">candidate</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
+                    <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">raw_prediction_response</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+                <span class="p">),</span>
             <span class="p">)</span>
-
-            <span class="c1"># set param to `functions` until core tool/function calling implemented</span>
-            <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="n">tool_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content</span><span class="p">(</span>
-                    <span class="n">history_gemini</span><span class="p">,</span>
-                    <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                    <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
-                    <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
-                    <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">ChatGeneration</span><span class="p">(</span>
-                    <span class="n">message</span><span class="o">=</span><span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">candidate</span><span class="p">),</span>
-                    <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                        <span class="n">candidate</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span>
-            <span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-            <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-            <span class="n">examples</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;examples&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">examples</span>
-            <span class="k">if</span> <span class="n">examples</span><span class="p">:</span>
-                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_chat</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message</span><span class="p">(</span><span class="n">question</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="o">**</span><span class="n">msg_params</span><span class="p">)</span>
-            <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">ChatGeneration</span><span class="p">(</span>
-                    <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
-                    <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                        <span class="n">candidate</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">raw_prediction_response</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span>
-            <span class="p">]</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span>
+        <span class="p">]</span>
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_agenerate</span><span class="p">(</span>
@@ -803,72 +868,55 @@
             <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;stream&quot;</span><span class="p">)</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;ChatVertexAI does not currently support async streaming.&quot;</span><span class="p">)</span>
 
-        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_agenerate_non_gemini</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">client</span><span class="p">,</span> <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_client_and_contents</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_acompletion_with_retry</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">generate_content_async</span><span class="p">,</span>
+                <span class="n">max_retries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="n">contents</span><span class="o">=</span><span class="n">contents</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">params</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_response_to_chat_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_agenerate_non_gemini</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">examples</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;examples&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">examples</span>
         <span class="n">msg_params</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="s2">&quot;candidate_count&quot;</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
             <span class="n">msg_params</span><span class="p">[</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;candidate_count&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
-            <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
-                <span class="n">messages</span><span class="p">,</span>
-                <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
-                <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
+        <span class="k">if</span> <span class="n">examples</span><span class="p">:</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+            <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_chat</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">_acompletion_with_retry</span><span class="p">(</span>
+                <span class="n">chat</span><span class="o">.</span><span class="n">send_message_async</span><span class="p">,</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">question</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">max_retries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">msg_params</span><span class="p">,</span>
             <span class="p">)</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
-                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
-                <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
-                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">ChatGeneration</span><span class="p">(</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
+                <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
+                    <span class="n">candidate</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
+                    <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">raw_prediction_response</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+                <span class="p">),</span>
             <span class="p">)</span>
-            <span class="c1"># set param to `functions` until core tool/function calling implemented</span>
-            <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="n">tool_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content_async</span><span class="p">(</span>
-                    <span class="n">history_gemini</span><span class="p">,</span>
-                    <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                    <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
-                    <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
-                    <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">ChatGeneration</span><span class="p">(</span>
-                    <span class="n">message</span><span class="o">=</span><span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">c</span><span class="p">),</span>
-                    <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                        <span class="n">c</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span>
-            <span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-            <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-            <span class="n">examples</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;examples&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">examples</span>
-            <span class="k">if</span> <span class="n">examples</span><span class="p">:</span>
-                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_chat</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
-                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message_async</span><span class="p">(</span><span class="n">question</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="o">**</span><span class="n">msg_params</span><span class="p">)</span>
-            <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">ChatGeneration</span><span class="p">(</span>
-                    <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">r</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
-                    <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                        <span class="n">r</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">raw_prediction_response</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-                    <span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span>
-            <span class="p">]</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span>
+        <span class="p">]</span>
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span>
@@ -878,81 +926,55 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_non_gemini</span><span class="p">(</span>
+                <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">client</span><span class="p">,</span> <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_client_and_contents</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+            <span class="n">response_iter</span> <span class="o">=</span> <span class="n">_completion_with_retry</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">generate_content</span><span class="p">,</span>
+                <span class="n">max_retries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="n">contents</span><span class="o">=</span><span class="n">contents</span><span class="p">,</span>
+                <span class="n">check_stream_response_for_candidates</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">check_stream_response_for_candidates</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">params</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">response_chunk</span> <span class="ow">in</span> <span class="n">response_iter</span><span class="p">:</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_chunk_to_generation_chunk</span><span class="p">(</span><span class="n">response_chunk</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+            <span class="k">yield</span> <span class="n">chunk</span>
+
+    <span class="k">def</span> <span class="nf">_stream_non_gemini</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
-            <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
-                <span class="n">messages</span><span class="p">,</span>
-                <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
-                <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
-                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
-                <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
-                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="c1"># set param to `functions` until core tool/function calling implemented</span>
-            <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="n">tool_config</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">responses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content</span><span class="p">(</span>
-                    <span class="n">history_gemini</span><span class="p">,</span>
-                    <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                    <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
-                    <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
-                    <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">:</span>
-                    <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span>
-                        <span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span>
-                    <span class="p">)</span>
-                    <span class="n">generation_info</span> <span class="o">=</span> <span class="n">get_generation_info</span><span class="p">(</span>
-                        <span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">examples</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;examples&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">examples</span><span class="p">:</span>
+            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
+            <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_chat</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
+            <span class="n">responses</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message_streaming</span><span class="p">(</span><span class="n">question</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
+                    <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+                <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                    <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
+                    <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
+                        <span class="n">response</span><span class="p">,</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
-                    <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                        <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
-                        <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                            <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
-                            <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                            <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
-                                <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                            <span class="p">),</span>
-                            <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
-                        <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">question</span> <span class="o">=</span> <span class="n">_get_question</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-            <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span><span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-            <span class="n">examples</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;examples&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">examples</span><span class="p">:</span>
-                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;examples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_parse_examples</span><span class="p">(</span><span class="n">examples</span><span class="p">)</span>
-            <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-                <span class="n">chat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_start_chat</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
-                <span class="n">responses</span> <span class="o">=</span> <span class="n">chat</span><span class="o">.</span><span class="n">send_message_streaming</span><span class="p">(</span><span class="n">question</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                        <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
-                    <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                        <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
-                        <span class="n">generation_info</span><span class="o">=</span><span class="n">get_generation_info</span><span class="p">(</span>
-                            <span class="n">response</span><span class="p">,</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                            <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">raw_prediction_response</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-                        <span class="p">),</span>
-                    <span class="p">)</span>
+                        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">raw_prediction_response</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -963,52 +985,20 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
-        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history_gemini</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
-            <span class="n">messages</span><span class="p">,</span>
-            <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
-            <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">_get_client_with_sys_instruction</span><span class="p">(</span>
-            <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
-            <span class="n">system_instruction</span><span class="o">=</span><span class="n">system_instruction</span><span class="p">,</span>
-            <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">raw_tools</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="n">tools</span> <span class="o">=</span> <span class="n">_format_tools_to_vertex_tool</span><span class="p">(</span><span class="n">raw_tools</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tools</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="n">raw_tool_config</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_config&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;tool_config&quot;</span> <span class="ow">in</span> <span class="n">params</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="n">tool_config</span> <span class="o">=</span> <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">raw_tool_config</span><span class="p">)</span> <span class="k">if</span> <span class="n">raw_tool_config</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">client</span><span class="p">,</span> <span class="n">contents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_client_and_contents</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">with</span> <span class="n">telemetry</span><span class="o">.</span><span class="n">tool_context_manager</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span><span class="p">):</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">generate_content_async</span><span class="p">(</span>
-                <span class="n">history_gemini</span><span class="p">,</span>
-                <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="n">generation_config</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
-                <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
-                <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
-                <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">response_chunk</span> <span class="ow">in</span> <span class="k">await</span> <span class="n">_acompletion_with_retry</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">generate_content_async</span><span class="p">,</span>
+                <span class="n">max_retries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="n">contents</span><span class="o">=</span><span class="n">contents</span><span class="p">,</span>
+                <span class="n">check_stream_response_for_candidates</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">check_stream_response_for_candidates</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">params</span><span class="p">,</span>
             <span class="p">):</span>
-                <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                <span class="n">generation_info</span> <span class="o">=</span> <span class="n">get_generation_info</span><span class="p">(</span>
-                    <span class="n">chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_model</span><span class="p">,</span>
-                    <span class="n">usage_metadata</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                    <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
-                    <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                        <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
-                        <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                        <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
-                            <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                            <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                        <span class="p">),</span>
-                        <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
-                    <span class="p">)</span>
+                <span class="n">chunk</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gemini_chunk_to_generation_chunk</span><span class="p">(</span><span class="n">response_chunk</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+                <span class="k">yield</span> <span class="n">chunk</span>
 
 <div class="viewcode-block" id="ChatVertexAI.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1112,21 +1102,7 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">parser</span> <span class="o">=</span> <span class="n">JsonOutputFunctionsParser</span><span class="p">()</span>
-
-        <span class="n">name</span> <span class="o">=</span> <span class="n">_format_tool_to_vertex_function</span><span class="p">(</span><span class="n">schema</span><span class="p">)[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_advanced</span><span class="p">:</span>
-            <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
-                <span class="n">functions</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">],</span>
-                <span class="n">tool_config</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;function_calling_config&quot;</span><span class="p">:</span> <span class="p">{</span>
-                        <span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span><span class="o">.</span><span class="n">ANY</span><span class="p">,</span>
-                        <span class="s2">&quot;allowed_function_names&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">name</span><span class="p">],</span>
-                    <span class="p">}</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">functions</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">])</span>
+        <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">],</span> <span class="n">tool_choice</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_is_gemini_advanced</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">include_raw</span><span class="p">:</span>
             <span class="n">parser_with_fallback</span> <span class="o">=</span> <span class="n">RunnablePassthrough</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span>
                 <span class="n">parsed</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="s2">&quot;raw&quot;</span><span class="p">)</span> <span class="o">|</span> <span class="n">parser</span><span class="p">,</span> <span class="n">parsing_error</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="kc">None</span>
@@ -1140,8 +1116,10 @@
 
 <div class="viewcode-block" id="ChatVertexAI.bind_tools"><a class="viewcode-back" href="../../chat_models/langchain_google_vertexai.chat_models.ChatVertexAI.html#langchain_google_vertexai.chat_models.ChatVertexAI.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
-        <span class="n">tool_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">_FunctionDeclarationLike</span><span class="p">,</span> <span class="n">VertexTool</span><span class="p">]],</span>
+        <span class="n">tool_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_ToolConfigDict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">_ToolChoiceType</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind tool-like objects to this chat model.</span>
@@ -1156,19 +1134,30 @@
 <span class="sd">            **kwargs: Any additional parameters to pass to the</span>
 <span class="sd">                :class:`~langchain.runnable.Runnable` constructor.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">and</span> <span class="n">tool_config</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must specify at most one of tool_choice and tool_config, received &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;both:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool_choice</span><span class="si">=}</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool_config</span><span class="si">=}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">vertexai_tools</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">_VertexToolDict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">vertexai_functions</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">schema</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
-                <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">)</span>
-            <span class="p">):</span>
-                <span class="n">formatted_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">schema</span><span class="p">):</span>
-                <span class="n">formatted_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tool_from_callable</span><span class="p">(</span><span class="n">schema</span><span class="p">))</span>  <span class="c1"># type: ignore</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Tool must be a BaseTool, Pydantic model, or callable.&quot;</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">VertexTool</span><span class="p">):</span>
+                <span class="n">vertexai_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">:</span> <span class="n">schema</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()[</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">]}</span>
                 <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">functions</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;function_declarations&quot;</span> <span class="ow">in</span> <span class="n">schema</span><span class="p">:</span>
+                <span class="n">vertexai_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">_VertexToolDict</span><span class="p">,</span> <span class="n">schema</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">vertexai_functions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+        <span class="n">vertexai_tools</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_format_functions_to_vertex_tool_dict</span><span class="p">(</span><span class="n">vertexai_functions</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">tool_choice</span><span class="p">:</span>
+            <span class="n">all_names</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">f</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">vt</span> <span class="ow">in</span> <span class="n">vertexai_tools</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">vt</span><span class="p">[</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">]</span>
+            <span class="p">]</span>
+            <span class="n">tool_config</span> <span class="o">=</span> <span class="n">_tool_choice_to_tool_config</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="n">all_names</span><span class="p">)</span>
+        <span class="c1"># Bind dicts for easier serialization/deserialization.</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">vertexai_tools</span><span class="p">,</span> <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_start_chat</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">_ChatHistory</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
@@ -1178,14 +1167,86 @@
                 <span class="n">context</span><span class="o">=</span><span class="n">history</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="n">message_history</span><span class="o">=</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_chat</span><span class="p">(</span><span class="n">message_history</span><span class="o">=</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">start_chat</span><span class="p">(</span><span class="n">message_history</span><span class="o">=</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_gemini_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stream</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">_VertexToolDict</span><span class="p">,</span> <span class="n">VertexTool</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">functions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">_FunctionDeclarationLike</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tool_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">_ToolConfigDict</span><span class="p">,</span> <span class="n">ToolConfig</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">safety_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SafetySettingsType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_GeminiGenerateContentKwargs</span><span class="p">:</span>
+        <span class="n">generation_config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">tools</span><span class="p">:</span>
+            <span class="n">tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">_format_to_vertex_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">functions</span><span class="p">:</span>
+            <span class="n">tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">_format_to_vertex_tool</span><span class="p">(</span><span class="n">functions</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">if</span> <span class="n">tool_config</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_config</span><span class="p">,</span> <span class="n">ToolConfig</span><span class="p">):</span>
+            <span class="n">tool_config</span> <span class="o">=</span> <span class="n">_format_tool_config</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">_ToolConfigDict</span><span class="p">,</span> <span class="n">tool_config</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">_GeminiGenerateContentKwargs</span><span class="p">(</span>
+            <span class="n">generation_config</span><span class="o">=</span><span class="n">generation_config</span><span class="p">,</span>
+            <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span>
+            <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span>
+            <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_gemini_client_and_contents</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">GenerativeModel</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="n">Content</span><span class="p">]]:</span>
+        <span class="n">system</span><span class="p">,</span> <span class="n">contents</span> <span class="o">=</span> <span class="n">_parse_chat_history_gemini</span><span class="p">(</span>
+            <span class="n">messages</span><span class="p">,</span>
+            <span class="n">project</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">,</span>
+            <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># TODO: Store default client params explicitly so private params don&#39;t have to</span>
+        <span class="c1"># be accessed, like _safety_settings.</span>
+        <span class="n">client</span> <span class="o">=</span> <span class="n">GenerativeModel</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="n">system_instruction</span><span class="o">=</span><span class="n">system</span><span class="p">,</span>
+            <span class="n">safety_settings</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">_safety_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">client</span><span class="p">,</span> <span class="n">contents</span>
+
+    <span class="k">def</span> <span class="nf">_gemini_response_to_chat_result</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">GenerationResponse</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">usage</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">candidates</span><span class="p">:</span>
+            <span class="n">info</span> <span class="o">=</span> <span class="n">get_generation_info</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">is_gemini</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">usage_metadata</span><span class="o">=</span><span class="n">usage</span><span class="p">)</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+            <span class="n">generations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span> <span class="n">generation_info</span><span class="o">=</span><span class="n">info</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_gemini_chunk_to_generation_chunk</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">response_chunk</span><span class="p">:</span> <span class="n">GenerationResponse</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatGenerationChunk</span><span class="p">:</span>
+        <span class="n">top_candidate</span> <span class="o">=</span> <span class="n">response_chunk</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">top_candidate</span><span class="p">,</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">generation_info</span> <span class="o">=</span> <span class="n">get_generation_info</span><span class="p">(</span>
+            <span class="n">top_candidate</span><span class="p">,</span>
+            <span class="n">is_gemini</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">usage_metadata</span><span class="o">=</span><span class="n">response_chunk</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage_metadata&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+            <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+            <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+        <span class="p">)</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 20, 2024.
+          Last updated on Apr 21, 2024.
       </footer>
     </div>
   </div>
