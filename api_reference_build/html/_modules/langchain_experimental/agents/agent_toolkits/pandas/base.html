@@ -202,9 +202,14 @@
   <h1>Source code for langchain_experimental.agents.agent_toolkits.pandas.base</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Agent for working with pandas objects.&quot;&quot;&quot;</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">cast</span>
 
-<span class="kn">from</span> <span class="nn">langchain.agents</span> <span class="kn">import</span> <span class="n">AgentType</span><span class="p">,</span> <span class="n">create_openai_tools_agent</span><span class="p">,</span> <span class="n">create_react_agent</span>
+<span class="kn">from</span> <span class="nn">langchain.agents</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AgentType</span><span class="p">,</span>
+    <span class="n">create_openai_tools_agent</span><span class="p">,</span>
+    <span class="n">create_react_agent</span><span class="p">,</span>
+    <span class="n">create_tool_calling_agent</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain.agents.agent</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AgentExecutor</span><span class="p">,</span>
     <span class="n">BaseMultiActionAgent</span><span class="p">,</span>
@@ -218,7 +223,7 @@
     <span class="n">create_openai_functions_agent</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">BaseCallbackManager</span>
-<span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelLike</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="n">LanguageModelLike</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">SystemMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">BasePromptTemplate</span><span class="p">,</span>
@@ -349,7 +354,7 @@
     <span class="n">llm</span><span class="p">:</span> <span class="n">LanguageModelLike</span><span class="p">,</span>
     <span class="n">df</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="n">agent_type</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
-        <span class="n">AgentType</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;openai-tools&quot;</span><span class="p">]</span>
+        <span class="n">AgentType</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;openai-tools&quot;</span><span class="p">,</span> <span class="s2">&quot;tool-calling&quot;</span><span class="p">]</span>
     <span class="p">]</span> <span class="o">=</span> <span class="n">AgentType</span><span class="o">.</span><span class="n">ZERO_SHOT_REACT_DESCRIPTION</span><span class="p">,</span>
     <span class="n">callback_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseCallbackManager</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">prefix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -370,11 +375,13 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a Pandas agent from an LLM and dataframe(s).</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        llm: Language model to use for the agent.</span>
+<span class="sd">        llm: Language model to use for the agent. If agent_type is &quot;tool-calling&quot; then</span>
+<span class="sd">            llm is expected to support tool calling.</span>
 <span class="sd">        df: Pandas dataframe or list of Pandas dataframes.</span>
-<span class="sd">        agent_type: One of &quot;openai-tools&quot;, &quot;openai-functions&quot;, or</span>
+<span class="sd">        agent_type: One of &quot;tool-calling&quot;, &quot;openai-tools&quot;, &quot;openai-functions&quot;, or</span>
 <span class="sd">            &quot;zero-shot-react-description&quot;. Defaults to &quot;zero-shot-react-description&quot;.</span>
-<span class="sd">            &quot;openai-tools&quot; is recommended over &quot;openai-functions&quot;.</span>
+<span class="sd">            &quot;tool-calling&quot; is recommended over the legacy &quot;openai-tools&quot; and</span>
+<span class="sd">            &quot;openai-functions&quot; types.</span>
 <span class="sd">        callback_manager: DEPRECATED. Pass &quot;callbacks&quot; key into &#39;agent_executor_kwargs&#39;</span>
 <span class="sd">            instead to pass constructor callbacks to AgentExecutor.</span>
 <span class="sd">        prefix: Prompt prefix string.</span>
@@ -411,7 +418,7 @@
 <span class="sd">            agent_executor = create_pandas_dataframe_agent(</span>
 <span class="sd">                llm,</span>
 <span class="sd">                df,</span>
-<span class="sd">                agent_type=&quot;openai-tools&quot;,</span>
+<span class="sd">                agent_type=&quot;tool-calling&quot;,</span>
 <span class="sd">                verbose=True</span>
 <span class="sd">            )</span>
 
@@ -470,7 +477,7 @@
             <span class="n">input_keys_arg</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span>
             <span class="n">return_keys_arg</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">],</span>
         <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">agent_type</span> <span class="ow">in</span> <span class="p">(</span><span class="n">AgentType</span><span class="o">.</span><span class="n">OPENAI_FUNCTIONS</span><span class="p">,</span> <span class="s2">&quot;openai-tools&quot;</span><span class="p">):</span>
+    <span class="k">elif</span> <span class="n">agent_type</span> <span class="ow">in</span> <span class="p">(</span><span class="n">AgentType</span><span class="o">.</span><span class="n">OPENAI_FUNCTIONS</span><span class="p">,</span> <span class="s2">&quot;openai-tools&quot;</span><span class="p">,</span> <span class="s2">&quot;tool-calling&quot;</span><span class="p">):</span>
         <span class="n">prompt</span> <span class="o">=</span> <span class="n">_get_functions_prompt</span><span class="p">(</span>
             <span class="n">df</span><span class="p">,</span>
             <span class="n">prefix</span><span class="o">=</span><span class="n">prefix</span><span class="p">,</span>
@@ -479,21 +486,33 @@
             <span class="n">number_of_head_rows</span><span class="o">=</span><span class="n">number_of_head_rows</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">agent_type</span> <span class="o">==</span> <span class="n">AgentType</span><span class="o">.</span><span class="n">OPENAI_FUNCTIONS</span><span class="p">:</span>
+            <span class="n">runnable</span> <span class="o">=</span> <span class="n">create_openai_functions_agent</span><span class="p">(</span>
+                <span class="n">cast</span><span class="p">(</span><span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="n">llm</span><span class="p">),</span> <span class="n">tools</span><span class="p">,</span> <span class="n">prompt</span>
+            <span class="p">)</span>
             <span class="n">agent</span> <span class="o">=</span> <span class="n">RunnableAgent</span><span class="p">(</span>
-                <span class="n">runnable</span><span class="o">=</span><span class="n">create_openai_functions_agent</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">prompt</span><span class="p">),</span>  <span class="c1"># type: ignore</span>
+                <span class="n">runnable</span><span class="o">=</span><span class="n">runnable</span><span class="p">,</span>
                 <span class="n">input_keys_arg</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span>
                 <span class="n">return_keys_arg</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">],</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">agent_type</span> <span class="o">==</span> <span class="s2">&quot;openai-tools&quot;</span><span class="p">:</span>
+                <span class="n">runnable</span> <span class="o">=</span> <span class="n">create_openai_tools_agent</span><span class="p">(</span>
+                    <span class="n">cast</span><span class="p">(</span><span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="n">llm</span><span class="p">),</span> <span class="n">tools</span><span class="p">,</span> <span class="n">prompt</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">runnable</span> <span class="o">=</span> <span class="n">create_tool_calling_agent</span><span class="p">(</span>
+                    <span class="n">cast</span><span class="p">(</span><span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="n">llm</span><span class="p">),</span> <span class="n">tools</span><span class="p">,</span> <span class="n">prompt</span>
+                <span class="p">)</span>
             <span class="n">agent</span> <span class="o">=</span> <span class="n">RunnableMultiActionAgent</span><span class="p">(</span>
-                <span class="n">runnable</span><span class="o">=</span><span class="n">create_openai_tools_agent</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">prompt</span><span class="p">),</span>  <span class="c1"># type: ignore</span>
+                <span class="n">runnable</span><span class="o">=</span><span class="n">runnable</span><span class="p">,</span>
                 <span class="n">input_keys_arg</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">],</span>
                 <span class="n">return_keys_arg</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;output&quot;</span><span class="p">],</span>
             <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Agent type </span><span class="si">{</span><span class="n">agent_type</span><span class="si">}</span><span class="s2"> not supported at the moment. Must be one of &quot;</span>
-            <span class="s2">&quot;&#39;openai-tools&#39;, &#39;openai-functions&#39;, or &#39;zero-shot-react-description&#39;.&quot;</span>
+            <span class="s2">&quot;&#39;tool-calling&#39;, &#39;openai-tools&#39;, &#39;openai-functions&#39;, or &quot;</span>
+            <span class="s2">&quot;&#39;zero-shot-react-description&#39;.&quot;</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">AgentExecutor</span><span class="p">(</span>
         <span class="n">agent</span><span class="o">=</span><span class="n">agent</span><span class="p">,</span>
@@ -512,7 +531,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 21, 2024.
+          Last updated on Apr 22, 2024.
       </footer>
     </div>
   </div>
