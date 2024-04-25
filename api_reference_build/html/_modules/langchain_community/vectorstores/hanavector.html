@@ -210,6 +210,7 @@
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Iterable</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
@@ -235,6 +236,27 @@
     <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">COSINE</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;COSINE_SIMILARITY&quot;</span><span class="p">,</span> <span class="s2">&quot;DESC&quot;</span><span class="p">),</span>
     <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">EUCLIDEAN_DISTANCE</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;L2DISTANCE&quot;</span><span class="p">,</span> <span class="s2">&quot;ASC&quot;</span><span class="p">),</span>
 <span class="p">}</span>
+
+<span class="n">COMPARISONS_TO_SQL</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;$eq&quot;</span><span class="p">:</span> <span class="s2">&quot;=&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$ne&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;&gt;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$lt&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$lte&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;=&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$gt&quot;</span><span class="p">:</span> <span class="s2">&quot;&gt;&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$gte&quot;</span><span class="p">:</span> <span class="s2">&quot;&gt;=&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">IN_OPERATORS_TO_SQL</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;$in&quot;</span><span class="p">:</span> <span class="s2">&quot;IN&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;$nin&quot;</span><span class="p">:</span> <span class="s2">&quot;NOT IN&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">BETWEEN_OPERATOR</span> <span class="o">=</span> <span class="s2">&quot;$between&quot;</span>
+
+<span class="n">LIKE_OPERATOR</span> <span class="o">=</span> <span class="s2">&quot;$like&quot;</span>
+
+<span class="n">LOGICAL_OPERATORS_TO_SQL</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;$and&quot;</span><span class="p">:</span> <span class="s2">&quot;AND&quot;</span><span class="p">,</span> <span class="s2">&quot;$or&quot;</span><span class="p">:</span> <span class="s2">&quot;OR&quot;</span><span class="p">}</span>
+
 
 <span class="n">default_distance_strategy</span> <span class="o">=</span> <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">COSINE</span>
 <span class="n">default_table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;EMBEDDINGS&quot;</span>
@@ -609,25 +631,95 @@
         <span class="n">query_tuple</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">where_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">filter</span><span class="p">:</span>
+            <span class="n">where_str</span><span class="p">,</span> <span class="n">query_tuple</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_filter_object</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+            <span class="n">where_str</span> <span class="o">=</span> <span class="s2">&quot; WHERE &quot;</span> <span class="o">+</span> <span class="n">where_str</span>
+        <span class="k">return</span> <span class="n">where_str</span><span class="p">,</span> <span class="n">query_tuple</span>
+
+    <span class="k">def</span> <span class="nf">_process_filter_object</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">filter</span><span class="p">):</span>  <span class="c1"># type: ignore[no-untyped-def]</span>
+        <span class="n">query_tuple</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">where_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">filter</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">filter</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
-                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">where_str</span> <span class="o">+=</span> <span class="s2">&quot; WHERE &quot;</span>
-                <span class="k">else</span><span class="p">:</span>
+                <span class="n">filter_value</span> <span class="o">=</span> <span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
                     <span class="n">where_str</span> <span class="o">+=</span> <span class="s2">&quot; AND &quot;</span>
 
-                <span class="n">where_str</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; JSON_VALUE(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_column</span><span class="si">}</span><span class="s2">, &#39;$.</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;) = ?&quot;</span>
+                <span class="c1"># Handling of &#39;special&#39; boolean operators &quot;$and&quot;, &quot;$or&quot;</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">LOGICAL_OPERATORS_TO_SQL</span><span class="p">:</span>
+                    <span class="n">logical_operator</span> <span class="o">=</span> <span class="n">LOGICAL_OPERATORS_TO_SQL</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+                    <span class="n">logical_operands</span> <span class="o">=</span> <span class="n">filter_value</span>
+                    <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">logical_operand</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">logical_operands</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">j</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">where_str</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">logical_operator</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="p">(</span>
+                            <span class="n">where_str_logical</span><span class="p">,</span>
+                            <span class="n">query_tuple_logical</span><span class="p">,</span>
+                        <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_filter_object</span><span class="p">(</span><span class="n">logical_operand</span><span class="p">)</span>
+                        <span class="n">where_str</span> <span class="o">+=</span> <span class="n">where_str_logical</span>
+                        <span class="n">query_tuple</span> <span class="o">+=</span> <span class="n">query_tuple_logical</span>
+                    <span class="k">continue</span>
 
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="nb">bool</span><span class="p">):</span>
-                    <span class="k">if</span> <span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">]:</span>
-                        <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;true&quot;</span><span class="p">)</span>
+                <span class="n">operator</span> <span class="o">=</span> <span class="s2">&quot;=&quot;</span>
+                <span class="n">sql_param</span> <span class="o">=</span> <span class="s2">&quot;?&quot;</span>
+
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filter_value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                    <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;true&quot;</span> <span class="k">if</span> <span class="n">filter_value</span> <span class="k">else</span> <span class="s2">&quot;false&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filter_value</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filter_value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">filter_value</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">filter_value</span><span class="p">,</span> <span class="n">Dict</span><span class="p">):</span>
+                    <span class="c1"># Handling of &#39;special&#39; operators starting with &quot;$&quot;</span>
+                    <span class="n">special_op</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">filter_value</span><span class="p">))</span>
+                    <span class="n">special_val</span> <span class="o">=</span> <span class="n">filter_value</span><span class="p">[</span><span class="n">special_op</span><span class="p">]</span>
+                    <span class="c1"># &quot;$eq&quot;, &quot;$ne&quot;, &quot;$lt&quot;, &quot;$lte&quot;, &quot;$gt&quot;, &quot;$gte&quot;</span>
+                    <span class="k">if</span> <span class="n">special_op</span> <span class="ow">in</span> <span class="n">COMPARISONS_TO_SQL</span><span class="p">:</span>
+                        <span class="n">operator</span> <span class="o">=</span> <span class="n">COMPARISONS_TO_SQL</span><span class="p">[</span><span class="n">special_op</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">special_val</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                            <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;true&quot;</span> <span class="k">if</span> <span class="n">filter_value</span> <span class="k">else</span> <span class="s2">&quot;false&quot;</span><span class="p">)</span>
+                        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">special_val</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+                            <span class="n">sql_param</span> <span class="o">=</span> <span class="s2">&quot;CAST(? as float)&quot;</span>
+                            <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">special_val</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">special_val</span><span class="p">)</span>
+                    <span class="c1"># &quot;$between&quot;</span>
+                    <span class="k">elif</span> <span class="n">special_op</span> <span class="o">==</span> <span class="n">BETWEEN_OPERATOR</span><span class="p">:</span>
+                        <span class="n">between_from</span> <span class="o">=</span> <span class="n">special_val</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="n">between_to</span> <span class="o">=</span> <span class="n">special_val</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                        <span class="n">operator</span> <span class="o">=</span> <span class="s2">&quot;BETWEEN&quot;</span>
+                        <span class="n">sql_param</span> <span class="o">=</span> <span class="s2">&quot;? AND ?&quot;</span>
+                        <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">between_from</span><span class="p">)</span>
+                        <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">between_to</span><span class="p">)</span>
+                    <span class="c1"># &quot;$like&quot;</span>
+                    <span class="k">elif</span> <span class="n">special_op</span> <span class="o">==</span> <span class="n">LIKE_OPERATOR</span><span class="p">:</span>
+                        <span class="n">operator</span> <span class="o">=</span> <span class="s2">&quot;LIKE&quot;</span>
+                        <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">special_val</span><span class="p">)</span>
+                    <span class="c1"># &quot;$in&quot;, &quot;$nin&quot;</span>
+                    <span class="k">elif</span> <span class="n">special_op</span> <span class="ow">in</span> <span class="n">IN_OPERATORS_TO_SQL</span><span class="p">:</span>
+                        <span class="n">operator</span> <span class="o">=</span> <span class="n">IN_OPERATORS_TO_SQL</span><span class="p">[</span><span class="n">special_op</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">special_val</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">list_entry</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">special_val</span><span class="p">):</span>
+                                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                                    <span class="n">sql_param</span> <span class="o">=</span> <span class="s2">&quot;(&quot;</span>
+                                <span class="n">sql_param</span> <span class="o">=</span> <span class="n">sql_param</span> <span class="o">+</span> <span class="s2">&quot;?&quot;</span>
+                                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">special_val</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+                                    <span class="n">sql_param</span> <span class="o">=</span> <span class="n">sql_param</span> <span class="o">+</span> <span class="s2">&quot;)&quot;</span>
+                                <span class="k">else</span><span class="p">:</span>
+                                    <span class="n">sql_param</span> <span class="o">=</span> <span class="n">sql_param</span> <span class="o">+</span> <span class="s2">&quot;,&quot;</span>
+                                <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">list_entry</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;Unsupported value for </span><span class="si">{</span><span class="n">operator</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">special_val</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="p">)</span>
                     <span class="k">else</span><span class="p">:</span>
-                        <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;false&quot;</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
-                    <span class="n">query_tuple</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported operator: </span><span class="si">{</span><span class="n">special_op</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Unsupported filter data-type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="nb">filter</span><span class="p">[</span><span class="n">key</span><span class="p">])</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Unsupported filter data-type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">filter_value</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
+
+                <span class="n">where_str</span> <span class="o">+=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot; JSON_VALUE(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_column</span><span class="si">}</span><span class="s2">, &#39;$.</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;)&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">operator</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">sql_param</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">where_str</span><span class="p">,</span> <span class="n">query_tuple</span>
 
@@ -783,7 +875,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

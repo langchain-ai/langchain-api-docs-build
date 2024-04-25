@@ -206,6 +206,7 @@
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
@@ -231,10 +232,17 @@
 <span class="kn">import</span> <span class="nn">google.generativeai</span> <span class="k">as</span> <span class="nn">genai</span>  <span class="c1"># type: ignore[import]</span>
 <span class="kn">import</span> <span class="nn">proto</span>  <span class="c1"># type: ignore[import]</span>
 <span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">from</span> <span class="nn">google.generativeai.types</span> <span class="kn">import</span> <span class="n">SafetySettingDict</span>  <span class="c1"># type: ignore[import]</span>
+<span class="kn">from</span> <span class="nn">google.generativeai.types</span> <span class="kn">import</span> <span class="n">Tool</span> <span class="k">as</span> <span class="n">GoogleTool</span>  <span class="c1"># type: ignore[import]</span>
+<span class="kn">from</span> <span class="nn">google.generativeai.types.content_types</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore[import]</span>
+    <span class="n">FunctionDeclarationType</span><span class="p">,</span>
+    <span class="n">ToolDict</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="n">BaseChatModel</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AIMessage</span><span class="p">,</span>
@@ -242,10 +250,16 @@
     <span class="n">BaseMessage</span><span class="p">,</span>
     <span class="n">FunctionMessage</span><span class="p">,</span>
     <span class="n">HumanMessage</span><span class="p">,</span>
+    <span class="n">InvalidToolCall</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
+    <span class="n">ToolCall</span><span class="p">,</span>
+    <span class="n">ToolCallChunk</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="n">parse_tool_calls</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">SecretStr</span><span class="p">,</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span>
 <span class="kn">from</span> <span class="nn">tenacity</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">before_sleep_log</span><span class="p">,</span>
@@ -257,7 +271,11 @@
 
 <span class="kn">from</span> <span class="nn">langchain_google_genai._common</span> <span class="kn">import</span> <span class="n">GoogleGenerativeAIError</span>
 <span class="kn">from</span> <span class="nn">langchain_google_genai._function_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_tool_choice_to_tool_config</span><span class="p">,</span>
+    <span class="n">_ToolChoiceType</span><span class="p">,</span>
+    <span class="n">_ToolConfigDict</span><span class="p">,</span>
     <span class="n">convert_to_genai_function_declarations</span><span class="p">,</span>
+    <span class="n">tool_to_dict</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_google_genai.llms</span> <span class="kn">import</span> <span class="n">GoogleModelFamily</span><span class="p">,</span> <span class="n">_BaseGoogleGenerativeAI</span>
 
@@ -552,6 +570,40 @@
                     <span class="p">)</span>
                 <span class="p">)</span>
             <span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+            <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
+            <span class="n">prev_message</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">input_messages</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">prev_message</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prev_message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">prev_message</span><span class="o">.</span><span class="n">tool_calls</span>
+            <span class="p">):</span>
+                <span class="c1"># message.name can be null for ToolMessage</span>
+                <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">prev_message</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">name</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">name</span>  <span class="c1"># type: ignore</span>
+            <span class="n">tool_response</span><span class="p">:</span> <span class="n">Any</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">tool_response</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">tool_response</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+                <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
+                    <span class="n">tool_response</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span>  <span class="c1"># leave as str representation</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">glm</span><span class="o">.</span><span class="n">Part</span><span class="p">(</span>
+                    <span class="n">function_response</span><span class="o">=</span><span class="n">glm</span><span class="o">.</span><span class="n">FunctionResponse</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                        <span class="n">response</span><span class="o">=</span><span class="p">(</span>
+                            <span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">tool_response</span><span class="p">}</span>
+                            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_response</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="n">tool_response</span>
+                        <span class="p">),</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Unexpected message with type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">message</span><span class="p">)</span><span class="si">}</span><span class="s2"> at the position </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">.&quot;</span>
@@ -562,24 +614,89 @@
 
 
 <span class="k">def</span> <span class="nf">_parse_response_candidate</span><span class="p">(</span>
-    <span class="n">response_candidate</span><span class="p">:</span> <span class="n">glm</span><span class="o">.</span><span class="n">Candidate</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">response_candidate</span><span class="p">:</span> <span class="n">glm</span><span class="o">.</span><span class="n">Candidate</span><span class="p">,</span> <span class="n">streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AIMessage</span><span class="p">:</span>
-    <span class="n">first_part</span> <span class="o">=</span> <span class="n">response_candidate</span><span class="o">.</span><span class="n">content</span><span class="o">.</span><span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">first_part</span><span class="o">.</span><span class="n">function_call</span><span class="p">:</span>
-        <span class="n">function_call</span> <span class="o">=</span> <span class="n">proto</span><span class="o">.</span><span class="n">Message</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">first_part</span><span class="o">.</span><span class="n">function_call</span><span class="p">)</span>
-        <span class="n">function_call</span><span class="p">[</span><span class="s2">&quot;arguments&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">function_call</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">,</span> <span class="p">{}))</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">AIMessageChunk</span> <span class="k">if</span> <span class="n">stream</span> <span class="k">else</span> <span class="n">AIMessage</span><span class="p">)(</span>
-            <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;function_call&quot;</span><span class="p">:</span> <span class="n">function_call</span><span class="p">}</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">parts</span> <span class="o">=</span> <span class="n">response_candidate</span><span class="o">.</span><span class="n">content</span><span class="o">.</span><span class="n">parts</span>
+    <span class="n">content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">:</span>
-        <span class="n">content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="p">[</span><span class="n">proto</span><span class="o">.</span><span class="n">Message</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">part</span><span class="p">)</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">]</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">AIMessageChunk</span> <span class="k">if</span> <span class="n">stream</span> <span class="k">else</span> <span class="n">AIMessage</span><span class="p">)(</span>
-        <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">additional_kwargs</span><span class="o">=</span><span class="p">{}</span>
+    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">response_candidate</span><span class="o">.</span><span class="n">content</span><span class="o">.</span><span class="n">parts</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">text</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">part</span><span class="o">.</span><span class="n">text</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">text</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">content</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">text</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">text</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="p">[</span><span class="n">content</span><span class="p">,</span> <span class="n">text</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="n">text</span><span class="p">:</span>
+                <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">text</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Unexpected content type&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">part</span><span class="o">.</span><span class="n">function_call</span><span class="p">:</span>
+            <span class="c1"># TODO: support multiple function calls</span>
+            <span class="k">if</span> <span class="s2">&quot;function_call&quot;</span> <span class="ow">in</span> <span class="n">additional_kwargs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Multiple function calls are not currently supported&quot;</span><span class="p">)</span>
+            <span class="n">function_call</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">part</span><span class="o">.</span><span class="n">function_call</span><span class="o">.</span><span class="n">name</span><span class="p">}</span>
+            <span class="c1"># dump to match other function calling llm for now</span>
+            <span class="n">function_call_args_dict</span> <span class="o">=</span> <span class="n">proto</span><span class="o">.</span><span class="n">Message</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="n">part</span><span class="o">.</span><span class="n">function_call</span><span class="p">)[</span><span class="s2">&quot;args&quot;</span><span class="p">]</span>
+            <span class="n">function_call</span><span class="p">[</span><span class="s2">&quot;arguments&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+                <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">function_call_args_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">function_call_args_dict</span><span class="p">}</span>
+            <span class="p">)</span>
+            <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;function_call&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">function_call</span>
+
+            <span class="k">if</span> <span class="n">streaming</span><span class="p">:</span>
+                <span class="n">tool_call_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">ToolCallChunk</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                        <span class="n">args</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
+                        <span class="nb">id</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())),</span>
+                        <span class="n">index</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>  <span class="c1"># type: ignore</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">tool_calls_dicts</span> <span class="o">=</span> <span class="n">parse_tool_calls</span><span class="p">(</span>
+                        <span class="p">[{</span><span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">function_call</span><span class="p">}],</span>
+                        <span class="n">return_id</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">ToolCall</span><span class="p">(</span>
+                            <span class="n">name</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                            <span class="n">args</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">],</span>
+                            <span class="nb">id</span><span class="o">=</span><span class="n">tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())),</span>
+                        <span class="p">)</span>
+                        <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls_dicts</span>
+                    <span class="p">]</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">invalid_tool_calls</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">InvalidToolCall</span><span class="p">(</span>
+                            <span class="n">name</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                            <span class="n">args</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
+                            <span class="nb">id</span><span class="o">=</span><span class="n">function_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())),</span>
+                            <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+                        <span class="p">)</span>
+                    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">content</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">streaming</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+            <span class="n">content</span><span class="o">=</span><span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]],</span> <span class="n">content</span><span class="p">),</span>
+            <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+            <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span>
+        <span class="n">content</span><span class="o">=</span><span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]],</span> <span class="n">content</span><span class="p">),</span>
+        <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+        <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span><span class="p">,</span>
+        <span class="n">invalid_tool_calls</span><span class="o">=</span><span class="n">invalid_tool_calls</span><span class="p">,</span>
     <span class="p">)</span>
 
 
@@ -602,7 +719,7 @@
         <span class="p">]</span>
         <span class="n">generations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="p">(</span><span class="n">ChatGenerationChunk</span> <span class="k">if</span> <span class="n">stream</span> <span class="k">else</span> <span class="n">ChatGeneration</span><span class="p">)(</span>
-                <span class="n">message</span><span class="o">=</span><span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">stream</span><span class="p">),</span>
+                <span class="n">message</span><span class="o">=</span><span class="n">_parse_response_candidate</span><span class="p">(</span><span class="n">candidate</span><span class="p">,</span> <span class="n">streaming</span><span class="o">=</span><span class="n">stream</span><span class="p">),</span>
                 <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
@@ -829,20 +946,29 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ToolDict</span><span class="p">,</span> <span class="n">GoogleTool</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">functions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">FunctionDeclarationType</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">safety_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SafetySettingDict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tool_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">_ToolConfigDict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">genai</span><span class="o">.</span><span class="n">ChatSession</span><span class="p">,</span> <span class="n">genai</span><span class="o">.</span><span class="n">types</span><span class="o">.</span><span class="n">ContentDict</span><span class="p">]:</span>
         <span class="n">client</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span>
-        <span class="n">functions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">safety_settings</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;safety_settings&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">safety_settings</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">functions</span> <span class="ow">or</span> <span class="n">safety_settings</span><span class="p">:</span>
-            <span class="n">tools</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">convert_to_genai_function_declarations</span><span class="p">(</span><span class="n">functions</span><span class="p">)</span> <span class="k">if</span> <span class="n">functions</span> <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
+        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">tools</span><span class="p">:</span>
+            <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">convert_to_genai_function_declarations</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span>
+            <span class="p">]</span>
+        <span class="k">elif</span> <span class="n">functions</span><span class="p">:</span>
+            <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_genai_function_declarations</span><span class="p">(</span><span class="n">functions</span><span class="p">)]</span>
+
+        <span class="k">if</span> <span class="n">formatted_tools</span> <span class="ow">or</span> <span class="n">safety_settings</span><span class="p">:</span>
             <span class="n">client</span> <span class="o">=</span> <span class="n">genai</span><span class="o">.</span><span class="n">GenerativeModel</span><span class="p">(</span>
-                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">tools</span><span class="o">=</span><span class="n">tools</span><span class="p">,</span> <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span>
+                <span class="n">model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+                <span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span>
+                <span class="n">safety_settings</span><span class="o">=</span><span class="n">safety_settings</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_params</span><span class="p">(</span><span class="n">stop</span><span class="p">,</span> <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">system_instruction</span><span class="p">,</span> <span class="n">history</span> <span class="o">=</span> <span class="n">_parse_chat_history</span><span class="p">(</span>
             <span class="n">messages</span><span class="p">,</span>
             <span class="n">convert_system_message_to_human</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">convert_system_message_to_human</span><span class="p">,</span>
@@ -873,14 +999,48 @@
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">count_text_tokens</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">text</span><span class="p">)</span>
             <span class="n">token_count</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;token_count&quot;</span><span class="p">]</span>
 
-        <span class="k">return</span> <span class="n">token_count</span></div></div>
+        <span class="k">return</span> <span class="n">token_count</span></div>
+
+<div class="viewcode-block" id="ChatGoogleGenerativeAI.bind_tools"><a class="viewcode-back" href="../../chat_models/langchain_google_genai.chat_models.ChatGoogleGenerativeAI.html#langchain_google_genai.chat_models.ChatGoogleGenerativeAI.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">ToolDict</span><span class="p">,</span> <span class="n">GoogleTool</span><span class="p">]],</span>
+        <span class="n">tool_config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">_ToolConfigDict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">_ToolChoiceType</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind tool-like objects to this chat model.</span>
+
+<span class="sd">        Assumes model is compatible with google-generativeAI tool-calling API.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tools: A list of tool definitions to bind to this chat model.</span>
+<span class="sd">                Can be a pydantic model, callable, or BaseTool. Pydantic</span>
+<span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
+<span class="sd">                their schema dictionary representation.</span>
+<span class="sd">            **kwargs: Any additional parameters to pass to the</span>
+<span class="sd">                :class:`~langchain.runnable.Runnable` constructor.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">and</span> <span class="n">tool_config</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must specify at most one of tool_choice and tool_config, received &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;both:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool_choice</span><span class="si">=}</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool_config</span><span class="si">=}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Bind dicts for easier serialization/deserialization.</span>
+        <span class="n">genai_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">tool_to_dict</span><span class="p">(</span><span class="n">convert_to_genai_function_declarations</span><span class="p">(</span><span class="n">tools</span><span class="p">))]</span>
+        <span class="k">if</span> <span class="n">tool_choice</span><span class="p">:</span>
+            <span class="n">all_names</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">f</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">genai_tools</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">t</span><span class="p">[</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">]</span>
+            <span class="p">]</span>
+            <span class="n">tool_config</span> <span class="o">=</span> <span class="n">_tool_choice_to_tool_config</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="n">all_names</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">genai_tools</span><span class="p">,</span> <span class="n">tool_config</span><span class="o">=</span><span class="n">tool_config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

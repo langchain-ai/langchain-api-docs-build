@@ -209,6 +209,7 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
 
+<span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForChainRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForChainRun</span><span class="p">,</span>
@@ -435,8 +436,83 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="ConversationalRetrievalChain"><a class="viewcode-back" href="../../../../chains/langchain.chains.conversational_retrieval.base.ConversationalRetrievalChain.html#langchain.chains.conversational_retrieval.base.ConversationalRetrievalChain">[docs]</a><span class="k">class</span> <span class="nc">ConversationalRetrievalChain</span><span class="p">(</span><span class="n">BaseConversationalRetrievalChain</span><span class="p">):</span>
+<div class="viewcode-block" id="ConversationalRetrievalChain"><a class="viewcode-back" href="../../../../chains/langchain.chains.conversational_retrieval.base.ConversationalRetrievalChain.html#langchain.chains.conversational_retrieval.base.ConversationalRetrievalChain">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.17&quot;</span><span class="p">,</span>
+    <span class="n">alternative</span><span class="o">=</span><span class="p">(</span>
+        <span class="s2">&quot;create_history_aware_retriever together with create_retrieval_chain &quot;</span>
+        <span class="s2">&quot;(see example in docstring)&quot;</span>
+    <span class="p">),</span>
+    <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">class</span> <span class="nc">ConversationalRetrievalChain</span><span class="p">(</span><span class="n">BaseConversationalRetrievalChain</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Chain for having a conversation based on retrieved documents.</span>
+
+<span class="sd">    This class is deprecated. See below for an example implementation using</span>
+<span class="sd">    `create_retrieval_chain`. Additional walkthroughs can be found at</span>
+<span class="sd">    https://python.langchain.com/docs/use_cases/question_answering/chat_history</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain.chains import (</span>
+<span class="sd">                create_history_aware_retriever,</span>
+<span class="sd">                create_retrieval_chain,</span>
+<span class="sd">            )</span>
+<span class="sd">            from langchain.chains.combine_documents import create_stuff_documents_chain</span>
+<span class="sd">            from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder</span>
+<span class="sd">            from langchain_openai import ChatOpenAI</span>
+
+
+<span class="sd">            retriever = ...  # Your retriever</span>
+
+<span class="sd">            llm = ChatOpenAI()</span>
+
+<span class="sd">            # Contextualize question</span>
+<span class="sd">            contextualize_q_system_prompt = (</span>
+<span class="sd">                &quot;Given a chat history and the latest user question &quot;</span>
+<span class="sd">                &quot;which might reference context in the chat history, &quot;</span>
+<span class="sd">                &quot;formulate a standalone question which can be understood &quot;</span>
+<span class="sd">                &quot;without the chat history. Do NOT answer the question, just &quot;</span>
+<span class="sd">                &quot;reformulate it if needed and otherwise return it as is.&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            contextualize_q_prompt = ChatPromptTemplate.from_messages(</span>
+<span class="sd">                [</span>
+<span class="sd">                    (&quot;system&quot;, contextualize_q_system_prompt),</span>
+<span class="sd">                    MessagesPlaceholder(&quot;chat_history&quot;),</span>
+<span class="sd">                    (&quot;human&quot;, &quot;{input}&quot;),</span>
+<span class="sd">                ]</span>
+<span class="sd">            )</span>
+<span class="sd">            history_aware_retriever = create_history_aware_retriever(</span>
+<span class="sd">                llm, retriever, contextualize_q_prompt</span>
+<span class="sd">            )</span>
+
+<span class="sd">            # Answer question</span>
+<span class="sd">            qa_system_prompt = (</span>
+<span class="sd">                &quot;You are an assistant for question-answering tasks. Use &quot;</span>
+<span class="sd">                &quot;the following pieces of retrieved context to answer the &quot;</span>
+<span class="sd">                &quot;question. If you don&#39;t know the answer, just say that you &quot;</span>
+<span class="sd">                &quot;don&#39;t know. Use three sentences maximum and keep the answer &quot;</span>
+<span class="sd">                &quot;concise.&quot;</span>
+<span class="sd">                &quot;\n\n&quot;</span>
+<span class="sd">                &quot;{context}&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            qa_prompt = ChatPromptTemplate.from_messages(</span>
+<span class="sd">                [</span>
+<span class="sd">                    (&quot;system&quot;, qa_system_prompt),</span>
+<span class="sd">                    MessagesPlaceholder(&quot;chat_history&quot;),</span>
+<span class="sd">                    (&quot;human&quot;, &quot;{input}&quot;),</span>
+<span class="sd">                ]</span>
+<span class="sd">            )</span>
+<span class="sd">            # Below we use create_stuff_documents_chain to feed all retrieved context</span>
+<span class="sd">            # into the LLM. Note that we can also use StuffDocumentsChain and other</span>
+<span class="sd">            # instances of BaseCombineDocumentsChain.</span>
+<span class="sd">            question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)</span>
+<span class="sd">            rag_chain = create_retrieval_chain(</span>
+<span class="sd">                history_aware_retriever, question_answer_chain</span>
+<span class="sd">            )</span>
+
+<span class="sd">            # Usage:</span>
+<span class="sd">            chat_history = []  # Collect chat history here (a sequence of messages)</span>
+<span class="sd">            rag_chain.invoke({&quot;input&quot;: query, &quot;chat_history&quot;: chat_history})</span>
 
 <span class="sd">    This chain takes in chat history (a list of messages) and new questions,</span>
 <span class="sd">    and then returns an answer to that question.</span>
@@ -516,8 +592,8 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">CallbackManagerForChainRun</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get docs.&quot;&quot;&quot;</span>
-        <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">retriever</span><span class="o">.</span><span class="n">get_relevant_documents</span><span class="p">(</span>
-            <span class="n">question</span><span class="p">,</span> <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">retriever</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+            <span class="n">question</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;callbacks&quot;</span><span class="p">:</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()}</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reduce_tokens_below_limit</span><span class="p">(</span><span class="n">docs</span><span class="p">)</span>
 
@@ -529,8 +605,8 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">AsyncCallbackManagerForChainRun</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get docs.&quot;&quot;&quot;</span>
-        <span class="n">docs</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">retriever</span><span class="o">.</span><span class="n">aget_relevant_documents</span><span class="p">(</span>
-            <span class="n">question</span><span class="p">,</span> <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">retriever</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
+            <span class="n">question</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;callbacks&quot;</span><span class="p">:</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()}</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reduce_tokens_below_limit</span><span class="p">(</span><span class="n">docs</span><span class="p">)</span>
 
@@ -673,7 +749,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

@@ -200,7 +200,8 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_community.llms.predibase</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.llms</span> <span class="kn">import</span> <span class="n">LLM</span>
@@ -219,13 +220,15 @@
 <span class="sd">    An optional `adapter_id` parameter is the Predibase ID or HuggingFace ID of a</span>
 <span class="sd">    fine-tuned LLM adapter, whose base model is the `model` parameter; the</span>
 <span class="sd">    fine-tuned adapter must be compatible with its base model;</span>
-<span class="sd">    otherwise, an error is raised.  If a Predibase ID references the</span>
-<span class="sd">    fine-tuned adapter, then the `adapter_version` in the adapter repository can</span>
-<span class="sd">    be optionally specified; omitting it defaults to the most recent version.</span>
+<span class="sd">    otherwise, an error is raised.  If the fine-tuned adapter is hosted at Predibase,</span>
+<span class="sd">    then `adapter_version` in the adapter repository must be specified.</span>
+
+<span class="sd">    An optional `predibase_sdk_version` parameter defaults to latest SDK version.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">predibase_api_key</span><span class="p">:</span> <span class="n">SecretStr</span>
+    <span class="n">predibase_sdk_version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">adapter_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">adapter_version</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
@@ -248,79 +251,176 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">predibase</span> <span class="kn">import</span> <span class="n">PredibaseClient</span>
-            <span class="kn">from</span> <span class="nn">predibase.pql</span> <span class="kn">import</span> <span class="n">get_session</span>
-            <span class="kn">from</span> <span class="nn">predibase.pql.api</span> <span class="kn">import</span> <span class="p">(</span>
-                <span class="n">ServerResponseError</span><span class="p">,</span>
-                <span class="n">Session</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="kn">from</span> <span class="nn">predibase.resource.llm.interface</span> <span class="kn">import</span> <span class="p">(</span>
-                <span class="n">HuggingFaceLLM</span><span class="p">,</span>
-                <span class="n">LLMDeployment</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="kn">from</span> <span class="nn">predibase.resource.llm.response</span> <span class="kn">import</span> <span class="n">GeneratedResponse</span>
-            <span class="kn">from</span> <span class="nn">predibase.resource.model</span> <span class="kn">import</span> <span class="n">Model</span>
-
-            <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">(</span>
-                <span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predibase_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
-                <span class="n">gateway</span><span class="o">=</span><span class="s2">&quot;https://api.app.predibase.com/v1&quot;</span><span class="p">,</span>
-                <span class="n">serving_endpoint</span><span class="o">=</span><span class="s2">&quot;serving.app.predibase.com&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">pc</span><span class="p">:</span> <span class="n">PredibaseClient</span> <span class="o">=</span> <span class="n">PredibaseClient</span><span class="p">(</span><span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">&quot;Could not import Predibase Python package. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install predibase`.&quot;</span>
-            <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Your API key is not correct. Please try again&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
         <span class="n">options</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_options_for_generation</span>
         <span class="p">)</span>
-        <span class="n">base_llm_deployment</span><span class="p">:</span> <span class="n">LLMDeployment</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span>
-            <span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;pb://deployments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_deprecated_sdk_version</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="kn">from</span> <span class="nn">predibase</span> <span class="kn">import</span> <span class="n">PredibaseClient</span>
+                <span class="kn">from</span> <span class="nn">predibase.pql</span> <span class="kn">import</span> <span class="n">get_session</span>
+                <span class="kn">from</span> <span class="nn">predibase.pql.api</span> <span class="kn">import</span> <span class="p">(</span>
+                    <span class="n">ServerResponseError</span><span class="p">,</span>
+                    <span class="n">Session</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="kn">from</span> <span class="nn">predibase.resource.llm.interface</span> <span class="kn">import</span> <span class="p">(</span>
+                    <span class="n">HuggingFaceLLM</span><span class="p">,</span>
+                    <span class="n">LLMDeployment</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="kn">from</span> <span class="nn">predibase.resource.llm.response</span> <span class="kn">import</span> <span class="n">GeneratedResponse</span>
+                <span class="kn">from</span> <span class="nn">predibase.resource.model</span> <span class="kn">import</span> <span class="n">Model</span>
+
+                <span class="n">session</span><span class="p">:</span> <span class="n">Session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">(</span>
+                    <span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predibase_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">(),</span>
+                    <span class="n">gateway</span><span class="o">=</span><span class="s2">&quot;https://api.app.predibase.com/v1&quot;</span><span class="p">,</span>
+                    <span class="n">serving_endpoint</span><span class="o">=</span><span class="s2">&quot;serving.app.predibase.com&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">pc</span><span class="p">:</span> <span class="n">PredibaseClient</span> <span class="o">=</span> <span class="n">PredibaseClient</span><span class="p">(</span><span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Could not import Predibase Python package. &quot;</span>
+                    <span class="s2">&quot;Please install it with `pip install predibase`.&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Your API key is not correct. Please try again&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+
+            <span class="n">base_llm_deployment</span><span class="p">:</span> <span class="n">LLMDeployment</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span>
+                <span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;pb://deployments/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="n">result</span><span class="p">:</span> <span class="n">GeneratedResponse</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">:</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                Attempt to retrieve the fine-tuned adapter from a Predibase</span>
+<span class="sd">                repository.  If absent, then load the fine-tuned adapter</span>
+<span class="sd">                from a HuggingFace repository.</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+                <span class="n">adapter_model</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Model</span><span class="p">,</span> <span class="n">HuggingFaceLLM</span><span class="p">]</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">adapter_model</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">get_model</span><span class="p">(</span>
+                        <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">,</span>
+                        <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_version</span><span class="p">,</span>
+                        <span class="n">model_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="n">ServerResponseError</span><span class="p">:</span>
+                    <span class="c1"># Predibase does not recognize the adapter ID (query HuggingFace).</span>
+                    <span class="n">adapter_model</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;hf://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">with_adapter</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">adapter_model</span><span class="p">)</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                    <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                    <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                    <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                    <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">response</span>
+
+        <span class="kn">from</span> <span class="nn">predibase</span> <span class="kn">import</span> <span class="n">Predibase</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;PREDIBASE_GATEWAY&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;https://api.app.predibase.com&quot;</span>
+        <span class="n">predibase</span><span class="p">:</span> <span class="n">Predibase</span> <span class="o">=</span> <span class="n">Predibase</span><span class="p">(</span>
+            <span class="n">api_token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">predibase_api_key</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
         <span class="p">)</span>
-        <span class="n">result</span><span class="p">:</span> <span class="n">GeneratedResponse</span>
+
+        <span class="kn">import</span> <span class="nn">requests</span>
+        <span class="kn">from</span> <span class="nn">lorax.client</span> <span class="kn">import</span> <span class="n">Client</span> <span class="k">as</span> <span class="n">LoraxClient</span>
+        <span class="kn">from</span> <span class="nn">lorax.errors</span> <span class="kn">import</span> <span class="n">GenerationError</span>
+        <span class="kn">from</span> <span class="nn">lorax.types</span> <span class="kn">import</span> <span class="n">Response</span>
+
+        <span class="n">lorax_client</span><span class="p">:</span> <span class="n">LoraxClient</span> <span class="o">=</span> <span class="n">predibase</span><span class="o">.</span><span class="n">deployments</span><span class="o">.</span><span class="n">client</span><span class="p">(</span>
+            <span class="n">deployment_ref</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="p">)</span>
+
+        <span class="n">response</span><span class="p">:</span> <span class="n">Response</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">:</span>
 <span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">            Attempt to retrieve the fine-tuned adapter from a Predibase repository.</span>
 <span class="sd">            If absent, then load the fine-tuned adapter from a HuggingFace repository.</span>
 <span class="sd">            &quot;&quot;&quot;</span>
-            <span class="n">adapter_model</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Model</span><span class="p">,</span> <span class="n">HuggingFaceLLM</span><span class="p">]</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">adapter_model</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">get_model</span><span class="p">(</span>
-                    <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">,</span>
-                    <span class="n">version</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_version</span><span class="p">,</span>
-                    <span class="n">model_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">except</span> <span class="n">ServerResponseError</span><span class="p">:</span>
-                <span class="c1"># Predibase does not recognize the adapter ID (query HuggingFace).</span>
-                <span class="n">adapter_model</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">LLM</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;hf://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">with_adapter</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">adapter_model</span><span class="p">)</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
-                <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapter_version</span><span class="p">:</span>
+                <span class="c1"># Since the adapter version is provided, query the Predibase repository.</span>
+                <span class="n">pb_adapter_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_version</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="n">lorax_client</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                        <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                        <span class="n">adapter_id</span><span class="o">=</span><span class="n">pb_adapter_id</span><span class="p">,</span>
+                        <span class="o">**</span><span class="n">options</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="n">GenerationError</span> <span class="k">as</span> <span class="n">ge</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;&quot;&quot;An adapter with the ID &quot;</span><span class="si">{</span><span class="n">pb_adapter_id</span><span class="si">}</span><span class="s2">&quot; cannot be </span><span class="se">\</span>
+<span class="s2">found in the Predibase repository of fine-tuned adapters.&quot;&quot;&quot;</span>
+                    <span class="p">)</span> <span class="kn">from</span> <span class="nn">ge</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># The adapter version is omitted,</span>
+                <span class="c1"># hence look for the adapter ID in the HuggingFace repository.</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="n">lorax_client</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                        <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                        <span class="n">adapter_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="p">,</span>
+                        <span class="n">adapter_source</span><span class="o">=</span><span class="s2">&quot;hub&quot;</span><span class="p">,</span>
+                        <span class="o">**</span><span class="n">options</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="n">GenerationError</span> <span class="k">as</span> <span class="n">ge</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;&quot;&quot;Either an adapter with the ID &quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">adapter_id</span><span class="si">}</span><span class="s2">&quot; </span><span class="se">\</span>
+<span class="s2">cannot be found in a HuggingFace repository, or it is incompatible with the </span><span class="se">\</span>
+<span class="s2">base model (please make sure that the adapter configuration is consistent).</span>
+<span class="s2">&quot;&quot;&quot;</span>
+                    <span class="p">)</span> <span class="kn">from</span> <span class="nn">ge</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">base_llm_deployment</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
-                <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">response</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="n">lorax_client</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+                    <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">options</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">JSONDecodeError</span> <span class="k">as</span> <span class="n">jde</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;&quot;&quot;An LLM with the deployment ID &quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&quot; cannot be found </span><span class="se">\</span>
+<span class="s2">at Predibase (please refer to </span><span class="se">\</span>
+<span class="s2">&quot;https://docs.predibase.com/user-guide/inference/models&quot; for the list of </span><span class="se">\</span>
+<span class="s2">supported models).</span>
+<span class="s2">&quot;&quot;&quot;</span>
+                <span class="p">)</span> <span class="kn">from</span> <span class="nn">jde</span>
+        <span class="n">response_text</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">generated_text</span>
+
+        <span class="k">return</span> <span class="n">response_text</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the identifying parameters.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="o">**</span><span class="p">{</span><span class="s2">&quot;model_kwargs&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span><span class="p">},</span>
-        <span class="p">}</span></div>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_is_deprecated_sdk_version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">semantic_version</span>
+            <span class="kn">from</span> <span class="nn">predibase.version</span> <span class="kn">import</span> <span class="n">__version__</span> <span class="k">as</span> <span class="n">current_version</span>
+            <span class="kn">from</span> <span class="nn">semantic_version.base</span> <span class="kn">import</span> <span class="n">Version</span>
+
+            <span class="n">sdk_semver_deprecated</span><span class="p">:</span> <span class="n">Version</span> <span class="o">=</span> <span class="n">semantic_version</span><span class="o">.</span><span class="n">Version</span><span class="p">(</span>
+                <span class="n">version_string</span><span class="o">=</span><span class="s2">&quot;2024.4.8&quot;</span>
+            <span class="p">)</span>
+            <span class="n">actual_current_version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predibase_sdk_version</span> <span class="ow">or</span> <span class="n">current_version</span>
+            <span class="n">sdk_semver_current</span><span class="p">:</span> <span class="n">Version</span> <span class="o">=</span> <span class="n">semantic_version</span><span class="o">.</span><span class="n">Version</span><span class="p">(</span>
+                <span class="n">version_string</span><span class="o">=</span><span class="n">actual_current_version</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="ow">not</span> <span class="p">(</span>
+                <span class="p">(</span><span class="n">sdk_semver_current</span> <span class="o">&gt;</span> <span class="n">sdk_semver_deprecated</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="p">(</span><span class="s2">&quot;+dev&quot;</span> <span class="ow">in</span> <span class="n">actual_current_version</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import Predibase Python package. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install semantic_version predibase`.&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

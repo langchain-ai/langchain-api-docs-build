@@ -205,6 +205,7 @@
 
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">typing</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span>
 
 <span class="k">if</span> <span class="n">typing</span><span class="o">.</span><span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -243,7 +244,7 @@
         <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_TTL_SECONDS</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">cassio.history</span> <span class="kn">import</span> <span class="n">StoredBlobHistory</span>
+            <span class="kn">from</span> <span class="nn">cassio.table</span> <span class="kn">import</span> <span class="n">ClusteredCassandraTable</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">ImportError</span><span class="p">,</span> <span class="ne">ModuleNotFoundError</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;Could not import cassio python package. &quot;</span>
@@ -251,34 +252,49 @@
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">session_id</span> <span class="o">=</span> <span class="n">session_id</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ttl_seconds</span> <span class="o">=</span> <span class="n">ttl_seconds</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">blob_history</span> <span class="o">=</span> <span class="n">StoredBlobHistory</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">keyspace</span><span class="p">,</span> <span class="n">table_name</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span> <span class="o">=</span> <span class="n">ClusteredCassandraTable</span><span class="p">(</span>
+            <span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
+            <span class="n">keyspace</span><span class="o">=</span><span class="n">keyspace</span><span class="p">,</span>
+            <span class="n">table</span><span class="o">=</span><span class="n">table_name</span><span class="p">,</span>
+            <span class="n">ttl_seconds</span><span class="o">=</span><span class="n">ttl_seconds</span><span class="p">,</span>
+            <span class="n">primary_key_type</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;TEXT&quot;</span><span class="p">,</span> <span class="s2">&quot;TIMEUUID&quot;</span><span class="p">],</span>
+            <span class="n">ordering_in_partition</span><span class="o">=</span><span class="s2">&quot;DESC&quot;</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">messages</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span>  <span class="c1"># type: ignore</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve all session messages from DB&quot;&quot;&quot;</span>
-        <span class="n">message_blobs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">blob_history</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="c1"># The latest are returned, in chronological order</span>
+        <span class="n">message_blobs</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">row</span><span class="p">[</span><span class="s2">&quot;body_blob&quot;</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">get_partition</span><span class="p">(</span>
+                <span class="n">partition_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">][::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="n">items</span> <span class="o">=</span> <span class="p">[</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">message_blob</span><span class="p">)</span> <span class="k">for</span> <span class="n">message_blob</span> <span class="ow">in</span> <span class="n">message_blobs</span><span class="p">]</span>
         <span class="n">messages</span> <span class="o">=</span> <span class="n">messages_from_dict</span><span class="p">(</span><span class="n">items</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">messages</span>
 
 <div class="viewcode-block" id="CassandraChatMessageHistory.add_message"><a class="viewcode-back" href="../../../chat_message_histories/langchain_community.chat_message_histories.cassandra.CassandraChatMessageHistory.html#langchain_community.chat_message_histories.cassandra.CassandraChatMessageHistory.add_message">[docs]</a>    <span class="k">def</span> <span class="nf">add_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Write a message to the table&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">blob_history</span><span class="o">.</span><span class="n">store</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">message_to_dict</span><span class="p">(</span><span class="n">message</span><span class="p">)),</span> <span class="bp">self</span><span class="o">.</span><span class="n">ttl_seconds</span>
+        <span class="n">this_row_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid1</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">put</span><span class="p">(</span>
+            <span class="n">partition_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">,</span>
+            <span class="n">row_id</span><span class="o">=</span><span class="n">this_row_id</span><span class="p">,</span>
+            <span class="n">body_blob</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">message_to_dict</span><span class="p">(</span><span class="n">message</span><span class="p">)),</span>
+            <span class="n">ttl_seconds</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ttl_seconds</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="CassandraChatMessageHistory.clear"><a class="viewcode-back" href="../../../chat_message_histories/langchain_community.chat_message_histories.cassandra.CassandraChatMessageHistory.html#langchain_community.chat_message_histories.cassandra.CassandraChatMessageHistory.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear session memory from DB&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">blob_history</span><span class="o">.</span><span class="n">clear_session_id</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">)</span></div></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">delete_partition</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">session_id</span><span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

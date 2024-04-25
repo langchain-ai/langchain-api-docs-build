@@ -202,6 +202,7 @@
   <h1>Source code for langchain_mistralai.embeddings</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">asyncio</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span> <span class="nn">httpx</span>
@@ -219,6 +220,17 @@
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 <span class="n">MAX_TOKENS</span> <span class="o">=</span> <span class="mi">16_000</span>
+<span class="sd">&quot;&quot;&quot;A batching parameter for the Mistral API. This is NOT the maximum number of tokens</span>
+<span class="sd">accepted by the embedding model for each document/chunk, but rather the maximum number </span>
+<span class="sd">of tokens that can be sent in a single request to the Mistral API (across multiple</span>
+<span class="sd">documents/chunks)&quot;&quot;&quot;</span>
+
+
+<div class="viewcode-block" id="DummyTokenizer"><a class="viewcode-back" href="../../embeddings/langchain_mistralai.embeddings.DummyTokenizer.html#langchain_mistralai.embeddings.DummyTokenizer">[docs]</a><span class="k">class</span> <span class="nc">DummyTokenizer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dummy tokenizer for when tokenizer cannot be accessed (e.g., via Huggingface)&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DummyTokenizer.encode_batch"><a class="viewcode-back" href="../../embeddings/langchain_mistralai.embeddings.DummyTokenizer.html#langchain_mistralai.embeddings.DummyTokenizer.encode_batch">[docs]</a>    <span class="k">def</span> <span class="nf">encode_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="k">for</span> <span class="n">text</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span></div></div>
 
 
 <div class="viewcode-block" id="MistralAIEmbeddings"><a class="viewcode-back" href="../../embeddings/langchain_mistralai.embeddings.MistralAIEmbeddings.html#langchain_mistralai.embeddings.MistralAIEmbeddings">[docs]</a><span class="k">class</span> <span class="nc">MistralAIEmbeddings</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">Embeddings</span><span class="p">):</span>
@@ -285,9 +297,18 @@
             <span class="n">timeout</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;timeout&quot;</span><span class="p">],</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tokenizer&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tokenizer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Tokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-                <span class="s2">&quot;mistralai/Mixtral-8x7B-v0.1&quot;</span>
-            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tokenizer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Tokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+                    <span class="s2">&quot;mistralai/Mixtral-8x7B-v0.1&quot;</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>  <span class="c1"># huggingface_hub GatedRepoError</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;Could not download mistral tokenizer from Huggingface for &quot;</span>
+                    <span class="s2">&quot;calculating batch sizes. Set a Huggingface token via the &quot;</span>
+                    <span class="s2">&quot;HF_TOKEN environment variable to download the real tokenizer. &quot;</span>
+                    <span class="s2">&quot;Falling back to a dummy tokenizer that uses `len()`.&quot;</span>
+                <span class="p">)</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;tokenizer&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">DummyTokenizer</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">values</span>
 
     <span class="k">def</span> <span class="nf">_get_batches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
@@ -302,7 +323,10 @@
 
         <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">text_tokens</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">text_token_lengths</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">batch_tokens</span> <span class="o">+</span> <span class="n">text_tokens</span> <span class="o">&gt;</span> <span class="n">MAX_TOKENS</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="n">batch</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># edge case where first batch exceeds max tokens</span>
+                    <span class="c1"># should not yield an empty batch.</span>
+                    <span class="k">yield</span> <span class="n">batch</span>
                 <span class="n">batch</span> <span class="o">=</span> <span class="p">[</span><span class="n">text</span><span class="p">]</span>
                 <span class="n">batch_tokens</span> <span class="o">=</span> <span class="n">text_tokens</span>
             <span class="k">else</span><span class="p">:</span>
@@ -398,7 +422,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

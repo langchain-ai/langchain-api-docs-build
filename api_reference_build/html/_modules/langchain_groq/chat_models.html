@@ -225,7 +225,6 @@
     <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">beta</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
@@ -329,6 +328,9 @@
     <span class="c1"># [httpx documentation](https://www.python-httpx.org/api/#client) for more details.</span>
     <span class="n">http_client</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Optional httpx.Client.&quot;&quot;&quot;</span>
+    <span class="n">http_async_client</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Optional httpx.AsyncClient. Only used for async invocations. Must specify</span>
+<span class="sd">        http_client as well if you&#39;d like a custom client for sync invocations.&quot;&quot;&quot;</span>
 
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
@@ -385,17 +387,20 @@
             <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_retries&quot;</span><span class="p">],</span>
             <span class="s2">&quot;default_headers&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_headers&quot;</span><span class="p">],</span>
             <span class="s2">&quot;default_query&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_query&quot;</span><span class="p">],</span>
-            <span class="s2">&quot;http_client&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">],</span>
         <span class="p">}</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">groq</span>
 
+            <span class="n">sync_specific</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;http_client&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]}</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client&quot;</span><span class="p">):</span>
-                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">groq</span><span class="o">.</span><span class="n">Groq</span><span class="p">(</span><span class="o">**</span><span class="n">client_params</span><span class="p">)</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">groq</span><span class="o">.</span><span class="n">Groq</span><span class="p">(</span>
+                    <span class="o">**</span><span class="n">client_params</span><span class="p">,</span> <span class="o">**</span><span class="n">sync_specific</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;async_client&quot;</span><span class="p">):</span>
+                <span class="n">async_specific</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;http_client&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]}</span>
                 <span class="n">values</span><span class="p">[</span><span class="s2">&quot;async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">groq</span><span class="o">.</span><span class="n">AsyncGroq</span><span class="p">(</span>
-                    <span class="o">**</span><span class="n">client_params</span>
+                    <span class="o">**</span><span class="n">client_params</span><span class="p">,</span> <span class="o">**</span><span class="n">async_specific</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
@@ -671,7 +676,7 @@
             <span class="n">token_usage</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;token_usage&quot;</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">token_usage</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">token_usage</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                    <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">overall_token_usage</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">overall_token_usage</span> <span class="ow">and</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">overall_token_usage</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">+=</span> <span class="n">v</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">overall_token_usage</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
@@ -797,8 +802,7 @@
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;tool_choice&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_choice</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ChatGroq.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_groq.chat_models.ChatGroq.html#langchain_groq.chat_models.ChatGroq.with_structured_output">[docs]</a>    <span class="nd">@beta</span><span class="p">()</span>
-    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
+<div class="viewcode-block" id="ChatGroq.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_groq.chat_models.ChatGroq.html#langchain_groq.chat_models.ChatGroq.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">schema</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -1148,7 +1152,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

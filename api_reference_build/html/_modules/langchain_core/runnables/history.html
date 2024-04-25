@@ -227,6 +227,7 @@
 <span class="p">)</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelLike</span>
     <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
     <span class="kn">from</span> <span class="nn">langchain_core.runnables.config</span> <span class="kn">import</span> <span class="n">RunnableConfig</span>
     <span class="kn">from</span> <span class="nn">langchain_core.tracers.schemas</span> <span class="kn">import</span> <span class="n">Run</span>
@@ -430,9 +431,12 @@
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">runnable</span><span class="p">:</span> <span class="n">Runnable</span><span class="p">[</span>
-            <span class="n">MessagesOrDictWithMessages</span><span class="p">,</span>
-            <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">MessagesOrDictWithMessages</span><span class="p">],</span>
+        <span class="n">runnable</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
+            <span class="n">Runnable</span><span class="p">[</span>
+                <span class="n">Union</span><span class="p">[</span><span class="n">MessagesOrDictWithMessages</span><span class="p">],</span>
+                <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">MessagesOrDictWithMessages</span><span class="p">],</span>
+            <span class="p">],</span>
+            <span class="n">LanguageModelLike</span><span class="p">,</span>
         <span class="p">],</span>
         <span class="n">get_session_history</span><span class="p">:</span> <span class="n">GetSessionHistoryCallable</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
@@ -566,9 +570,18 @@
             <span class="k">return</span> <span class="n">super_schema</span></div>
 
     <span class="k">def</span> <span class="nf">_get_input_messages</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">input_val</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">input_val</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span>
         <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_val</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_messages_key</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_messages_key</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_val</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">input_val</span><span class="o">.</span><span class="n">keys</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;input&quot;</span>
+            <span class="n">input_val</span> <span class="o">=</span> <span class="n">input_val</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_val</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">HumanMessage</span>
@@ -590,7 +603,18 @@
         <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output_val</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-            <span class="n">output_val</span> <span class="o">=</span> <span class="n">output_val</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">output_messages_key</span> <span class="ow">or</span> <span class="s2">&quot;output&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_messages_key</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_messages_key</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">output_val</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">output_val</span><span class="o">.</span><span class="n">keys</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">key</span> <span class="o">=</span> <span class="s2">&quot;output&quot;</span>
+            <span class="c1"># If you are wrapping a chat model directly</span>
+            <span class="c1"># The output is actually this weird generations object</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">output_val</span> <span class="ow">and</span> <span class="s2">&quot;generations&quot;</span> <span class="ow">in</span> <span class="n">output_val</span><span class="p">:</span>
+                <span class="n">output_val</span> <span class="o">=</span> <span class="n">output_val</span><span class="p">[</span><span class="s2">&quot;generations&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;message&quot;</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">output_val</span> <span class="o">=</span> <span class="n">output_val</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output_val</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span>
@@ -609,10 +633,7 @@
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">history_messages_key</span><span class="p">:</span>
             <span class="c1"># return all messages</span>
-            <span class="n">input_val</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="nb">input</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_messages_key</span> <span class="k">else</span> <span class="nb">input</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">input_messages_key</span><span class="p">]</span>
-            <span class="p">)</span>
-            <span class="n">messages</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_messages</span><span class="p">(</span><span class="n">input_val</span><span class="p">)</span>
+            <span class="n">messages</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_messages</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">messages</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_aenter_history</span><span class="p">(</span>
@@ -634,8 +655,7 @@
 
         <span class="c1"># Get the input messages</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">inputs</span><span class="p">)</span>
-        <span class="n">input_val</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">input_messages_key</span> <span class="ow">or</span> <span class="s2">&quot;input&quot;</span><span class="p">]</span>
-        <span class="n">input_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_messages</span><span class="p">(</span><span class="n">input_val</span><span class="p">)</span>
+        <span class="n">input_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_messages</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
 
         <span class="c1"># If historic messages were prepended to the input messages, remove them to</span>
         <span class="c1"># avoid adding duplicate messages to history.</span>
@@ -699,7 +719,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

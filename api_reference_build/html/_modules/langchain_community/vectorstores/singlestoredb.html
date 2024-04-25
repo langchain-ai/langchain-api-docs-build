@@ -204,6 +204,7 @@
 
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
@@ -240,6 +241,15 @@
 <span class="sd">    optionally, the names of the table and the fields to use.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">class</span> <span class="nc">SearchStrategy</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enumerator of the Search strategies for searching in the vectorstore.&quot;&quot;&quot;</span>
+
+        <span class="n">VECTOR_ONLY</span> <span class="o">=</span> <span class="s2">&quot;VECTOR_ONLY&quot;</span>
+        <span class="n">TEXT_ONLY</span> <span class="o">=</span> <span class="s2">&quot;TEXT_ONLY&quot;</span>
+        <span class="n">FILTER_BY_TEXT</span> <span class="o">=</span> <span class="s2">&quot;FILTER_BY_TEXT&quot;</span>
+        <span class="n">FILTER_BY_VECTOR</span> <span class="o">=</span> <span class="s2">&quot;FILTER_BY_VECTOR&quot;</span>
+        <span class="n">WEIGHTED_SUM</span> <span class="o">=</span> <span class="s2">&quot;WEIGHTED_SUM&quot;</span>
+
     <span class="k">def</span> <span class="nf">_get_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">SingleStoreDB</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">singlestoredb</span> <span class="k">as</span> <span class="nn">s2</span>
@@ -259,10 +269,12 @@
         <span class="n">content_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span>
         <span class="n">metadata_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;metadata&quot;</span><span class="p">,</span>
         <span class="n">vector_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;vector&quot;</span><span class="p">,</span>
+        <span class="n">id_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
         <span class="n">use_vector_index</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">vector_index_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
         <span class="n">vector_index_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vector_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1536</span><span class="p">,</span>
+        <span class="n">use_full_text_search</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
         <span class="n">max_overflow</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
@@ -283,7 +295,8 @@
 <span class="sd">                - EUCLIDEAN_DISTANCE: Computes the Euclidean distance between</span>
 <span class="sd">                    two vectors. This metric considers the geometric distance in</span>
 <span class="sd">                    the vector space, and might be more suitable for embeddings</span>
-<span class="sd">                    that rely on spatial relationships.</span>
+<span class="sd">                    that rely on spatial relationships. This metric is not</span>
+<span class="sd">                    compatible with the WEIGHTED_SUM search strategy.</span>
 
 <span class="sd">            table_name (str, optional): Specifies the name of the table in use.</span>
 <span class="sd">                Defaults to &quot;embeddings&quot;.</span>
@@ -293,6 +306,8 @@
 <span class="sd">                Defaults to &quot;metadata&quot;.</span>
 <span class="sd">            vector_field (str, optional): Specifies the field to store the vector.</span>
 <span class="sd">                Defaults to &quot;vector&quot;.</span>
+<span class="sd">            id_field (str, optional): Specifies the field to store the id.</span>
+<span class="sd">                Defaults to &quot;id&quot;.</span>
 
 <span class="sd">            use_vector_index (bool, optional): Toggles the use of a vector index.</span>
 <span class="sd">                Works only with SingleStoreDB 8.5 or later. Defaults to False.</span>
@@ -314,6 +329,14 @@
 <span class="sd">                Defaults to 1536. Required if use_vector_index is set to True.</span>
 <span class="sd">                Should be set to the same value as the size of the vectors</span>
 <span class="sd">                stored in the vector_field.</span>
+
+<span class="sd">            use_full_text_search (bool, optional): Toggles the use a full-text index</span>
+<span class="sd">                on the document content. Defaults to False. If set to True, the table</span>
+<span class="sd">                will be created with a full-text index on the content field,</span>
+<span class="sd">                and the simularity_search method will all using TEXT_ONLY,</span>
+<span class="sd">                FILTER_BY_TEXT, FILTER_BY_VECTOR, and WIGHTED_SUM search strategies.</span>
+<span class="sd">                If set to False, the simularity_search method will only allow</span>
+<span class="sd">                VECTOR_ONLY search strategy.</span>
 
 <span class="sd">            Following arguments pertain to the connection pool:</span>
 
@@ -367,7 +390,7 @@
 
 <span class="sd">            .. code-block:: python</span>
 
-<span class="sd">                from langchain_community.embeddings import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
 <span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
 
 <span class="sd">                vectorstore = SingleStoreDB(</span>
@@ -379,7 +402,7 @@
 
 <span class="sd">            .. code-block:: python</span>
 
-<span class="sd">                from langchain_community.embeddings import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
 <span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
 
 <span class="sd">                vectorstore = SingleStoreDB(</span>
@@ -399,7 +422,7 @@
 
 <span class="sd">            .. code-block:: python</span>
 
-<span class="sd">                from langchain_community.embeddings import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
 <span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
 
 <span class="sd">                os.environ[&#39;SINGLESTOREDB_URL&#39;] = &#39;me:p455w0rd@s2-host.com/my_db&#39;</span>
@@ -409,13 +432,25 @@
 
 <span class="sd">            .. code-block:: python</span>
 
-<span class="sd">                from langchain_community.embeddings import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
 <span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
 
 <span class="sd">                os.environ[&#39;SINGLESTOREDB_URL&#39;] = &#39;me:p455w0rd@s2-host.com/my_db&#39;</span>
 <span class="sd">                vectorstore = SingleStoreDB(</span>
 <span class="sd">                    OpenAIEmbeddings(),</span>
 <span class="sd">                    use_vector_index=True,</span>
+<span class="sd">                )</span>
+
+<span class="sd">            Using full-text index:</span>
+
+<span class="sd">            .. code-block:: python</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
+
+<span class="sd">                os.environ[&#39;SINGLESTOREDB_URL&#39;] = &#39;me:p455w0rd@s2-host.com/my_db&#39;</span>
+<span class="sd">                vectorstore = SingleStoreDB(</span>
+<span class="sd">                    OpenAIEmbeddings(),</span>
+<span class="sd">                    use_full_text_search=True,</span>
 <span class="sd">                )</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
@@ -425,12 +460,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize_input</span><span class="p">(</span><span class="n">content_field</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize_input</span><span class="p">(</span><span class="n">metadata_field</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize_input</span><span class="p">(</span><span class="n">vector_field</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize_input</span><span class="p">(</span><span class="n">id_field</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">use_vector_index</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">use_vector_index</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vector_index_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize_input</span><span class="p">(</span><span class="n">vector_index_name</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vector_index_options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">vector_index_options</span> <span class="ow">or</span> <span class="p">{})</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vector_index_options</span><span class="p">[</span><span class="s2">&quot;metric_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vector_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">vector_size</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_full_text_search</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">use_full_text_search</span><span class="p">)</span>
 
         <span class="c1"># Pass the rest of the kwargs to the connection.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">connection_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span>
@@ -440,7 +478,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">connection_kwargs</span><span class="p">[</span><span class="s2">&quot;conn_attrs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">connection_kwargs</span><span class="p">[</span><span class="s2">&quot;conn_attrs&quot;</span><span class="p">][</span><span class="s2">&quot;_connector_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;langchain python sdk&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">connection_kwargs</span><span class="p">[</span><span class="s2">&quot;conn_attrs&quot;</span><span class="p">][</span><span class="s2">&quot;_connector_version&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1.0.2&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connection_kwargs</span><span class="p">[</span><span class="s2">&quot;conn_attrs&quot;</span><span class="p">][</span><span class="s2">&quot;_connector_version&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;2.0.0&quot;</span>
 
         <span class="c1"># Create connection pool.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">connection_pool</span> <span class="o">=</span> <span class="n">QueuePool</span><span class="p">(</span>
@@ -468,6 +506,9 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">cur</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
             <span class="k">try</span><span class="p">:</span>
+                <span class="n">full_text_index</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_full_text_search</span><span class="p">:</span>
+                    <span class="n">full_text_index</span> <span class="o">=</span> <span class="s2">&quot;, FULLTEXT(</span><span class="si">{}</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_vector_index</span><span class="p">:</span>
                     <span class="n">index_options</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vector_index_options</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_index_options</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
@@ -476,10 +517,11 @@
                         <span class="p">)</span>
                     <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
 <span class="w">                        </span><span class="sd">&quot;&quot;&quot;CREATE TABLE IF NOT EXISTS {}</span>
-<span class="sd">                        ({} TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,</span>
-<span class="sd">                        {} VECTOR({}, F32) NOT NULL, {} JSON,</span>
-<span class="sd">                        VECTOR INDEX {} ({}) {});&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+<span class="sd">                        ({} BIGINT AUTO_INCREMENT PRIMARY KEY, {} LONGTEXT CHARACTER</span>
+<span class="sd">                        SET utf8mb4 COLLATE utf8mb4_general_ci, {} VECTOR({}, F32)</span>
+<span class="sd">                        NOT NULL, {} JSON, VECTOR INDEX {} ({}) {}{});&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">vector_size</span><span class="p">,</span>
@@ -487,17 +529,21 @@
                             <span class="bp">self</span><span class="o">.</span><span class="n">vector_index_name</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
                             <span class="n">index_options</span><span class="p">,</span>
+                            <span class="n">full_text_index</span><span class="p">,</span>
                         <span class="p">),</span>
                     <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
 <span class="w">                        </span><span class="sd">&quot;&quot;&quot;CREATE TABLE IF NOT EXISTS {}</span>
-<span class="sd">                        ({} TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,</span>
-<span class="sd">                        {} BLOB, {} JSON);&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+<span class="sd">                        ({} BIGINT AUTO_INCREMENT PRIMARY KEY, {} LONGTEXT CHARACTER</span>
+<span class="sd">                        SET utf8mb4 COLLATE utf8mb4_general_ci, {} BLOB, {} JSON{});</span>
+<span class="sd">                        &quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
+                            <span class="n">full_text_index</span><span class="p">,</span>
                         <span class="p">),</span>
                     <span class="p">)</span>
             <span class="k">finally</span><span class="p">:</span>
@@ -567,8 +613,12 @@
                         <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">([</span><span class="n">text</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
                     <span class="p">)</span>
                     <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-                        <span class="s2">&quot;INSERT INTO </span><span class="si">{}</span><span class="s2"> VALUES (</span><span class="si">%s</span><span class="s2">, JSON_ARRAY_PACK(</span><span class="si">%s</span><span class="s2">), </span><span class="si">%s</span><span class="s2">)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span>
+<span class="w">                        </span><span class="sd">&quot;&quot;&quot;INSERT INTO {}({}, {}, {})</span>
+<span class="sd">                        VALUES (%s, JSON_ARRAY_PACK(%s), %s)&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
                         <span class="p">),</span>
                         <span class="p">(</span>
                             <span class="n">text</span><span class="p">,</span>
@@ -576,7 +626,7 @@
                             <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">metadata</span><span class="p">),</span>
                         <span class="p">),</span>
                     <span class="p">)</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_vector_index</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_vector_index</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_full_text_search</span><span class="p">:</span>
                     <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">&quot;OPTIMIZE TABLE </span><span class="si">{}</span><span class="s2"> FLUSH;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">))</span>
             <span class="k">finally</span><span class="p">:</span>
                 <span class="n">cur</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
@@ -585,7 +635,16 @@
         <span class="k">return</span> <span class="p">[]</span></div>
 
 <div class="viewcode-block" id="SingleStoreDB.similarity_search"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.singlestoredb.SingleStoreDB.html#langchain_community.vectorstores.singlestoredb.SingleStoreDB.similarity_search">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">search_strategy</span><span class="p">:</span> <span class="n">SearchStrategy</span> <span class="o">=</span> <span class="n">SearchStrategy</span><span class="o">.</span><span class="n">VECTOR_ONLY</span><span class="p">,</span>
+        <span class="n">filter_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">text_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">vector_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">vector_select_count_multiplier</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the most similar indexed documents to the query text.</span>
 
@@ -595,29 +654,119 @@
 <span class="sd">            query (str): The query text for which to find similar documents.</span>
 <span class="sd">            k (int): The number of documents to return. Default is 4.</span>
 <span class="sd">            filter (dict): A dictionary of metadata fields and values to filter by.</span>
+<span class="sd">                Default is None.</span>
+<span class="sd">            search_strategy (SearchStrategy): The search strategy to use.</span>
+<span class="sd">                Default is SearchStrategy.VECTOR_ONLY.</span>
+<span class="sd">                Available options are:</span>
+<span class="sd">                - SearchStrategy.VECTOR_ONLY: Searches only by vector similarity.</span>
+<span class="sd">                - SearchStrategy.TEXT_ONLY: Searches only by text similarity. This</span>
+<span class="sd">                    option is only available if use_full_text_search is True.</span>
+<span class="sd">                - SearchStrategy.FILTER_BY_TEXT: Filters by text similarity and</span>
+<span class="sd">                    searches by vector similarity. This option is only available if</span>
+<span class="sd">                    use_full_text_search is True.</span>
+<span class="sd">                - SearchStrategy.FILTER_BY_VECTOR: Filters by vector similarity and</span>
+<span class="sd">                    searches by text similarity. This option is only available if</span>
+<span class="sd">                    use_full_text_search is True.</span>
+<span class="sd">                - SearchStrategy.WEIGHTED_SUM: Searches by a weighted sum of text and</span>
+<span class="sd">                    vector similarity. This option is only available if</span>
+<span class="sd">                    use_full_text_search is True and distance_strategy is DOT_PRODUCT.</span>
+<span class="sd">            filter_threshold (float): The threshold for filtering by text or vector</span>
+<span class="sd">                similarity. Default is 0. This option has effect only if search_strategy</span>
+<span class="sd">                is SearchStrategy.FILTER_BY_TEXT or SearchStrategy.FILTER_BY_VECTOR.</span>
+<span class="sd">            text_weight (float): The weight of text similarity in the weighted sum</span>
+<span class="sd">                search strategy. Default is 0.5. This option has effect only if</span>
+<span class="sd">                search_strategy is SearchStrategy.WEIGHTED_SUM.</span>
+<span class="sd">            vector_weight (float): The weight of vector similarity in the weighted sum</span>
+<span class="sd">                search strategy. Default is 0.5. This option has effect only if</span>
+<span class="sd">                search_strategy is SearchStrategy.WEIGHTED_SUM.</span>
+<span class="sd">            vector_select_count_multiplier (int): The multiplier for the number of</span>
+<span class="sd">                vectors to select when using the vector index. Default is 10.</span>
+<span class="sd">                This parameter has effect only if use_vector_index is True and</span>
+<span class="sd">                search_strategy is SearchStrategy.WEIGHTED_SUM or</span>
+<span class="sd">                SearchStrategy.FILTER_BY_TEXT.</span>
+<span class="sd">                The number of vectors selected will</span>
+<span class="sd">                be k * vector_select_count_multiplier.</span>
+<span class="sd">                This is needed due to the limitations of the vector index.</span>
+
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List[Document]: A list of documents that are most similar to the query text.</span>
 
 <span class="sd">        Examples:</span>
+
+<span class="sd">            Basic Usage:</span>
 <span class="sd">            .. code-block:: python</span>
+
 <span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
-<span class="sd">                from langchain_community.embeddings import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
 <span class="sd">                s2 = SingleStoreDB.from_documents(</span>
 <span class="sd">                    docs,</span>
 <span class="sd">                    OpenAIEmbeddings(),</span>
 <span class="sd">                    host=&quot;username:password@localhost:3306/database&quot;</span>
 <span class="sd">                )</span>
-<span class="sd">                s2.similarity_search(&quot;query text&quot;, 1,</span>
-<span class="sd">                    {&quot;metadata_field&quot;: &quot;metadata_value&quot;})</span>
+<span class="sd">                results = s2.similarity_search(&quot;query text&quot;, 1,</span>
+<span class="sd">                                    {&quot;metadata_field&quot;: &quot;metadata_value&quot;})</span>
+
+<span class="sd">            Different Search Strategies:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">                s2 = SingleStoreDB.from_documents(</span>
+<span class="sd">                    docs,</span>
+<span class="sd">                    OpenAIEmbeddings(),</span>
+<span class="sd">                    host=&quot;username:password@localhost:3306/database&quot;,</span>
+<span class="sd">                    use_full_text_search=True,</span>
+<span class="sd">                    use_vector_index=True,</span>
+<span class="sd">                )</span>
+<span class="sd">                results = s2.similarity_search(&quot;query text&quot;, 1,</span>
+<span class="sd">                        search_strategy=SingleStoreDB.SearchStrategy.FILTER_BY_TEXT,</span>
+<span class="sd">                        filter_threshold=0.5)</span>
+
+<span class="sd">            Weighted Sum Search Strategy:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">                s2 = SingleStoreDB.from_documents(</span>
+<span class="sd">                    docs,</span>
+<span class="sd">                    OpenAIEmbeddings(),</span>
+<span class="sd">                    host=&quot;username:password@localhost:3306/database&quot;,</span>
+<span class="sd">                    use_full_text_search=True,</span>
+<span class="sd">                    use_vector_index=True,</span>
+<span class="sd">                )</span>
+<span class="sd">                results = s2.similarity_search(&quot;query text&quot;, 1,</span>
+<span class="sd">                    search_strategy=SingleStoreDB.SearchStrategy.WEIGHTED_SUM,</span>
+<span class="sd">                    text_weight=0.3,</span>
+<span class="sd">                    vector_weight=0.7)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score</span><span class="p">(</span>
-            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">search_strategy</span><span class="o">=</span><span class="n">search_strategy</span><span class="p">,</span>
+            <span class="n">filter_threshold</span><span class="o">=</span><span class="n">filter_threshold</span><span class="p">,</span>
+            <span class="n">text_weight</span><span class="o">=</span><span class="n">text_weight</span><span class="p">,</span>
+            <span class="n">vector_weight</span><span class="o">=</span><span class="n">vector_weight</span><span class="p">,</span>
+            <span class="n">vector_select_count_multiplier</span><span class="o">=</span><span class="n">vector_select_count_multiplier</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="p">]</span></div>
 
 <div class="viewcode-block" id="SingleStoreDB.similarity_search_with_score"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.singlestoredb.SingleStoreDB.html#langchain_community.vectorstores.singlestoredb.SingleStoreDB.similarity_search_with_score">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">search_strategy</span><span class="p">:</span> <span class="n">SearchStrategy</span> <span class="o">=</span> <span class="n">SearchStrategy</span><span class="o">.</span><span class="n">VECTOR_ONLY</span><span class="p">,</span>
+        <span class="n">filter_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">text_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">vector_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">vector_select_count_multiplier</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs most similar to query. Uses cosine similarity.</span>
 
@@ -626,19 +775,155 @@
 <span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
 <span class="sd">            filter: A dictionary of metadata fields and values to filter by.</span>
 <span class="sd">                    Defaults to None.</span>
-
+<span class="sd">            search_strategy (SearchStrategy): The search strategy to use.</span>
+<span class="sd">                Default is SearchStrategy.VECTOR_ONLY.</span>
+<span class="sd">                Available options are:</span>
+<span class="sd">                - SearchStrategy.VECTOR_ONLY: Searches only by vector similarity.</span>
+<span class="sd">                - SearchStrategy.TEXT_ONLY: Searches only by text similarity. This</span>
+<span class="sd">                    option is only available if use_full_text_search is True.</span>
+<span class="sd">                - SearchStrategy.FILTER_BY_TEXT: Filters by text similarity and</span>
+<span class="sd">                    searches by vector similarity. This option is only available if</span>
+<span class="sd">                    use_full_text_search is True.</span>
+<span class="sd">                - SearchStrategy.FILTER_BY_VECTOR: Filters by vector similarity and</span>
+<span class="sd">                    searches by text similarity. This option is only available if</span>
+<span class="sd">                    use_full_text_search is True.</span>
+<span class="sd">                - SearchStrategy.WEIGHTED_SUM: Searches by a weighted sum of text and</span>
+<span class="sd">                    vector similarity. This option is only available if</span>
+<span class="sd">                    use_full_text_search is True and distance_strategy is DOT_PRODUCT.</span>
+<span class="sd">            filter_threshold (float): The threshold for filtering by text or vector</span>
+<span class="sd">                similarity. Default is 0. This option has effect only if search_strategy</span>
+<span class="sd">                is SearchStrategy.FILTER_BY_TEXT or SearchStrategy.FILTER_BY_VECTOR.</span>
+<span class="sd">            text_weight (float): The weight of text similarity in the weighted sum</span>
+<span class="sd">                search strategy. Default is 0.5. This option has effect only if</span>
+<span class="sd">                search_strategy is SearchStrategy.WEIGHTED_SUM.</span>
+<span class="sd">            vector_weight (float): The weight of vector similarity in the weighted sum</span>
+<span class="sd">                search strategy. Default is 0.5. This option has effect only if</span>
+<span class="sd">                search_strategy is SearchStrategy.WEIGHTED_SUM.</span>
+<span class="sd">            vector_select_count_multiplier (int): The multiplier for the number of</span>
+<span class="sd">                vectors to select when using the vector index. Default is 10.</span>
+<span class="sd">                This parameter has effect only if use_vector_index is True and</span>
+<span class="sd">                search_strategy is SearchStrategy.WEIGHTED_SUM or</span>
+<span class="sd">                SearchStrategy.FILTER_BY_TEXT.</span>
+<span class="sd">                The number of vectors selected will</span>
+<span class="sd">                be k * vector_select_count_multiplier.</span>
+<span class="sd">                This is needed due to the limitations of the vector index.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents most similar to the query and score for each</span>
+<span class="sd">            document.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the search strategy is not supported with the</span>
+<span class="sd">                distance strategy.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            Basic Usage:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">                s2 = SingleStoreDB.from_documents(</span>
+<span class="sd">                    docs,</span>
+<span class="sd">                    OpenAIEmbeddings(),</span>
+<span class="sd">                    host=&quot;username:password@localhost:3306/database&quot;</span>
+<span class="sd">                )</span>
+<span class="sd">                results = s2.similarity_search_with_score(&quot;query text&quot;, 1,</span>
+<span class="sd">                                    {&quot;metadata_field&quot;: &quot;metadata_value&quot;})</span>
+
+<span class="sd">            Different Search Strategies:</span>
+
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">                s2 = SingleStoreDB.from_documents(</span>
+<span class="sd">                    docs,</span>
+<span class="sd">                    OpenAIEmbeddings(),</span>
+<span class="sd">                    host=&quot;username:password@localhost:3306/database&quot;,</span>
+<span class="sd">                    use_full_text_search=True,</span>
+<span class="sd">                    use_vector_index=True,</span>
+<span class="sd">                )</span>
+<span class="sd">                results = s2.similarity_search_with_score(&quot;query text&quot;, 1,</span>
+<span class="sd">                        search_strategy=SingleStoreDB.SearchStrategy.FILTER_BY_VECTOR,</span>
+<span class="sd">                        filter_threshold=0.5)</span>
+
+<span class="sd">            Weighted Sum Search Strategy:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">                s2 = SingleStoreDB.from_documents(</span>
+<span class="sd">                    docs,</span>
+<span class="sd">                    OpenAIEmbeddings(),</span>
+<span class="sd">                    host=&quot;username:password@localhost:3306/database&quot;,</span>
+<span class="sd">                    use_full_text_search=True,</span>
+<span class="sd">                    use_vector_index=True,</span>
+<span class="sd">                )</span>
+<span class="sd">                results = s2.similarity_search_with_score(&quot;query text&quot;, 1,</span>
+<span class="sd">                    search_strategy=SingleStoreDB.SearchStrategy.WEIGHTED_SUM,</span>
+<span class="sd">                    text_weight=0.3,</span>
+<span class="sd">                    vector_weight=0.7)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">search_strategy</span> <span class="o">!=</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">VECTOR_ONLY</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_full_text_search</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;Search strategy {} is not supported</span>
+<span class="sd">                when use_full_text_search is False&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search_strategy</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">WEIGHTED_SUM</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span> <span class="o">!=</span> <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">DOT_PRODUCT</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Search strategy </span><span class="si">{}</span><span class="s2"> is not supported with distance strategy </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">search_strategy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
         <span class="c1"># Creates embedding vector from user query</span>
-        <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="n">embedding</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">search_strategy</span> <span class="o">!=</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">TEXT_ONLY</span><span class="p">:</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection_pool</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
         <span class="n">result</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">where_clause</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="n">where_clause_values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="nb">filter</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">filter</span> <span class="ow">or</span> <span class="n">search_strategy</span> <span class="ow">in</span> <span class="p">[</span>
+            <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_TEXT</span><span class="p">,</span>
+            <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_VECTOR</span><span class="p">,</span>
+        <span class="p">]:</span>
             <span class="n">where_clause</span> <span class="o">=</span> <span class="s2">&quot;WHERE &quot;</span>
             <span class="n">arguments</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="k">if</span> <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_TEXT</span><span class="p">:</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="s2">&quot;MATCH (</span><span class="si">{}</span><span class="s2">) AGAINST (</span><span class="si">%s</span><span class="s2">) &gt; </span><span class="si">%s</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">where_clause_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+                <span class="n">where_clause_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">filter_threshold</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_VECTOR</span><span class="p">:</span>
+                <span class="n">condition</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">(</span><span class="si">{}</span><span class="s2">, JSON_ARRAY_PACK(</span><span class="si">%s</span><span class="s2">)) &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="o">.</span><span class="n">name</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span> <span class="n">DistanceStrategy</span><span class="p">)</span>
+                    <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span> <span class="o">==</span> <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">EUCLIDEAN_DISTANCE</span><span class="p">:</span>
+                    <span class="n">condition</span> <span class="o">+=</span> <span class="s2">&quot;&lt; </span><span class="si">%s</span><span class="s2">&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">condition</span> <span class="o">+=</span> <span class="s2">&quot;&gt; </span><span class="si">%s</span><span class="s2">&quot;</span>
+                <span class="n">arguments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">condition</span><span class="p">)</span>
+                <span class="n">where_clause_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">{}</span><span class="s2">]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">embedding</span><span class="p">))))</span>
+                <span class="n">where_clause_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">filter_threshold</span><span class="p">))</span>
 
             <span class="k">def</span> <span class="nf">build_where_clause</span><span class="p">(</span>
                 <span class="n">where_clause_values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span>
@@ -661,29 +946,98 @@
                         <span class="n">where_clause_values</span> <span class="o">+=</span> <span class="n">prefix_args</span> <span class="o">+</span> <span class="p">[</span><span class="n">key</span><span class="p">]</span>
                         <span class="n">where_clause_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">sub_filter</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
 
-            <span class="n">build_where_clause</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">,</span> <span class="nb">filter</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">filter</span><span class="p">:</span>
+                <span class="n">build_where_clause</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">,</span> <span class="nb">filter</span><span class="p">)</span>
             <span class="n">where_clause</span> <span class="o">+=</span> <span class="s2">&quot; AND &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">arguments</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">cur</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-<span class="w">                    </span><span class="sd">&quot;&quot;&quot;SELECT {}, {}, {}({}, JSON_ARRAY_PACK(%s)) as __score</span>
-<span class="sd">                    FROM {} {} ORDER BY __score {} LIMIT %s&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="o">.</span><span class="n">name</span>
-                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span> <span class="n">DistanceStrategy</span><span class="p">)</span>
-                        <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
-                        <span class="n">where_clause</span><span class="p">,</span>
-                        <span class="n">ORDERING_DIRECTIVE</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">],</span>
-                    <span class="p">),</span>
-                    <span class="p">(</span><span class="s2">&quot;[</span><span class="si">{}</span><span class="s2">]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">embedding</span><span class="p">))),)</span>
-                    <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">)</span>
-                    <span class="o">+</span> <span class="p">(</span><span class="n">k</span><span class="p">,),</span>
-                <span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">VECTOR_ONLY</span>
+                    <span class="ow">or</span> <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_TEXT</span>
+                <span class="p">):</span>
+                    <span class="n">search_options</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">use_vector_index</span>
+                        <span class="ow">and</span> <span class="n">search_strategy</span>
+                        <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_TEXT</span>
+                    <span class="p">):</span>
+                        <span class="n">search_options</span> <span class="o">=</span> <span class="s2">&quot;SEARCH_OPTIONS &#39;{</span><span class="se">\&quot;</span><span class="s2">k</span><span class="se">\&quot;</span><span class="s2">:</span><span class="si">%d</span><span class="s2">}&#39;&quot;</span> <span class="o">%</span> <span class="p">(</span>
+                            <span class="n">k</span> <span class="o">*</span> <span class="n">vector_select_count_multiplier</span>
+                        <span class="p">)</span>
+                    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+<span class="w">                        </span><span class="sd">&quot;&quot;&quot;SELECT {}, {}, {}({}, JSON_ARRAY_PACK(%s)) as __score</span>
+<span class="sd">                        FROM {} {} ORDER BY __score {}{} LIMIT %s&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="o">.</span><span class="n">name</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span> <span class="n">DistanceStrategy</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="n">where_clause</span><span class="p">,</span>
+                            <span class="n">search_options</span><span class="p">,</span>
+                            <span class="n">ORDERING_DIRECTIVE</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">],</span>
+                        <span class="p">),</span>
+                        <span class="p">(</span><span class="s2">&quot;[</span><span class="si">{}</span><span class="s2">]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">embedding</span><span class="p">))),)</span>
+                        <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">)</span>
+                        <span class="o">+</span> <span class="p">(</span><span class="n">k</span><span class="p">,),</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="p">(</span>
+                    <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">FILTER_BY_VECTOR</span>
+                    <span class="ow">or</span> <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">TEXT_ONLY</span>
+                <span class="p">):</span>
+                    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+<span class="w">                        </span><span class="sd">&quot;&quot;&quot;SELECT {}, {}, MATCH ({}) AGAINST (%s) as __score</span>
+<span class="sd">                        FROM {} {} ORDER BY __score DESC LIMIT %s&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="n">where_clause</span><span class="p">,</span>
+                        <span class="p">),</span>
+                        <span class="p">(</span><span class="n">query</span><span class="p">,)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">k</span><span class="p">,),</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="n">search_strategy</span> <span class="o">==</span> <span class="n">SingleStoreDB</span><span class="o">.</span><span class="n">SearchStrategy</span><span class="o">.</span><span class="n">WEIGHTED_SUM</span><span class="p">:</span>
+                    <span class="n">cur</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+<span class="w">                        </span><span class="sd">&quot;&quot;&quot;SELECT {}, {}, __score1 * %s + __score2 * %s as __score</span>
+<span class="sd">                        FROM (</span>
+<span class="sd">                            SELECT {}, {}, {}, MATCH ({}) AGAINST (%s) as __score1 </span>
+<span class="sd">                        FROM {} {}) r1 FULL OUTER JOIN (</span>
+<span class="sd">                            SELECT {}, {}({}, JSON_ARRAY_PACK(%s)) as __score2</span>
+<span class="sd">                            FROM {} {} ORDER BY __score2 {} LIMIT %s</span>
+<span class="sd">                        ) r2 ON r1.{} = r2.{} ORDER BY __score {} LIMIT %s&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">metadata_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">content_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="n">where_clause</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="o">.</span><span class="n">name</span>
+                            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span> <span class="n">DistanceStrategy</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">vector_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="p">,</span>
+                            <span class="n">where_clause</span><span class="p">,</span>
+                            <span class="n">ORDERING_DIRECTIVE</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">],</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">id_field</span><span class="p">,</span>
+                            <span class="n">ORDERING_DIRECTIVE</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">],</span>
+                        <span class="p">),</span>
+                        <span class="p">(</span><span class="n">text_weight</span><span class="p">,</span> <span class="n">vector_weight</span><span class="p">,</span> <span class="n">query</span><span class="p">)</span>
+                        <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">)</span>
+                        <span class="o">+</span> <span class="p">(</span><span class="s2">&quot;[</span><span class="si">{}</span><span class="s2">]&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">embedding</span><span class="p">))),)</span>
+                        <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">where_clause_values</span><span class="p">)</span>
+                        <span class="o">+</span> <span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="n">vector_select_count_multiplier</span><span class="p">,</span> <span class="n">k</span><span class="p">),</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Invalid search strategy: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search_strategy</span><span class="p">)</span>
+                    <span class="p">)</span>
 
                 <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">cur</span><span class="o">.</span><span class="n">fetchall</span><span class="p">():</span>
                     <span class="n">doc</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
@@ -705,10 +1059,12 @@
         <span class="n">content_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span>
         <span class="n">metadata_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;metadata&quot;</span><span class="p">,</span>
         <span class="n">vector_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;vector&quot;</span><span class="p">,</span>
+        <span class="n">id_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
         <span class="n">use_vector_index</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">vector_index_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
         <span class="n">vector_index_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">vector_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1536</span><span class="p">,</span>
+        <span class="n">use_full_text_search</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">pool_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
         <span class="n">max_overflow</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
@@ -720,10 +1076,99 @@
 <span class="sd">            2. Creates a new table for the embeddings in SingleStoreDB.</span>
 <span class="sd">            3. Adds the documents to the newly created table.</span>
 <span class="sd">        This is intended to be a quick way to get started.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            texts (List[str]): List of texts to add to the vectorstore.</span>
+<span class="sd">            embedding (Embeddings): A text embedding model.</span>
+<span class="sd">            metadatas (Optional[List[dict]], optional): Optional list of metadatas.</span>
+<span class="sd">                Defaults to None.</span>
+<span class="sd">            distance_strategy (DistanceStrategy, optional):</span>
+<span class="sd">                Determines the strategy employed for calculating</span>
+<span class="sd">                the distance between vectors in the embedding space.</span>
+<span class="sd">                Defaults to DOT_PRODUCT.</span>
+<span class="sd">                Available options are:</span>
+<span class="sd">                - DOT_PRODUCT: Computes the scalar product of two vectors.</span>
+<span class="sd">                    This is the default behavior</span>
+<span class="sd">                - EUCLIDEAN_DISTANCE: Computes the Euclidean distance between</span>
+<span class="sd">                    two vectors. This metric considers the geometric distance in</span>
+<span class="sd">                    the vector space, and might be more suitable for embeddings</span>
+<span class="sd">                    that rely on spatial relationships. This metric is not</span>
+<span class="sd">                    compatible with the WEIGHTED_SUM search strategy.</span>
+<span class="sd">            table_name (str, optional): Specifies the name of the table in use.</span>
+<span class="sd">                Defaults to &quot;embeddings&quot;.</span>
+<span class="sd">            content_field (str, optional): Specifies the field to store the content.</span>
+<span class="sd">                Defaults to &quot;content&quot;.</span>
+<span class="sd">            metadata_field (str, optional): Specifies the field to store metadata.</span>
+<span class="sd">                Defaults to &quot;metadata&quot;.</span>
+<span class="sd">            vector_field (str, optional): Specifies the field to store the vector.</span>
+<span class="sd">                Defaults to &quot;vector&quot;.</span>
+<span class="sd">            id_field (str, optional): Specifies the field to store the id.</span>
+<span class="sd">                Defaults to &quot;id&quot;.</span>
+<span class="sd">            use_vector_index (bool, optional): Toggles the use of a vector index.</span>
+<span class="sd">                Works only with SingleStoreDB 8.5 or later. Defaults to False.</span>
+<span class="sd">                If set to True, vector_size parameter is required to be set to</span>
+<span class="sd">                a proper value.</span>
+<span class="sd">            vector_index_name (str, optional): Specifies the name of the vector index.</span>
+<span class="sd">                Defaults to empty. Will be ignored if use_vector_index is set to False.</span>
+<span class="sd">            vector_index_options (dict, optional): Specifies the options for</span>
+<span class="sd">                the vector index. Defaults to {}.</span>
+<span class="sd">                Will be ignored if use_vector_index is set to False. The options are:</span>
+<span class="sd">                index_type (str, optional): Specifies the type of the index.</span>
+<span class="sd">                    Defaults to IVF_PQFS.</span>
+<span class="sd">                For more options, please refer to the SingleStoreDB documentation:</span>
+<span class="sd">                https://docs.singlestore.com/cloud/reference/sql-reference/vector-functions/vector-indexing/</span>
+<span class="sd">            vector_size (int, optional): Specifies the size of the vector.</span>
+<span class="sd">                Defaults to 1536. Required if use_vector_index is set to True.</span>
+<span class="sd">                Should be set to the same value as the size of the vectors</span>
+<span class="sd">                stored in the vector_field.</span>
+<span class="sd">            use_full_text_search (bool, optional): Toggles the use a full-text index</span>
+<span class="sd">                on the document content. Defaults to False. If set to True, the table</span>
+<span class="sd">                will be created with a full-text index on the content field,</span>
+<span class="sd">                and the simularity_search method will all using TEXT_ONLY,</span>
+<span class="sd">                FILTER_BY_TEXT, FILTER_BY_VECTOR, and WIGHTED_SUM search strategies.</span>
+<span class="sd">                If set to False, the simularity_search method will only allow</span>
+<span class="sd">                VECTOR_ONLY search strategy.</span>
+
+<span class="sd">            pool_size (int, optional): Determines the number of active connections in</span>
+<span class="sd">                the pool. Defaults to 5.</span>
+<span class="sd">            max_overflow (int, optional): Determines the maximum number of connections</span>
+<span class="sd">                allowed beyond the pool_size. Defaults to 10.</span>
+<span class="sd">            timeout (float, optional): Specifies the maximum wait time in seconds for</span>
+<span class="sd">                establishing a connection. Defaults to 30.</span>
+
+<span class="sd">            Additional optional arguments provide further customization over the</span>
+<span class="sd">            database connection:</span>
+
+<span class="sd">            pure_python (bool, optional): Toggles the connector mode. If True,</span>
+<span class="sd">                operates in pure Python mode.</span>
+<span class="sd">            local_infile (bool, optional): Allows local file uploads.</span>
+<span class="sd">            charset (str, optional): Specifies the character set for string values.</span>
+<span class="sd">            ssl_key (str, optional): Specifies the path of the file containing the SSL</span>
+<span class="sd">                key.</span>
+<span class="sd">            ssl_cert (str, optional): Specifies the path of the file containing the SSL</span>
+<span class="sd">                certificate.</span>
+<span class="sd">            ssl_ca (str, optional): Specifies the path of the file containing the SSL</span>
+<span class="sd">                certificate authority.</span>
+<span class="sd">            ssl_cipher (str, optional): Sets the SSL cipher list.</span>
+<span class="sd">            ssl_disabled (bool, optional): Disables SSL usage.</span>
+<span class="sd">            ssl_verify_cert (bool, optional): Verifies the server&#39;s certificate.</span>
+<span class="sd">                Automatically enabled if ``ssl_ca`` is specified.</span>
+<span class="sd">            ssl_verify_identity (bool, optional): Verifies the server&#39;s identity.</span>
+<span class="sd">            conv (dict[int, Callable], optional): A dictionary of data conversion</span>
+<span class="sd">                functions.</span>
+<span class="sd">            credential_type (str, optional): Specifies the type of authentication to</span>
+<span class="sd">                use: auth.PASSWORD, auth.JWT, or auth.BROWSER_SSO.</span>
+<span class="sd">            autocommit (bool, optional): Enables autocommits.</span>
+<span class="sd">            results_type (str, optional): Determines the structure of the query results:</span>
+<span class="sd">                tuples, namedtuples, dicts.</span>
+<span class="sd">            results_format (str, optional): Deprecated. This option has been renamed to</span>
+<span class="sd">                results_type.</span>
+
 <span class="sd">        Example:</span>
 <span class="sd">            .. code-block:: python</span>
+
 <span class="sd">                from langchain_community.vectorstores import SingleStoreDB</span>
-<span class="sd">                from langchain_community.embeddings import OpenAIEmbeddings</span>
+<span class="sd">                from langchain_openai import OpenAIEmbeddings</span>
+
 <span class="sd">                s2 = SingleStoreDB.from_texts(</span>
 <span class="sd">                    texts,</span>
 <span class="sd">                    OpenAIEmbeddings(),</span>
@@ -738,6 +1183,7 @@
             <span class="n">content_field</span><span class="o">=</span><span class="n">content_field</span><span class="p">,</span>
             <span class="n">metadata_field</span><span class="o">=</span><span class="n">metadata_field</span><span class="p">,</span>
             <span class="n">vector_field</span><span class="o">=</span><span class="n">vector_field</span><span class="p">,</span>
+            <span class="n">id_field</span><span class="o">=</span><span class="n">id_field</span><span class="p">,</span>
             <span class="n">pool_size</span><span class="o">=</span><span class="n">pool_size</span><span class="p">,</span>
             <span class="n">max_overflow</span><span class="o">=</span><span class="n">max_overflow</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
@@ -745,6 +1191,7 @@
             <span class="n">vector_index_name</span><span class="o">=</span><span class="n">vector_index_name</span><span class="p">,</span>
             <span class="n">vector_index_options</span><span class="o">=</span><span class="n">vector_index_options</span><span class="p">,</span>
             <span class="n">vector_size</span><span class="o">=</span><span class="n">vector_size</span><span class="p">,</span>
+            <span class="n">use_full_text_search</span><span class="o">=</span><span class="n">use_full_text_search</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">instance</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="n">embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="n">texts</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -759,7 +1206,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>

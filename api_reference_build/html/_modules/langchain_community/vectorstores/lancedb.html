@@ -202,12 +202,25 @@
   <h1>Source code for langchain_community.vectorstores.lancedb</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VectorStore</span>
+
+
+<div class="viewcode-block" id="import_lancedb"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.lancedb.import_lancedb.html#langchain_community.vectorstores.lancedb.import_lancedb">[docs]</a><span class="k">def</span> <span class="nf">import_lancedb</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span> <span class="nn">lancedb</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;Could not import pinecone lancedb package. &quot;</span>
+            <span class="s2">&quot;Please install it with `pip install lancedb`.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+    <span class="k">return</span> <span class="n">lancedb</span></div>
 
 
 <div class="viewcode-block" id="LanceDB"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.lancedb.LanceDB.html#langchain_community.vectorstores.lancedb.LanceDB">[docs]</a><span class="k">class</span> <span class="nc">LanceDB</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
@@ -224,15 +237,15 @@
 <span class="sd">        id_key: Key to use for the id in the database. Defaults to ``id``.</span>
 <span class="sd">        text_key: Key to use for the text in the database. Defaults to ``text``.</span>
 <span class="sd">        table_name: Name of the table to use. Defaults to ``vectorstore``.</span>
+<span class="sd">        api_key: API key to use for LanceDB cloud database.</span>
+<span class="sd">        region: Region to use for LanceDB cloud database.</span>
+<span class="sd">        mode: Mode to use for adding data to the table. Defaults to ``overwrite``.</span>
 
 
 
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
-
-<span class="sd">            db = lancedb.connect(&#39;./lancedb&#39;)</span>
-<span class="sd">            table = db.open_table(&#39;my_table&#39;)</span>
-<span class="sd">            vectorstore = LanceDB(table, embedding_function)</span>
+<span class="sd">            vectorstore = LanceDB(uri=&#39;/lancedb&#39;, embedding_function)</span>
 <span class="sd">            vectorstore.add_texts([&#39;text1&#39;, &#39;text2&#39;])</span>
 <span class="sd">            result = vectorstore.similarity_search(&#39;text1&#39;)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -241,38 +254,55 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">connection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">uri</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;/tmp/lancedb&quot;</span><span class="p">,</span>
         <span class="n">vector_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;vector&quot;</span><span class="p">,</span>
         <span class="n">id_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
         <span class="n">text_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
         <span class="n">table_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;vectorstore&quot;</span><span class="p">,</span>
+        <span class="n">api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">region</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mode</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;overwrite&quot;</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize with Lance DB vectorstore&quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">lancedb</span>
-        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                <span class="s2">&quot;Could not import lancedb python package. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install lancedb`.&quot;</span>
-            <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">lancedb</span> <span class="o">=</span> <span class="n">lancedb</span>
+        <span class="n">lancedb</span> <span class="o">=</span> <span class="n">import_lancedb</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span> <span class="o">=</span> <span class="n">embedding</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span> <span class="o">=</span> <span class="n">vector_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_id_key</span> <span class="o">=</span> <span class="n">id_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span> <span class="o">=</span> <span class="n">text_key</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span> <span class="o">=</span> <span class="n">table_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="o">=</span> <span class="n">api_key</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;LANCE_API_KEY&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">api_key</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">region</span> <span class="o">=</span> <span class="n">region</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">uri</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;db://&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;API key is required for LanceDB cloud.&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;embedding should be provided&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;embedding object should be provided&quot;</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">lancedb</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">LanceTable</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;connection should be an instance of lancedb.db.LanceTable, &quot;</span><span class="p">,</span>
-                    <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">connection</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="n">lancedb</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">LanceDBConnection</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="n">connection</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">connection</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">lancedb</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">LanceTable</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;`connection` has to be a lancedb.db.LanceDBConnection object.</span><span class="se">\</span>
+<span class="s2">                `lancedb.db.LanceTable` is deprecated.&quot;</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_table</span><span class="p">()</span></div>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="n">lancedb</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">uri</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">uri</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;db://&quot;</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="n">lancedb</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span>
+                            <span class="n">uri</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">,</span> <span class="n">region</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">region</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="n">lancedb</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+                        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                            <span class="s2">&quot;api key provided with local uri.</span><span class="se">\</span>
+<span class="s2">                            The data will be stored locally&quot;</span>
+                        <span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]:</span>
@@ -290,7 +320,7 @@
 <span class="sd">        Args:</span>
 <span class="sd">            texts: Iterable of strings to add to the vectorstore.</span>
 <span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
-<span class="sd">            ids: Optional list of ids to associate with the texts.</span>
+<span class="sd">            ids: Optional list of ids to associate w    ith the texts.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List of ids of the added texts.</span>
@@ -301,20 +331,70 @@
         <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">))</span>  <span class="c1"># type: ignore</span>
         <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">texts</span><span class="p">):</span>
             <span class="n">embedding</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-            <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadatas</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">metadatas</span> <span class="k">else</span> <span class="p">{}</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadatas</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">metadatas</span> <span class="k">else</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">ids</span><span class="p">[</span><span class="n">idx</span><span class="p">]}</span>
             <span class="n">docs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="p">{</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">:</span> <span class="n">embedding</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_id_key</span><span class="p">:</span> <span class="n">ids</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span><span class="p">:</span> <span class="n">text</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">metadata</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
                 <span class="p">}</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">docs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">table_names</span><span class="p">():</span>
+            <span class="n">tbl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">open_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tbl</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tbl</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">docs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">create_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">docs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">ids</span></div>
 
+<div class="viewcode-block" id="LanceDB.get_table"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.lancedb.LanceDB.html#langchain_community.vectorstores.lancedb.LanceDB.get_table">[docs]</a>    <span class="k">def</span> <span class="nf">get_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">open_table</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Table </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> not found in the database&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">open_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="LanceDB.create_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.lancedb.LanceDB.html#langchain_community.vectorstores.lancedb.LanceDB.create_index">[docs]</a>    <span class="k">def</span> <span class="nf">create_index</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">col_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">vector_col</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_partitions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span>
+        <span class="n">num_sub_vectors</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">96</span><span class="p">,</span>
+        <span class="n">index_cache_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a scalar(for non-vector cols) or a vector index on a table.</span>
+<span class="sd">        Make sure your vector column has enough data before creating an index on it.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            vector_col: Provide if you want to create index on a vector column.</span>
+<span class="sd">            col_name: Provide if you want to create index on a non-vector column.</span>
+<span class="sd">            metric: Provide the metric to use for vector index. Defaults to &#39;L2&#39;</span>
+<span class="sd">                    choice of metrics: &#39;L2&#39;, &#39;dot&#39;, &#39;cosine&#39;</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">vector_col</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span>
+                <span class="n">vector_column_name</span><span class="o">=</span><span class="n">vector_col</span><span class="p">,</span>
+                <span class="n">num_partitions</span><span class="o">=</span><span class="n">num_partitions</span><span class="p">,</span>
+                <span class="n">num_sub_vectors</span><span class="o">=</span><span class="n">num_sub_vectors</span><span class="p">,</span>
+                <span class="n">index_cache_size</span><span class="o">=</span><span class="n">index_cache_size</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">col_name</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">create_scalar_index</span><span class="p">(</span><span class="n">col_name</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Provide either vector_col or col_name&quot;</span><span class="p">)</span></div>
+
 <div class="viewcode-block" id="LanceDB.similarity_search"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.lancedb.LanceDB.html#langchain_community.vectorstores.lancedb.LanceDB.similarity_search">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return documents most similar to the query</span>
 
@@ -326,8 +406,9 @@
 <span class="sd">            List of documents most similar to the query.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="n">tbl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
         <span class="n">docs</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">vector_column_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">)</span>
+            <span class="n">tbl</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">vector_column_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">)</span>
             <span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
             <span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
         <span class="p">)</span>
@@ -357,42 +438,57 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LanceDB</span><span class="p">:</span>
         <span class="n">instance</span> <span class="o">=</span> <span class="n">LanceDB</span><span class="p">(</span>
-            <span class="n">connection</span><span class="p">,</span>
-            <span class="n">embedding</span><span class="p">,</span>
-            <span class="n">vector_key</span><span class="p">,</span>
-            <span class="n">id_key</span><span class="p">,</span>
-            <span class="n">text_key</span><span class="p">,</span>
+            <span class="n">connection</span><span class="o">=</span><span class="n">connection</span><span class="p">,</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+            <span class="n">vector_key</span><span class="o">=</span><span class="n">vector_key</span><span class="p">,</span>
+            <span class="n">id_key</span><span class="o">=</span><span class="n">id_key</span><span class="p">,</span>
+            <span class="n">text_key</span><span class="o">=</span><span class="n">text_key</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">instance</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">instance</span></div>
 
-    <span class="k">def</span> <span class="nf">_init_table</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="kn">import</span> <span class="nn">pyarrow</span> <span class="k">as</span> <span class="nn">pa</span>
+<div class="viewcode-block" id="LanceDB.delete"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.lancedb.LanceDB.html#langchain_community.vectorstores.lancedb.LanceDB.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">delete_all</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">drop_columns</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Allows deleting rows by filtering, by ids or drop columns from the table.</span>
 
-        <span class="n">schema</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">schema</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">pa</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">,</span>
-                    <span class="n">pa</span><span class="o">.</span><span class="n">list_</span><span class="p">(</span>
-                        <span class="n">pa</span><span class="o">.</span><span class="n">float32</span><span class="p">(),</span>
-                        <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embeddings</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">)),</span>  <span class="c1"># type: ignore</span>
-                    <span class="p">),</span>
-                <span class="p">),</span>
-                <span class="n">pa</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_id_key</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">string</span><span class="p">()),</span>
-                <span class="n">pa</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">string</span><span class="p">()),</span>
-            <span class="p">]</span>
-        <span class="p">)</span>
-        <span class="n">db</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lancedb</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="s2">&quot;/tmp/lancedb&quot;</span><span class="p">)</span>
-        <span class="n">tbl</span> <span class="o">=</span> <span class="n">db</span><span class="o">.</span><span class="n">create_table</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;overwrite&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">tbl</span></div>
+<span class="sd">        Args:</span>
+<span class="sd">            filter: Provide a string SQL expression -  &quot;{col} {operation} {value}&quot;.</span>
+<span class="sd">            ids: Provide list of ids to delete from the table.</span>
+<span class="sd">            drop_columns: Provide list of columns to drop from the table.</span>
+<span class="sd">            delete_all: If True, delete all rows from the table.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tbl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">filter</span><span class="p">:</span>
+            <span class="n">tbl</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">ids</span><span class="p">:</span>
+            <span class="n">tbl</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;id in (&#39;</span><span class="si">{}</span><span class="s2">&#39;)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ids</span><span class="p">)))</span>
+        <span class="k">elif</span> <span class="n">drop_columns</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                    <span class="s2">&quot;Column operations currently not supported in LanceDB Cloud.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tbl</span><span class="o">.</span><span class="n">drop_columns</span><span class="p">(</span><span class="n">drop_columns</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">delete_all</span><span class="p">:</span>
+            <span class="n">tbl</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s2">&quot;true&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Provide either filter, ids, drop_columns or delete_all&quot;</span><span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 22, 2024.
+          Last updated on Apr 25, 2024.
       </footer>
     </div>
   </div>
