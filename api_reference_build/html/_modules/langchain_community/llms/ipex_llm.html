@@ -244,6 +244,10 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tokenizer_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">load_in_4bit</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">load_in_low_bit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLM</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -252,52 +256,29 @@
 <span class="sd">        Args:</span>
 <span class="sd">            model_id: Path for the huggingface repo id to be downloaded or</span>
 <span class="sd">                      the huggingface checkpoint folder.</span>
+<span class="sd">            tokenizer_id: Path for the huggingface repo id to be downloaded or</span>
+<span class="sd">                      the huggingface checkpoint folder which contains the tokenizer.</span>
+<span class="sd">            load_in_4bit: &quot;Whether to load model in 4bit.</span>
+<span class="sd">                      Unused if `load_in_low_bit` is not None.</span>
+<span class="sd">            load_in_low_bit: Which low bit precisions to use when loading model.</span>
+<span class="sd">                      Example values: &#39;sym_int4&#39;, &#39;asym_int4&#39;, &#39;fp4&#39;, &#39;nf4&#39;, &#39;fp8&#39;, etc.</span>
+<span class="sd">                      Overrides `load_in_4bit` if specified.</span>
 <span class="sd">            model_kwargs: Keyword arguments to pass to the model and tokenizer.</span>
 <span class="sd">            kwargs: Extra arguments to pass to the model and tokenizer.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            An object of IpexLLM.</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">ipex_llm.transformers</span> <span class="kn">import</span> <span class="p">(</span>
-                <span class="n">AutoModel</span><span class="p">,</span>
-                <span class="n">AutoModelForCausalLM</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="kn">from</span> <span class="nn">transformers</span> <span class="kn">import</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">LlamaTokenizer</span>
 
-        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Could not import ipex-llm or transformers. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install --pre --upgrade ipex-llm[all]`.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
-
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
-
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-                <span class="n">model_id</span><span class="p">,</span> <span class="n">load_in_4bit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span>
-            <span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
-                <span class="n">model_id</span><span class="p">,</span> <span class="n">load_in_4bit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span>
-            <span class="p">)</span>
-
-        <span class="k">if</span> <span class="s2">&quot;trust_remote_code&quot;</span> <span class="ow">in</span> <span class="n">_model_kwargs</span><span class="p">:</span>
-            <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_model_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;trust_remote_code&quot;</span>
-            <span class="p">}</span>
-
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_load_model</span><span class="p">(</span>
             <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
-            <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-            <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
-            <span class="n">model_kwargs</span><span class="o">=</span><span class="n">_model_kwargs</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">tokenizer_id</span><span class="o">=</span><span class="n">tokenizer_id</span><span class="p">,</span>
+            <span class="n">low_bit_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">load_in_4bit</span><span class="o">=</span><span class="n">load_in_4bit</span><span class="p">,</span>
+            <span class="n">load_in_low_bit</span><span class="o">=</span><span class="n">load_in_low_bit</span><span class="p">,</span>
+            <span class="n">model_kwargs</span><span class="o">=</span><span class="n">model_kwargs</span><span class="p">,</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="IpexLLM.from_model_id_low_bit"><a class="viewcode-back" href="../../../llms/langchain_community.llms.ipex_llm.IpexLLM.html#langchain_community.llms.ipex_llm.IpexLLM.from_model_id_low_bit">[docs]</a>    <span class="nd">@classmethod</span>
@@ -305,6 +286,8 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tokenizer_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLM</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -313,12 +296,36 @@
 <span class="sd">        Args:</span>
 
 <span class="sd">            model_id: Path for the ipex-llm transformers low-bit model folder.</span>
+<span class="sd">            tokenizer_id: Path for the huggingface repo id or local model folder</span>
+<span class="sd">                      which contains the tokenizer.</span>
 <span class="sd">            model_kwargs: Keyword arguments to pass to the model and tokenizer.</span>
 <span class="sd">            kwargs: Extra arguments to pass to the model and tokenizer.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            An object of IpexLLM.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_load_model</span><span class="p">(</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+            <span class="n">tokenizer_id</span><span class="o">=</span><span class="n">tokenizer_id</span><span class="p">,</span>
+            <span class="n">low_bit_model</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">load_in_4bit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># not used for low-bit model</span>
+            <span class="n">load_in_low_bit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># not used for low-bit model</span>
+            <span class="n">model_kwargs</span><span class="o">=</span><span class="n">model_kwargs</span><span class="p">,</span>
+            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_load_model</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">tokenizer_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">load_in_4bit</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">load_in_low_bit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">low_bit_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">ipex_llm.transformers</span> <span class="kn">import</span> <span class="p">(</span>
                 <span class="n">AutoModel</span><span class="p">,</span>
@@ -328,25 +335,61 @@
 
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Could not import ipex-llm or transformers. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install --pre --upgrade ipex-llm[all]`.&quot;</span>
+                <span class="s2">&quot;Could not import ipex-llm. &quot;</span>
+                <span class="s2">&quot;Please install `ipex-llm` properly following installation guides: &quot;</span>
+                <span class="s2">&quot;https://github.com/intel-analytics/ipex-llm?tab=readme-ov-file#install-ipex-llm.&quot;</span>
             <span class="p">)</span>
 
         <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+
+        <span class="n">_tokenizer_id</span> <span class="o">=</span> <span class="n">tokenizer_id</span> <span class="ow">or</span> <span class="n">model_id</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">load_low_bit</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">_tokenizer_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModel</span><span class="o">.</span><span class="n">load_low_bit</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">_tokenizer_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
 
+        <span class="c1"># restore model_kwargs</span>
         <span class="k">if</span> <span class="s2">&quot;trust_remote_code&quot;</span> <span class="ow">in</span> <span class="n">_model_kwargs</span><span class="p">:</span>
             <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_model_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;trust_remote_code&quot;</span>
             <span class="p">}</span>
+
+        <span class="c1"># load model with AutoModelForCausalLM and falls back to AutoModel on failure.</span>
+        <span class="n">load_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;use_cache&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;trust_remote_code&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">low_bit_model</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">load_in_low_bit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">load_function_name</span> <span class="o">=</span> <span class="s2">&quot;from_pretrained&quot;</span>
+                <span class="n">load_kwargs</span><span class="p">[</span><span class="s2">&quot;load_in_low_bit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">load_in_low_bit</span>  <span class="c1"># type: ignore</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">load_function_name</span> <span class="o">=</span> <span class="s2">&quot;from_pretrained&quot;</span>
+                <span class="n">load_kwargs</span><span class="p">[</span><span class="s2">&quot;load_in_4bit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">load_in_4bit</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">load_function_name</span> <span class="o">=</span> <span class="s2">&quot;load_low_bit&quot;</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Attempt to load with AutoModelForCausalLM</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_load_model_general</span><span class="p">(</span>
+                <span class="n">AutoModelForCausalLM</span><span class="p">,</span>
+                <span class="n">load_function_name</span><span class="o">=</span><span class="n">load_function_name</span><span class="p">,</span>
+                <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                <span class="n">load_kwargs</span><span class="o">=</span><span class="n">load_kwargs</span><span class="p">,</span>
+                <span class="n">model_kwargs</span><span class="o">=</span><span class="n">_model_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="c1"># Fallback to AutoModel if there&#39;s an exception</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_load_model_general</span><span class="p">(</span>
+                <span class="n">AutoModel</span><span class="p">,</span>
+                <span class="n">load_function_name</span><span class="o">=</span><span class="n">load_function_name</span><span class="p">,</span>
+                <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                <span class="n">load_kwargs</span><span class="o">=</span><span class="n">load_kwargs</span><span class="p">,</span>
+                <span class="n">model_kwargs</span><span class="o">=</span><span class="n">_model_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
@@ -354,7 +397,25 @@
             <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
             <span class="n">model_kwargs</span><span class="o">=</span><span class="n">_model_kwargs</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_load_model_general</span><span class="p">(</span>
+        <span class="n">model_class</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">load_function_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">load_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">model_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;General function to attempt to load a model.&quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">load_function</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model_class</span><span class="p">,</span> <span class="n">load_function_name</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">load_function</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">load_kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">model_kwargs</span><span class="p">})</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Failed to load model using &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_class</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">load_function_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -429,7 +490,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 25, 2024.
+          Last updated on Apr 26, 2024.
       </footer>
     </div>
   </div>

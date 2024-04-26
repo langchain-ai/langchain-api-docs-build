@@ -203,10 +203,10 @@
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
@@ -214,23 +214,25 @@
     <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Set</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
+    <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="kn">import</span> <span class="nn">aiohttp</span>
 <span class="kn">import</span> <span class="nn">requests</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.html</span> <span class="kn">import</span> <span class="n">extract_sub_links</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.document_loaders.base</span> <span class="kn">import</span> <span class="n">BaseLoader</span>
 
-<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
-    <span class="kn">import</span> <span class="nn">aiohttp</span>
-
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_metadata_extractor</span><span class="p">(</span><span class="n">raw_html</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_metadata_extractor</span><span class="p">(</span>
+    <span class="n">raw_html</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">requests</span><span class="o">.</span><span class="n">Response</span><span class="p">,</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientResponse</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Extract metadata from raw html using BeautifulSoup.&quot;&quot;&quot;</span>
-    <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">url</span><span class="p">}</span>
+    <span class="n">content_type</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;headers&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">url</span><span class="p">,</span> <span class="s2">&quot;content_type&quot;</span><span class="p">:</span> <span class="n">content_type</span><span class="p">}</span>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="kn">from</span> <span class="nn">bs4</span> <span class="kn">import</span> <span class="n">BeautifulSoup</span>
@@ -288,7 +290,7 @@
         <span class="n">max_depth</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
         <span class="n">use_async</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">extractor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">metadata_extractor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadata_extractor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">_MetadataExtractorType</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">exclude_dirs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="n">prevent_outside</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -310,10 +312,22 @@
 <span class="sd">            extractor: A function to extract document contents from raw html.</span>
 <span class="sd">                When extract function returns an empty string, the document is</span>
 <span class="sd">                ignored.</span>
-<span class="sd">            metadata_extractor: A function to extract metadata from raw html and the</span>
-<span class="sd">                source url (args in that order). Default extractor will attempt</span>
-<span class="sd">                to use BeautifulSoup4 to extract the title, description and language</span>
-<span class="sd">                of the page.</span>
+<span class="sd">            metadata_extractor: A function to extract metadata from args: raw html, the</span>
+<span class="sd">                source url, and the requests.Response/aiohttp.ClientResponse object</span>
+<span class="sd">                (args in that order).</span>
+<span class="sd">                Default extractor will attempt to use BeautifulSoup4 to extract the</span>
+<span class="sd">                title, description and language of the page.</span>
+<span class="sd">                ..code-block:: python</span>
+
+<span class="sd">                    import requests</span>
+<span class="sd">                    import aiohttp</span>
+
+<span class="sd">                    def simple_metadata_extractor(</span>
+<span class="sd">                        raw_html: str, url: str, response: Union[requests.Response, aiohttp.ClientResponse]</span>
+<span class="sd">                    ) -&gt; dict:</span>
+<span class="sd">                        content_type = getattr(response, &quot;headers&quot;).get(&quot;Content-Type&quot;, &quot;&quot;)</span>
+<span class="sd">                        return {&quot;source&quot;: url, &quot;content_type&quot;: content_type}</span>
+
 <span class="sd">            exclude_dirs: A list of subdirectories to exclude.</span>
 <span class="sd">            timeout: The timeout for the requests, in the unit of seconds. If None then</span>
 <span class="sd">                connection will not timeout.</span>
@@ -325,17 +339,18 @@
 <span class="sd">            continue_on_failure: If True, continue if getting or parsing a link raises</span>
 <span class="sd">                an exception. Otherwise, raise the exception.</span>
 <span class="sd">            base_url: The base url to check for outside links against.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">url</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span> <span class="o">=</span> <span class="n">max_depth</span> <span class="k">if</span> <span class="n">max_depth</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">2</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_async</span> <span class="o">=</span> <span class="n">use_async</span> <span class="k">if</span> <span class="n">use_async</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">extractor</span> <span class="o">=</span> <span class="n">extractor</span> <span class="k">if</span> <span class="n">extractor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">metadata_extractor</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">metadata_extractor</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">metadata_extractor</span>
             <span class="k">if</span> <span class="n">metadata_extractor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="k">else</span> <span class="n">_metadata_extractor</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metadata_extractor</span> <span class="o">=</span> <span class="n">_wrap_metadata_extractor</span><span class="p">(</span><span class="n">metadata_extractor</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exclude_dirs</span> <span class="o">=</span> <span class="n">exclude_dirs</span> <span class="k">if</span> <span class="n">exclude_dirs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">()</span>
 
         <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">exclude_dir</span><span class="p">)</span> <span class="k">for</span> <span class="n">exclude_dir</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">exclude_dirs</span><span class="p">):</span>
@@ -386,7 +401,7 @@
         <span class="k">if</span> <span class="n">content</span><span class="p">:</span>
             <span class="k">yield</span> <span class="n">Document</span><span class="p">(</span>
                 <span class="n">page_content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_extractor</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">url</span><span class="p">),</span>
+                <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_extractor</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">response</span><span class="p">),</span>
             <span class="p">)</span>
 
         <span class="c1"># Store the visited links and recursively visit the children</span>
@@ -472,7 +487,7 @@
             <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="n">Document</span><span class="p">(</span>
                     <span class="n">page_content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
-                    <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_extractor</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">url</span><span class="p">),</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata_extractor</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">response</span><span class="p">),</span>
                 <span class="p">)</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">depth</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
@@ -520,13 +535,37 @@
             <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="n">results</span> <span class="ow">or</span> <span class="p">[])</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_child_links_recursive</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="n">visited</span><span class="p">)</span></div></div>
+
+
+<span class="n">_MetadataExtractorType1</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]</span>
+<span class="n">_MetadataExtractorType2</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[</span>
+    <span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">requests</span><span class="o">.</span><span class="n">Response</span><span class="p">,</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientResponse</span><span class="p">]],</span> <span class="nb">dict</span>
+<span class="p">]</span>
+<span class="n">_MetadataExtractorType</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">_MetadataExtractorType1</span><span class="p">,</span> <span class="n">_MetadataExtractorType2</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_wrap_metadata_extractor</span><span class="p">(</span>
+    <span class="n">metadata_extractor</span><span class="p">:</span> <span class="n">_MetadataExtractorType</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_MetadataExtractorType2</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">metadata_extractor</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">_MetadataExtractorType2</span><span class="p">,</span> <span class="n">metadata_extractor</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="k">def</span> <span class="nf">_metadata_extractor_wrapper</span><span class="p">(</span>
+            <span class="n">raw_html</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">response</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">requests</span><span class="o">.</span><span class="n">Response</span><span class="p">,</span> <span class="n">aiohttp</span><span class="o">.</span><span class="n">ClientResponse</span><span class="p">],</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">_MetadataExtractorType1</span><span class="p">,</span> <span class="n">metadata_extractor</span><span class="p">)(</span><span class="n">raw_html</span><span class="p">,</span> <span class="n">url</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">_metadata_extractor_wrapper</span>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 25, 2024.
+          Last updated on Apr 26, 2024.
       </footer>
     </div>
   </div>

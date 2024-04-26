@@ -225,6 +225,10 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tokenizer_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">load_in_4bit</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">load_in_low_bit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLM</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -233,6 +237,8 @@
 <span class="sd">        Args:</span>
 <span class="sd">            model_id: Path for the huggingface repo id to be downloaded or</span>
 <span class="sd">                      the huggingface checkpoint folder.</span>
+<span class="sd">            tokenizer_id: Path for the huggingface repo id to be downloaded or</span>
+<span class="sd">                      the huggingface checkpoint folder which contains the tokenizer.</span>
 <span class="sd">            model_kwargs: Keyword arguments to pass to the model and tokenizer.</span>
 <span class="sd">            kwargs: Extra arguments to pass to the model and tokenizer.</span>
 
@@ -254,12 +260,27 @@
                 <span class="s2">&quot;Please install it with `pip install --pre --upgrade bigdl-llm[all]`.&quot;</span>
             <span class="p">)</span>
 
+        <span class="k">if</span> <span class="n">load_in_low_bit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;`load_in_low_bit` option is not supported in BigdlLLM and </span>
+<span class="sd">                is ignored. For more data types support with `load_in_low_bit`, </span>
+<span class="sd">                use IpexLLM instead.&quot;&quot;&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">load_in_4bit</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;BigdlLLM only supports loading in 4-bit mode, &quot;</span>
+                <span class="s2">&quot;i.e. load_in_4bit = True. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install --pre --upgrade bigdl-llm[all]`.&quot;</span>
+            <span class="p">)</span>
+
         <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">_tokenizer_id</span> <span class="o">=</span> <span class="n">tokenizer_id</span> <span class="ow">or</span> <span class="n">model_id</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">_tokenizer_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">_tokenizer_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
@@ -288,6 +309,8 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">tokenizer_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LLM</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -296,6 +319,8 @@
 <span class="sd">        Args:</span>
 
 <span class="sd">            model_id: Path for the bigdl-llm transformers low-bit model folder.</span>
+<span class="sd">            tokenizer_id: Path for the huggingface repo id or local model folder</span>
+<span class="sd">                      which contains the tokenizer.</span>
 <span class="sd">            model_kwargs: Keyword arguments to pass to the model and tokenizer.</span>
 <span class="sd">            kwargs: Extra arguments to pass to the model and tokenizer.</span>
 
@@ -319,10 +344,12 @@
             <span class="p">)</span>
 
         <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">_tokenizer_id</span> <span class="o">=</span> <span class="n">tokenizer_id</span> <span class="ow">or</span> <span class="n">model_id</span>
+
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">_tokenizer_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
+            <span class="n">tokenizer</span> <span class="o">=</span> <span class="n">LlamaTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">_tokenizer_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">load_low_bit</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="o">**</span><span class="n">_model_kwargs</span><span class="p">)</span>
@@ -351,7 +378,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 25, 2024.
+          Last updated on Apr 26, 2024.
       </footer>
     </div>
   </div>
