@@ -221,6 +221,7 @@
 
 <span class="sd">    BaseCache --&gt; &lt;name&gt;Cache  # Examples: InMemoryCache, RedisCache, GPTCache</span>
 <span class="sd">&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">hashlib</span>
@@ -278,6 +279,9 @@
     <span class="n">_AstraDBCollectionEnvironment</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_community.vectorstores</span> <span class="kn">import</span> <span class="n">AzureCosmosDBVectorSearch</span>
+<span class="kn">from</span> <span class="nn">langchain_community.vectorstores</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OpenSearchVectorSearch</span> <span class="k">as</span> <span class="n">OpenSearchVectorStore</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_community.vectorstores.redis</span> <span class="kn">import</span> <span class="n">Redis</span> <span class="k">as</span> <span class="n">RedisVectorstore</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span>
@@ -2251,13 +2255,115 @@
     <span class="k">def</span> <span class="nf">_validate_enum_value</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">enum_type</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Enum</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">enum_type</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid enum value: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">. Expected </span><span class="si">{</span><span class="n">enum_type</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OpenSearchSemanticCache"><a class="viewcode-back" href="../../cache/langchain_community.cache.OpenSearchSemanticCache.html#langchain_community.cache.OpenSearchSemanticCache">[docs]</a><span class="k">class</span> <span class="nc">OpenSearchSemanticCache</span><span class="p">(</span><span class="n">BaseCache</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Cache that uses OpenSearch vector store backend&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="OpenSearchSemanticCache.__init__"><a class="viewcode-back" href="../../cache/langchain_community.cache.OpenSearchSemanticCache.html#langchain_community.cache.OpenSearchSemanticCache.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">opensearch_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span> <span class="n">score_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            opensearch_url (str): URL to connect to OpenSearch.</span>
+<span class="sd">            embedding (Embedding): Embedding provider for semantic encoding and search.</span>
+<span class="sd">            score_threshold (float, 0.2):</span>
+<span class="sd">        Example:</span>
+<span class="sd">        .. code-block:: python</span>
+<span class="sd">            import langchain</span>
+<span class="sd">            from langchain.cache import OpenSearchSemanticCache</span>
+<span class="sd">            from langchain.embeddings import OpenAIEmbeddings</span>
+<span class="sd">            langchain.llm_cache = OpenSearchSemanticCache(</span>
+<span class="sd">                opensearch_url=&quot;http//localhost:9200&quot;,</span>
+<span class="sd">                embedding=OpenAIEmbeddings()</span>
+<span class="sd">            )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OpenSearchVectorStore</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">opensearch_url</span> <span class="o">=</span> <span class="n">opensearch_url</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span> <span class="o">=</span> <span class="n">score_threshold</span></div>
+
+    <span class="k">def</span> <span class="nf">_index_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">hashed_index</span> <span class="o">=</span> <span class="n">_hash</span><span class="p">(</span><span class="n">llm_string</span><span class="p">)</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;cache_</span><span class="si">{</span><span class="n">hashed_index</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_get_llm_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OpenSearchVectorStore</span><span class="p">:</span>
+        <span class="n">index_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">(</span><span class="n">llm_string</span><span class="p">)</span>
+
+        <span class="c1"># return vectorstore client for the specific llm string</span>
+        <span class="k">if</span> <span class="n">index_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">[</span><span class="n">index_name</span><span class="p">]</span>
+
+        <span class="c1"># create new vectorstore client for the specific llm string</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">[</span><span class="n">index_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">OpenSearchVectorStore</span><span class="p">(</span>
+            <span class="n">opensearch_url</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">opensearch_url</span><span class="p">,</span>
+            <span class="n">index_name</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span>
+            <span class="n">embedding_function</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># create index for the vectorstore</span>
+        <span class="n">vectorstore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">[</span><span class="n">index_name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">vectorstore</span><span class="o">.</span><span class="n">index_exists</span><span class="p">():</span>
+            <span class="n">_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">)</span>
+            <span class="n">vectorstore</span><span class="o">.</span><span class="n">create_index</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">_embedding</span><span class="p">),</span> <span class="n">index_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">vectorstore</span>
+
+<div class="viewcode-block" id="OpenSearchSemanticCache.lookup"><a class="viewcode-back" href="../../cache/langchain_community.cache.OpenSearchSemanticCache.html#langchain_community.cache.OpenSearchSemanticCache.lookup">[docs]</a>    <span class="k">def</span> <span class="nf">lookup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RETURN_VAL_TYPE</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Look up based on prompt and llm_string.&quot;&quot;&quot;</span>
+        <span class="n">llm_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_llm_cache</span><span class="p">(</span><span class="n">llm_string</span><span class="p">)</span>
+        <span class="n">generations</span><span class="p">:</span> <span class="n">List</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Read from a Hash</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">llm_cache</span><span class="o">.</span><span class="n">similarity_search</span><span class="p">(</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">score_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">results</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">document</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">generations</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">loads</span><span class="p">(</span><span class="n">document</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;return_val&quot;</span><span class="p">]))</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;Retrieving a cache value that could not be deserialized &quot;</span>
+                        <span class="s2">&quot;properly. This is likely due to the cache being in an &quot;</span>
+                        <span class="s2">&quot;older format. Please recreate your cache to avoid this &quot;</span>
+                        <span class="s2">&quot;error.&quot;</span>
+                    <span class="p">)</span>
+
+                    <span class="n">generations</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                        <span class="n">_load_generations_from_json</span><span class="p">(</span><span class="n">document</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;return_val&quot;</span><span class="p">])</span>
+                    <span class="p">)</span>
+        <span class="k">return</span> <span class="n">generations</span> <span class="k">if</span> <span class="n">generations</span> <span class="k">else</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="OpenSearchSemanticCache.update"><a class="viewcode-back" href="../../cache/langchain_community.cache.OpenSearchSemanticCache.html#langchain_community.cache.OpenSearchSemanticCache.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">return_val</span><span class="p">:</span> <span class="n">RETURN_VAL_TYPE</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update cache based on prompt and llm_string.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">gen</span> <span class="ow">in</span> <span class="n">return_val</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">gen</span><span class="p">,</span> <span class="n">Generation</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;OpenSearchSemanticCache only supports caching of &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;normal LLM generations, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">gen</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="n">llm_cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_llm_cache</span><span class="p">(</span><span class="n">llm_string</span><span class="p">)</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;llm_string&quot;</span><span class="p">:</span> <span class="n">llm_string</span><span class="p">,</span>
+            <span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">,</span>
+            <span class="s2">&quot;return_val&quot;</span><span class="p">:</span> <span class="n">dumps</span><span class="p">([</span><span class="n">g</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">return_val</span><span class="p">]),</span>
+        <span class="p">}</span>
+        <span class="n">llm_cache</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="o">=</span><span class="p">[</span><span class="n">prompt</span><span class="p">],</span> <span class="n">metadatas</span><span class="o">=</span><span class="p">[</span><span class="n">metadata</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="OpenSearchSemanticCache.clear"><a class="viewcode-back" href="../../cache/langchain_community.cache.OpenSearchSemanticCache.html#langchain_community.cache.OpenSearchSemanticCache.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear semantic cache for a given llm_string.&quot;&quot;&quot;</span>
+        <span class="n">index_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;llm_string&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">index_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">[</span><span class="n">index_name</span><span class="p">]</span><span class="o">.</span><span class="n">delete_index</span><span class="p">(</span><span class="n">index_name</span><span class="o">=</span><span class="n">index_name</span><span class="p">)</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_dict</span><span class="p">[</span><span class="n">index_name</span><span class="p">]</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 26, 2024.
+          Last updated on Apr 27, 2024.
       </footer>
     </div>
   </div>

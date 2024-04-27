@@ -201,12 +201,14 @@
         
   <h1>Source code for langchain_upstage.tools.groundedness_check</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
 
+<span class="kn">from</span> <span class="nn">langchain_core._api.deprecation</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForToolRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForToolRun</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span><span class="p">,</span> <span class="n">HumanMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">SecretStr</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
@@ -215,16 +217,18 @@
 <span class="kn">from</span> <span class="nn">langchain_upstage</span> <span class="kn">import</span> <span class="n">ChatUpstage</span>
 
 
-<div class="viewcode-block" id="GroundednessCheckInput"><a class="viewcode-back" href="../../../tools/langchain_upstage.tools.groundedness_check.GroundednessCheckInput.html#langchain_upstage.tools.groundedness_check.GroundednessCheckInput">[docs]</a><span class="k">class</span> <span class="nc">GroundednessCheckInput</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<div class="viewcode-block" id="UpstageGroundednessCheckInput"><a class="viewcode-back" href="../../../tools/langchain_upstage.tools.groundedness_check.UpstageGroundednessCheckInput.html#langchain_upstage.tools.groundedness_check.UpstageGroundednessCheckInput">[docs]</a><span class="k">class</span> <span class="nc">UpstageGroundednessCheckInput</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Input for the Groundedness Check tool.&quot;&quot;&quot;</span>
 
-    <span class="n">context</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;context in which the answer should be verified&quot;</span><span class="p">)</span>
-    <span class="n">query</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;context in which the answer should be verified&quot;</span>
+    <span class="p">)</span>
+    <span class="n">answer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="s2">&quot;assistant&#39;s reply or a text that is subject to groundedness check&quot;</span>
     <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="GroundednessCheck"><a class="viewcode-back" href="../../../tools/langchain_upstage.tools.groundedness_check.GroundednessCheck.html#langchain_upstage.tools.groundedness_check.GroundednessCheck">[docs]</a><span class="k">class</span> <span class="nc">GroundednessCheck</span><span class="p">(</span><span class="n">BaseTool</span><span class="p">):</span>
+<div class="viewcode-block" id="UpstageGroundednessCheck"><a class="viewcode-back" href="../../../tools/langchain_upstage.tools.groundedness_check.UpstageGroundednessCheck.html#langchain_upstage.tools.groundedness_check.UpstageGroundednessCheck">[docs]</a><span class="k">class</span> <span class="nc">UpstageGroundednessCheck</span><span class="p">(</span><span class="n">BaseTool</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Tool that checks the groundedness of a context and an assistant message.</span>
 
 <span class="sd">    To use, you should have the environment variable `UPSTAGE_API_KEY`</span>
@@ -233,15 +237,15 @@
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
 
-<span class="sd">                from langchain_upstage import GroundednessCheck</span>
+<span class="sd">                from langchain_upstage import UpstageGroundednessCheck</span>
 
-<span class="sd">                tool = GroundednessCheck()</span>
+<span class="sd">                tool = UpstageGroundednessCheck()</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;groundedness_check&quot;</span>
     <span class="n">description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="p">(</span>
         <span class="s2">&quot;A tool that checks the groundedness of an assistant response &quot;</span>
-        <span class="s2">&quot;to user-provided context. GroundednessCheck ensures that &quot;</span>
+        <span class="s2">&quot;to user-provided context. UpstageGroundednessCheck ensures that &quot;</span>
         <span class="s2">&quot;the assistant’s response is not only relevant but also &quot;</span>
         <span class="s2">&quot;precisely aligned with the user&#39;s initial context, &quot;</span>
         <span class="s2">&quot;promoting a more reliable and context-aware interaction. &quot;</span>
@@ -252,7 +256,7 @@
     <span class="n">upstage_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">SecretStr</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;api_key&quot;</span><span class="p">)</span>
     <span class="n">api_wrapper</span><span class="p">:</span> <span class="n">ChatUpstage</span>
 
-    <span class="n">args_schema</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]</span> <span class="o">=</span> <span class="n">GroundednessCheckInput</span>
+    <span class="n">args_schema</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]</span> <span class="o">=</span> <span class="n">UpstageGroundednessCheckInput</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">upstage_api_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;upstage_api_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -275,35 +279,51 @@
         <span class="p">)</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">upstage_api_key</span><span class="o">=</span><span class="n">upstage_api_key</span><span class="p">,</span> <span class="n">api_wrapper</span><span class="o">=</span><span class="n">api_wrapper</span><span class="p">)</span>
 
+<div class="viewcode-block" id="UpstageGroundednessCheck.formatDocumentsAsString"><a class="viewcode-back" href="../../../tools/langchain_upstage.tools.groundedness_check.UpstageGroundednessCheck.html#langchain_upstage.tools.groundedness_check.UpstageGroundednessCheck.formatDocumentsAsString">[docs]</a>    <span class="k">def</span> <span class="nf">formatDocumentsAsString</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">docs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">])</span></div>
+
     <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">context</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]],</span>
+        <span class="n">answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForToolRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;grounded&quot;</span><span class="p">,</span> <span class="s2">&quot;notGrounded&quot;</span><span class="p">,</span> <span class="s2">&quot;notSure&quot;</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">List</span><span class="p">):</span>
+            <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">formatDocumentsAsString</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
         <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_wrapper</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">query</span><span class="p">)],</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">[</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">answer</span><span class="p">)],</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_arun</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">context</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">context</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]],</span>
+        <span class="n">answer</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForToolRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;grounded&quot;</span><span class="p">,</span> <span class="s2">&quot;notGrounded&quot;</span><span class="p">,</span> <span class="s2">&quot;notSure&quot;</span><span class="p">]]:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">List</span><span class="p">):</span>
+            <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">formatDocumentsAsString</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
         <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_wrapper</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">query</span><span class="p">)],</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">[</span><span class="n">HumanMessage</span><span class="p">(</span><span class="n">context</span><span class="p">),</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">answer</span><span class="p">)],</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GroundednessCheck"><a class="viewcode-back" href="../../../tools/langchain_upstage.tools.groundedness_check.GroundednessCheck.html#langchain_upstage.tools.groundedness_check.GroundednessCheck">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.3&quot;</span><span class="p">,</span>
+    <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span>
+    <span class="n">alternative_import</span><span class="o">=</span><span class="s2">&quot;langchain_upstage.UpstageGroundednessCheck&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">class</span> <span class="nc">GroundednessCheck</span><span class="p">(</span><span class="n">UpstageGroundednessCheck</span><span class="p">):</span>
+    <span class="k">pass</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 26, 2024.
+          Last updated on Apr 27, 2024.
       </footer>
     </div>
   </div>
