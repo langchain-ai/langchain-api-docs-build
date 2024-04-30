@@ -200,13 +200,24 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_community.chat_models.maritalk</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">http</span> <span class="kn">import</span> <span class="n">HTTPStatus</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">http</span> <span class="kn">import</span> <span class="n">HTTPStatus</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>
-<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
-<span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="n">SimpleChatModel</span>
-<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">,</span> <span class="n">SystemMessage</span>
+<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
+    <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="n">BaseChatModel</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AIMessage</span><span class="p">,</span>
+    <span class="n">AIMessageChunk</span><span class="p">,</span>
+    <span class="n">BaseMessage</span><span class="p">,</span>
+    <span class="n">HumanMessage</span><span class="p">,</span>
+    <span class="n">SystemMessage</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span>
 <span class="kn">from</span> <span class="nn">requests</span> <span class="kn">import</span> <span class="n">Response</span>
 <span class="kn">from</span> <span class="nn">requests.exceptions</span> <span class="kn">import</span> <span class="n">HTTPError</span>
@@ -236,7 +247,7 @@
         <span class="k">return</span> <span class="n">formatted_message</span></div>
 
 
-<div class="viewcode-block" id="ChatMaritalk"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.maritalk.ChatMaritalk.html#langchain_community.chat_models.maritalk.ChatMaritalk">[docs]</a><span class="k">class</span> <span class="nc">ChatMaritalk</span><span class="p">(</span><span class="n">SimpleChatModel</span><span class="p">):</span>
+<div class="viewcode-block" id="ChatMaritalk"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.maritalk.ChatMaritalk.html#langchain_community.chat_models.maritalk.ChatMaritalk">[docs]</a><span class="k">class</span> <span class="nc">ChatMaritalk</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;`MariTalk` Chat models API.</span>
 
 <span class="sd">    This class allows interacting with the MariTalk chatbot API.</span>
@@ -334,7 +345,51 @@
 <span class="sd">                 If an error occurs (e.g., rate limiting), returns a string</span>
 <span class="sd">                 describing the error.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="s2">&quot;https://chat.maritaca.ai/api/chat/inference&quot;</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+        <span class="n">stopping_tokens</span> <span class="o">=</span> <span class="n">stop</span> <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
+
+        <span class="n">parsed_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parse_messages_for_model</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="n">parsed_messages</span><span class="p">,</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="s2">&quot;do_sample&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">do_sample</span><span class="p">,</span>
+            <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_tokens</span><span class="p">,</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+            <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">top_p</span><span class="p">,</span>
+            <span class="s2">&quot;stopping_tokens&quot;</span><span class="p">:</span> <span class="n">stopping_tokens</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">ok</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;answer&quot;</span><span class="p">,</span> <span class="s2">&quot;No answer found&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaritalkHTTPError</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_acall</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Asynchronously sends the parsed messages to the MariTalk API and returns</span>
+<span class="sd">        the generated response or an error message.</span>
+
+<span class="sd">        This method makes an HTTP POST request to the MariTalk API with the</span>
+<span class="sd">        provided messages and other parameters using async I/O.</span>
+<span class="sd">        If the request is successful and the API returns a response,</span>
+<span class="sd">        this method returns a string containing the answer.</span>
+<span class="sd">        If the request is rate-limited or encounters another error,</span>
+<span class="sd">        it returns a string with the error message.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">httpx</span>
+
             <span class="n">url</span> <span class="o">=</span> <span class="s2">&quot;https://chat.maritaca.ai/api/chat/inference&quot;</span>
             <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
             <span class="n">stopping_tokens</span> <span class="o">=</span> <span class="n">stop</span> <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
@@ -352,18 +407,157 @@
                 <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">}</span>
 
-            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">()</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span>
+                <span class="p">)</span>
 
-            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">ok</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;answer&quot;</span><span class="p">,</span> <span class="s2">&quot;No answer found&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">MaritalkHTTPError</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
 
-        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;An error occurred: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import httpx python package. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install httpx`.&quot;</span>
+            <span class="p">)</span>
 
-        <span class="c1"># Fallback return statement, in case of unexpected code paths</span>
-        <span class="k">return</span> <span class="s2">&quot;An unexpected error occurred&quot;</span>
+    <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+        <span class="n">stopping_tokens</span> <span class="o">=</span> <span class="n">stop</span> <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
+
+        <span class="n">parsed_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parse_messages_for_model</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="n">parsed_messages</span><span class="p">,</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="s2">&quot;do_sample&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">do_sample</span><span class="p">,</span>
+            <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_tokens</span><span class="p">,</span>
+            <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+            <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">top_p</span><span class="p">,</span>
+            <span class="s2">&quot;stopping_tokens&quot;</span><span class="p">:</span> <span class="n">stopping_tokens</span><span class="p">,</span>
+            <span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+            <span class="s2">&quot;https://chat.maritaca.ai/api/chat/inference&quot;</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+            <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">ok</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">iter_lines</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;data: &quot;</span><span class="p">):</span>
+                    <span class="n">response_data</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;data: &quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">response_data</span><span class="p">:</span>
+                        <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response_data</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="s2">&quot;text&quot;</span> <span class="ow">in</span> <span class="n">parsed_data</span><span class="p">:</span>
+                            <span class="n">delta</span> <span class="o">=</span> <span class="n">parsed_data</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
+                            <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                                <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">delta</span><span class="p">)</span>
+                            <span class="p">)</span>
+                            <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
+                                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
+                            <span class="k">yield</span> <span class="n">chunk</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MaritalkHTTPError</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">httpx</span>
+
+            <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+            <span class="n">stopping_tokens</span> <span class="o">=</span> <span class="n">stop</span> <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
+
+            <span class="n">parsed_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parse_messages_for_model</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+
+            <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="n">parsed_messages</span><span class="p">,</span>
+                <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+                <span class="s2">&quot;do_sample&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">do_sample</span><span class="p">,</span>
+                <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_tokens</span><span class="p">,</span>
+                <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
+                <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">top_p</span><span class="p">,</span>
+                <span class="s2">&quot;stopping_tokens&quot;</span><span class="p">:</span> <span class="n">stopping_tokens</span><span class="p">,</span>
+                <span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">}</span>
+
+            <span class="k">async</span> <span class="k">with</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">()</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">client</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span>
+                    <span class="s2">&quot;POST&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;https://chat.maritaca.ai/api/chat/inference&quot;</span><span class="p">,</span>
+                    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+                    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+                        <span class="k">async</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">aiter_lines</span><span class="p">():</span>
+                            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;data: &quot;</span><span class="p">):</span>
+                                <span class="n">response_data</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;data: &quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                                <span class="k">if</span> <span class="n">response_data</span><span class="p">:</span>
+                                    <span class="n">parsed_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response_data</span><span class="p">)</span>
+                                    <span class="k">if</span> <span class="s2">&quot;text&quot;</span> <span class="ow">in</span> <span class="n">parsed_data</span><span class="p">:</span>
+                                        <span class="n">delta</span> <span class="o">=</span> <span class="n">parsed_data</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
+                                        <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                                            <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">delta</span><span class="p">)</span>
+                                        <span class="p">)</span>
+                                        <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
+                                            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span>
+                                                <span class="n">delta</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span>
+                                            <span class="p">)</span>
+                                        <span class="k">yield</span> <span class="n">chunk</span>
+
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">MaritalkHTTPError</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import httpx python package. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install httpx`.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_generate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="n">output_str</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_call</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">output_str</span><span class="p">)</span>
+        <span class="n">generation</span> <span class="o">=</span> <span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">generation</span><span class="p">])</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_agenerate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="n">output_str</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acall</span><span class="p">(</span>
+            <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">output_str</span><span class="p">)</span>
+        <span class="n">generation</span> <span class="o">=</span> <span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">generation</span><span class="p">])</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -386,7 +580,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 29, 2024.
+          Last updated on Apr 30, 2024.
       </footer>
     </div>
   </div>
