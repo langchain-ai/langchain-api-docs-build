@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_experimental.utilities.python &mdash; 🦜🔗 LangChain 0.1.16</title>
+  <title>langchain_experimental.utilities.python &mdash; 🦜🔗 LangChain 0.1.17</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_experimental/utilities/python.html" />
 
@@ -203,6 +203,7 @@
 <span></span><span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">multiprocessing</span>
+<span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">StringIO</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span>
@@ -224,6 +225,23 @@
     <span class="nb">globals</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;_globals&quot;</span><span class="p">)</span>
     <span class="nb">locals</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;_locals&quot;</span><span class="p">)</span>
 
+<div class="viewcode-block" id="PythonREPL.sanitize_input"><a class="viewcode-back" href="../../../utilities/langchain_experimental.utilities.python.PythonREPL.html#langchain_experimental.utilities.python.PythonREPL.sanitize_input">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">sanitize_input</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sanitize input to the python REPL.</span>
+
+<span class="sd">        Remove whitespace, backtick &amp; python</span>
+<span class="sd">        (if llm mistakes python console as terminal)</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            query: The query to sanitize</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            str: The sanitized query</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;^(\s|`)*(?i:python)?\s*&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">query</span><span class="p">)</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(\s|`)*$&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">query</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">query</span></div>
+
 <div class="viewcode-block" id="PythonREPL.worker"><a class="viewcode-back" href="../../../utilities/langchain_experimental.utilities.python.PythonREPL.html#langchain_experimental.utilities.python.PythonREPL.worker">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">worker</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
@@ -235,7 +253,8 @@
         <span class="n">old_stdout</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span>
         <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="n">mystdout</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">exec</span><span class="p">(</span><span class="n">command</span><span class="p">,</span> <span class="nb">globals</span><span class="p">,</span> <span class="nb">locals</span><span class="p">)</span>
+            <span class="n">cleaned_command</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">sanitize_input</span><span class="p">(</span><span class="n">command</span><span class="p">)</span>
+            <span class="n">exec</span><span class="p">(</span><span class="n">cleaned_command</span><span class="p">,</span> <span class="nb">globals</span><span class="p">,</span> <span class="nb">locals</span><span class="p">)</span>
             <span class="n">sys</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="n">old_stdout</span>
             <span class="n">queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">mystdout</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
@@ -277,7 +296,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 30, 2024.
+          Last updated on May 01, 2024.
       </footer>
     </div>
   </div>

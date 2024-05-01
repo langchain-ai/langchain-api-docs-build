@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_nvidia_ai_endpoints.reranking &mdash; 🦜🔗 LangChain 0.1.16</title>
+  <title>langchain_nvidia_ai_endpoints.reranking &mdash; 🦜🔗 LangChain 0.1.17</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_nvidia_ai_endpoints/reranking.html" />
 
@@ -229,11 +229,11 @@
     <span class="n">_client</span><span class="p">:</span> <span class="n">_NVIDIAClient</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">_NVIDIAClient</span><span class="p">)</span>
 
     <span class="n">_default_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span>
+    <span class="n">_default_model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ai-rerank-qa-mistral-4b&quot;</span>
+    <span class="n">_default_model_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;nv-rerank-qa-mistral-4b:1&quot;</span>
 
     <span class="n">top_n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The number of documents to return.&quot;</span><span class="p">)</span>
-    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
-        <span class="s2">&quot;ai-rerank-qa-mistral-4b&quot;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The model to use for reranking.&quot;</span>
-    <span class="p">)</span>
+    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">_default_model</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The model to use for reranking.&quot;</span><span class="p">)</span>
     <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="n">_default_batch_size</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The maximum batch size.&quot;</span>
     <span class="p">)</span>
@@ -258,12 +258,25 @@
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">available_models</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Model</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Get a list of available models that work with ChatNVIDIA.</span>
+<span class="sd">        Get a list of available models that work with NVIDIARerank.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get_available_models</span><span class="p">(</span>
-            <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">curr_mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;nim&quot;</span><span class="p">,</span> <span class="s2">&quot;open&quot;</span><span class="p">]:</span>
+            <span class="c1"># local NIM supports a single model and no /models endpoint</span>
+            <span class="n">models</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">Model</span><span class="p">(</span>
+                    <span class="nb">id</span><span class="o">=</span><span class="n">NVIDIARerank</span><span class="o">.</span><span class="n">_default_model</span><span class="p">,</span>
+                    <span class="n">model_name</span><span class="o">=</span><span class="n">NVIDIARerank</span><span class="o">.</span><span class="n">_default_model_name</span><span class="p">,</span>
+                    <span class="n">model_type</span><span class="o">=</span><span class="s2">&quot;ranking&quot;</span><span class="p">,</span>
+                    <span class="n">client</span><span class="o">=</span><span class="s2">&quot;NVIDIARerank&quot;</span><span class="p">,</span>
+                    <span class="n">path</span><span class="o">=</span><span class="s2">&quot;magic&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">models</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get_available_models</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
+                <span class="nb">filter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">models</span>
 
 <div class="viewcode-block" id="NVIDIARerank.get_available_models"><a class="viewcode-back" href="../../reranking/langchain_nvidia_ai_endpoints.reranking.NVIDIARerank.html#langchain_nvidia_ai_endpoints.reranking.NVIDIARerank.get_available_models">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_available_models</span><span class="p">(</span>
@@ -273,7 +286,7 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Model</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Get a list of available models. These models will work with the ChatNVIDIA</span>
+<span class="sd">        Get a list of available models. These models will work with the NVIDIARerank</span>
 <span class="sd">        interface.</span>
 
 <span class="sd">        Use the mode parameter to specify the mode to use. See the docs for mode()</span>
@@ -283,13 +296,18 @@
 <span class="sd">        chat models, by setting the list_all parameter to True.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span><span class="o">.</span><span class="n">mode</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get_available_models</span><span class="p">(</span>
-            <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span>
-            <span class="n">list_all</span><span class="o">=</span><span class="n">list_all</span><span class="p">,</span>
-            <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="k">if</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;nim&quot;</span><span class="p">,</span> <span class="s2">&quot;open&quot;</span><span class="p">]:</span>
+            <span class="c1"># ignoring list_all because there is one</span>
+            <span class="n">models</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_models</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">models</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get_available_models</span><span class="p">(</span>
+                <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span>
+                <span class="n">list_all</span><span class="o">=</span><span class="n">list_all</span><span class="p">,</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="p">,</span>
+                <span class="nb">filter</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">models</span></div>
 
 <div class="viewcode-block" id="NVIDIARerank.mode"><a class="viewcode-back" href="../../reranking/langchain_nvidia_ai_endpoints.reranking.NVIDIARerank.html#langchain_nvidia_ai_endpoints.reranking.NVIDIARerank.mode">[docs]</a>    <span class="k">def</span> <span class="nf">mode</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -393,7 +411,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Apr 30, 2024.
+          Last updated on May 01, 2024.
       </footer>
     </div>
   </div>
