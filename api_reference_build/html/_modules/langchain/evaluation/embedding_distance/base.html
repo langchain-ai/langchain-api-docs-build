@@ -205,7 +205,6 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">from</span> <span class="nn">langchain_community.embeddings.openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForChainRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForChainRun</span><span class="p">,</span>
@@ -218,6 +217,27 @@
 <span class="kn">from</span> <span class="nn">langchain.evaluation.schema</span> <span class="kn">import</span> <span class="n">PairwiseStringEvaluator</span><span class="p">,</span> <span class="n">StringEvaluator</span>
 <span class="kn">from</span> <span class="nn">langchain.schema</span> <span class="kn">import</span> <span class="n">RUN_KEY</span>
 <span class="kn">from</span> <span class="nn">langchain.utils.math</span> <span class="kn">import</span> <span class="n">cosine_similarity</span>
+
+
+<span class="k">def</span> <span class="nf">_embedding_factory</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Embeddings</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create an Embeddings object.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Embeddings: The created Embeddings object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Here for backwards compatibility.</span>
+    <span class="c1"># Generally, we do not want to be seeing imports from langchain community</span>
+    <span class="c1"># or partner packages in langchain.</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">langchain_community.embeddings.openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import OpenAIEmbeddings. Please install the &quot;</span>
+                <span class="s2">&quot;OpenAIEmbeddings package using `pip install langchain-openai`.&quot;</span>
+            <span class="p">)</span>
+    <span class="k">return</span> <span class="n">OpenAIEmbeddings</span><span class="p">()</span>
 
 
 <div class="viewcode-block" id="EmbeddingDistance"><a class="viewcode-back" href="../../../../evaluation/langchain.evaluation.embedding_distance.base.EmbeddingDistance.html#langchain.evaluation.embedding_distance.base.EmbeddingDistance">[docs]</a><span class="k">class</span> <span class="nc">EmbeddingDistance</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
@@ -247,7 +267,7 @@
 <span class="sd">                                            for comparing the embeddings.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">embeddings</span><span class="p">:</span> <span class="n">Embeddings</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">OpenAIEmbeddings</span><span class="p">)</span>
+    <span class="n">embeddings</span><span class="p">:</span> <span class="n">Embeddings</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">_embedding_factory</span><span class="p">)</span>
     <span class="n">distance_metric</span><span class="p">:</span> <span class="n">EmbeddingDistance</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="n">EmbeddingDistance</span><span class="o">.</span><span class="n">COSINE</span><span class="p">)</span>
 
     <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -261,7 +281,28 @@
 <span class="sd">            Dict[str, Any]: The validated values.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embeddings</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;embeddings&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">embeddings</span><span class="p">,</span> <span class="n">OpenAIEmbeddings</span><span class="p">):</span>
+        <span class="n">types_</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
+
+            <span class="n">types_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">OpenAIEmbeddings</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">langchain_community.embeddings.openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
+
+            <span class="n">types_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">OpenAIEmbeddings</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">types_</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import OpenAIEmbeddings. Please install the &quot;</span>
+                <span class="s2">&quot;OpenAIEmbeddings package using `pip install langchain-openai`.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">embeddings</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">types_</span><span class="p">)):</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="kn">import</span> <span class="nn">tiktoken</span>  <span class="c1"># noqa: F401</span>
             <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
@@ -685,7 +726,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 01, 2024.
+          Last updated on May 02, 2024.
       </footer>
     </div>
   </div>
