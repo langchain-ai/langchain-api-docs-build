@@ -204,7 +204,6 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">root_validator</span>
@@ -234,9 +233,10 @@
         <span class="n">include_tables</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cassio_init_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_session</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_session</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">cassio_init_kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session</span><span class="p">:</span>
+        <span class="n">_session</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_session</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">cassio_init_kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_session</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Session not provided and cannot be resolved&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_session</span> <span class="o">=</span> <span class="n">_session</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_keyspaces</span> <span class="o">=</span> <span class="n">IGNORED_KEYSPACES</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_tables</span> <span class="o">=</span> <span class="n">exclude_tables</span> <span class="ow">or</span> <span class="p">[]</span>
@@ -246,52 +246,28 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">fetch</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
-        <span class="n">include_columns</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">ResultSet</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">ResultSet</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute a CQL query and return the results.&quot;&quot;&quot;</span>
-        <span class="n">clean_query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_cql</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="s2">&quot;SELECT&quot;</span><span class="p">)</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">clean_query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">fetch</span> <span class="o">==</span> <span class="s2">&quot;all&quot;</span><span class="p">:</span>
-            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_all</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">fetch</span> <span class="o">==</span> <span class="s2">&quot;one&quot;</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">one</span><span class="p">()</span><span class="o">.</span><span class="n">_asdict</span><span class="p">()</span> <span class="k">if</span> <span class="n">result</span> <span class="k">else</span> <span class="p">{}</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_one</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">fetch</span> <span class="o">==</span> <span class="s2">&quot;cursor&quot;</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">result</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Fetch parameter must be either &#39;one&#39;, &#39;all&#39;, or &#39;cursor&#39;&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="CassandraDatabase.run_no_throw"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.run_no_throw">[docs]</a>    <span class="k">def</span> <span class="nf">run_no_throw</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">fetch</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span><span class="p">,</span>
-        <span class="n">include_columns</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">ResultSet</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Execute a CQL query and return the results or an error message.&quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">fetch</span><span class="p">,</span> <span class="n">include_columns</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<span class="w">            </span><span class="sd">&quot;&quot;&quot;Format the error message&quot;&quot;&quot;</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span></div>
+    <span class="k">def</span> <span class="nf">_fetch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ResultSet</span><span class="p">:</span>
+        <span class="n">clean_query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_cql</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="s2">&quot;SELECT&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">clean_query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-<div class="viewcode-block" id="CassandraDatabase.get_keyspace_tables_str_no_throw"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.get_keyspace_tables_str_no_throw">[docs]</a>    <span class="k">def</span> <span class="nf">get_keyspace_tables_str_no_throw</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the tables for the specified keyspace.&quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">schema_string</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_keyspace_tables_str</span><span class="p">(</span><span class="n">keyspace</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">schema_string</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<span class="w">            </span><span class="sd">&quot;&quot;&quot;Format the error message&quot;&quot;&quot;</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span></div>
+<div class="viewcode-block" id="CassandraDatabase.fetch_all"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.fetch_all">[docs]</a>    <span class="k">def</span> <span class="nf">fetch_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fetch</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">))</span></div>
 
-<div class="viewcode-block" id="CassandraDatabase.get_keyspace_tables_str"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.get_keyspace_tables_str">[docs]</a>    <span class="k">def</span> <span class="nf">get_keyspace_tables_str</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the tables for the specified keyspace.&quot;&quot;&quot;</span>
-        <span class="n">tables</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_keyspace_tables</span><span class="p">(</span><span class="n">keyspace</span><span class="p">)</span>
-        <span class="n">schema_string</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">table</span> <span class="ow">in</span> <span class="n">tables</span><span class="p">:</span>
-            <span class="n">schema_string</span> <span class="o">+=</span> <span class="n">table</span><span class="o">.</span><span class="n">as_markdown</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span>
-
-        <span class="k">return</span> <span class="n">schema_string</span></div>
+<div class="viewcode-block" id="CassandraDatabase.fetch_one"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.fetch_one">[docs]</a>    <span class="k">def</span> <span class="nf">fetch_one</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">one</span><span class="p">()</span><span class="o">.</span><span class="n">_asdict</span><span class="p">()</span> <span class="k">if</span> <span class="n">result</span> <span class="k">else</span> <span class="p">{}</span></div>
 
 <div class="viewcode-block" id="CassandraDatabase.get_keyspace_tables"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.get_keyspace_tables">[docs]</a>    <span class="k">def</span> <span class="nf">get_keyspace_tables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Table</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the Table objects for the specified keyspace.&quot;&quot;&quot;</span>
@@ -300,17 +276,6 @@
             <span class="k">return</span> <span class="n">schema</span><span class="p">[</span><span class="n">keyspace</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="p">[]</span></div>
-
-<div class="viewcode-block" id="CassandraDatabase.get_table_data_no_throw"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.cassandra_database.CassandraDatabase.html#langchain_community.utilities.cassandra_database.CassandraDatabase.get_table_data_no_throw">[docs]</a>    <span class="k">def</span> <span class="nf">get_table_data_no_throw</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">keyspace</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">predicate</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get data from the specified table in the specified keyspace. Optionally can</span>
-<span class="sd">        take a predicate for the WHERE clause and a limit.&quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_table_data</span><span class="p">(</span><span class="n">keyspace</span><span class="p">,</span> <span class="n">table</span><span class="p">,</span> <span class="n">predicate</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-<span class="w">            </span><span class="sd">&quot;&quot;&quot;Format the error message&quot;&quot;&quot;</span>
-            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">traceback</span><span class="o">.</span><span class="n">format_exc</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span></div>
 
     <span class="c1"># This is a more basic string building function that doesn&#39;t use a query builder</span>
     <span class="c1"># or prepared statements</span>
@@ -329,7 +294,7 @@
 
         <span class="n">query</span> <span class="o">+=</span> <span class="s2">&quot;;&quot;</span>
 
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">fetch</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_all</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">result</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">data</span></div>
 
@@ -346,15 +311,13 @@
 <span class="sd">        by iterating over all tables within that keyspace and calling their</span>
 <span class="sd">        as_markdown method.</span>
 
-<span class="sd">        Parameters:</span>
-<span class="sd">        - keyspace (str): The name of the keyspace to generate markdown</span>
-<span class="sd">        documentation for.</span>
-<span class="sd">        - tables (list[Table]): list of tables in the keyspace; it will be resolved</span>
-<span class="sd">        if not provided.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            keyspace: The name of the keyspace to generate markdown documentation for.</span>
+<span class="sd">            tables: list of tables in the keyspace; it will be resolved if not provided.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        A string containing the markdown representation of the specified</span>
-<span class="sd">        keyspace schema.</span>
+<span class="sd">            A string containing the markdown representation of the specified</span>
+<span class="sd">            keyspace schema.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">tables</span><span class="p">:</span>
             <span class="n">tables</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_keyspace_tables</span><span class="p">(</span><span class="n">keyspace</span><span class="p">)</span>
@@ -386,10 +349,10 @@
 <span class="sd">        the subset of keyspaces that have been resolved in this instance.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        A markdown string that documents the schema of all resolved keyspaces and</span>
-<span class="sd">        their tables within this CassandraDatabase instance. This includes keyspace</span>
-<span class="sd">        names, table names, comments, columns, partition keys, clustering keys,</span>
-<span class="sd">        and indexes for each table.</span>
+<span class="sd">            A markdown string that documents the schema of all resolved keyspaces and</span>
+<span class="sd">            their tables within this CassandraDatabase instance. This includes keyspace</span>
+<span class="sd">            names, table names, comments, columns, partition keys, clustering keys,</span>
+<span class="sd">            and indexes for each table.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_schema</span><span class="p">()</span>
         <span class="n">output</span> <span class="o">=</span> <span class="s2">&quot;# Cassandra Database Schema</span><span class="se">\n\n</span><span class="s2">&quot;</span>
@@ -403,18 +366,18 @@
 <span class="sd">        Ensures that `cql` starts with the specified type (e.g., SELECT) and does</span>
 <span class="sd">        not contain content that could indicate CQL injection vulnerabilities.</span>
 
-<span class="sd">        Parameters:</span>
-<span class="sd">        - cql (str): The CQL query string to be validated.</span>
-<span class="sd">        - type (str): The expected starting keyword of the query, used to verify</span>
-<span class="sd">          that the query begins with the correct operation type</span>
-<span class="sd">          (e.g., &quot;SELECT&quot;, &quot;UPDATE&quot;). Defaults to &quot;SELECT&quot;.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            cql: The CQL query string to be validated.</span>
+<span class="sd">            type: The expected starting keyword of the query, used to verify</span>
+<span class="sd">                that the query begins with the correct operation type</span>
+<span class="sd">                (e.g., &quot;SELECT&quot;, &quot;UPDATE&quot;). Defaults to &quot;SELECT&quot;.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        - str: The trimmed and validated CQL query string without a trailing semicolon.</span>
+<span class="sd">            The trimmed and validated CQL query string without a trailing semicolon.</span>
 
 <span class="sd">        Raises:</span>
-<span class="sd">        - ValueError: If the value of `type` is not supported</span>
-<span class="sd">        - DatabaseError: If `cql` is considered unsafe</span>
+<span class="sd">            ValueError: If the value of `type` is not supported</span>
+<span class="sd">            DatabaseError: If `cql` is considered unsafe</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">SUPPORTED_TYPES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SELECT&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="nb">type</span> <span class="ow">and</span> <span class="nb">type</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">SUPPORTED_TYPES</span><span class="p">:</span>
@@ -448,28 +411,25 @@
         <span class="c1"># The trimmed query, before modifications</span>
         <span class="k">return</span> <span class="n">cql_trimmed</span>
 
-    <span class="k">def</span> <span class="nf">_fetch_keyspaces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspace_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_fetch_keyspaces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspaces</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Fetches a list of keyspace names from the Cassandra database. The list can be</span>
 <span class="sd">        filtered by a provided list of keyspace names or by excluding predefined</span>
 <span class="sd">        keyspaces.</span>
 
-<span class="sd">        Parameters:</span>
-<span class="sd">        - keyspace_list (Optional[List[str]]): A list of keyspace names to specifically</span>
-<span class="sd">        include. If provided and not empty, the method returns only the keyspaces</span>
-<span class="sd">        present in this list. If not provided or empty, the method returns all</span>
-<span class="sd">        keyspaces except those specified in the _exclude_keyspaces attribute.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            keyspaces: A list of keyspace names to specifically include.</span>
+<span class="sd">                If provided and not empty, the method returns only the keyspaces</span>
+<span class="sd">                present in this list.</span>
+<span class="sd">                If not provided or empty, the method returns all keyspaces except those</span>
+<span class="sd">                specified in the _exclude_keyspaces attribute.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        - List[str]: A list of keyspace names according to the filtering criteria.</span>
+<span class="sd">            A list of keyspace names according to the filtering criteria.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">all_keyspaces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-            <span class="s2">&quot;SELECT keyspace_name FROM system_schema.keyspaces&quot;</span><span class="p">,</span> <span class="n">fetch</span><span class="o">=</span><span class="s2">&quot;all&quot;</span>
+        <span class="n">all_keyspaces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_all</span><span class="p">(</span>
+            <span class="s2">&quot;SELECT keyspace_name FROM system_schema.keyspaces&quot;</span>
         <span class="p">)</span>
-
-        <span class="c1"># Type check to ensure &#39;all_keyspaces&#39; is a sequence of dictionaries</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">all_keyspaces</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Expected a sequence of dictionaries from &#39;run&#39; method.&quot;</span><span class="p">)</span>
 
         <span class="c1"># Filtering keyspaces based on &#39;keyspace_list&#39; and &#39;_exclude_keyspaces&#39;</span>
         <span class="n">filtered_keyspaces</span> <span class="o">=</span> <span class="p">[]</span>
@@ -478,87 +438,105 @@
                 <span class="k">continue</span>  <span class="c1"># Skip if the row is not a dictionary.</span>
 
             <span class="n">keyspace_name</span> <span class="o">=</span> <span class="n">ks</span><span class="p">[</span><span class="s2">&quot;keyspace_name&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">keyspace_list</span> <span class="ow">and</span> <span class="n">keyspace_name</span> <span class="ow">in</span> <span class="n">keyspace_list</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">keyspaces</span> <span class="ow">and</span> <span class="n">keyspace_name</span> <span class="ow">in</span> <span class="n">keyspaces</span><span class="p">:</span>
                 <span class="n">filtered_keyspaces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">keyspace_name</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="n">keyspace_list</span> <span class="ow">and</span> <span class="n">keyspace_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_keyspaces</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="n">keyspaces</span> <span class="ow">and</span> <span class="n">keyspace_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_keyspaces</span><span class="p">:</span>
                 <span class="n">filtered_keyspaces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">keyspace_name</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">filtered_keyspaces</span>
 
-    <span class="k">def</span> <span class="nf">_fetch_schema_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspace_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Fetches schema data, including tables, columns, and indexes, filtered by a</span>
-<span class="sd">        list of keyspaces. This method constructs CQL queries to retrieve detailed</span>
-<span class="sd">        schema information from the specified keyspaces and executes them to gather</span>
-<span class="sd">        data about tables, columns, and indexes within those keyspaces.</span>
+    <span class="k">def</span> <span class="nf">_format_keyspace_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">keyspaces</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="c1"># Construct IN clause for CQL query</span>
+        <span class="n">keyspace_in_clause</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">ks</span><span class="si">}</span><span class="s2">&#39;&quot;</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">keyspaces</span><span class="p">])</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2"> WHERE keyspace_name IN (</span><span class="si">{</span><span class="n">keyspace_in_clause</span><span class="si">}</span><span class="s2">)&quot;&quot;&quot;</span>
 
-<span class="sd">        Parameters:</span>
-<span class="sd">        - keyspace_list (List[str]): A list of keyspace names from which to fetch</span>
-<span class="sd">          schema data.</span>
+    <span class="k">def</span> <span class="nf">_fetch_tables_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspaces</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetches tables schema data, filtered by a list of keyspaces.</span>
+<span class="sd">        This method allows for efficiently fetching schema information for multiple</span>
+<span class="sd">        keyspaces in a single operation, enabling applications to programmatically</span>
+<span class="sd">        analyze or document the database schema.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            keyspaces: A list of keyspace names from which to fetch tables schema data.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        - Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]: A</span>
-<span class="sd">          tuple containing three lists:</span>
-<span class="sd">        - The first list contains dictionaries of table details (keyspace name,</span>
-<span class="sd">          table name, and comment).</span>
-<span class="sd">        - The second list contains dictionaries of column details (keyspace name,</span>
-<span class="sd">          table name, column name, type, kind, and position).</span>
-<span class="sd">        - The third list contains dictionaries of index details (keyspace name,</span>
-<span class="sd">          table name, index name, kind, and options).</span>
-
-<span class="sd">        This method allows for efficiently fetching schema information for multiple</span>
-<span class="sd">        keyspaces in a single operation,</span>
-<span class="sd">        enabling applications to programmatically analyze or document the database</span>
-<span class="sd">        schema.</span>
+<span class="sd">            Dictionaries of table details (keyspace name,  table name, and comment).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Construct IN clause for CQL query</span>
-        <span class="n">keyspace_in_clause</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">ks</span><span class="si">}</span><span class="s2">&#39;&quot;</span> <span class="k">for</span> <span class="n">ks</span> <span class="ow">in</span> <span class="n">keyspace_list</span><span class="p">])</span>
+        <span class="n">tables_query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_keyspace_query</span><span class="p">(</span>
+            <span class="s2">&quot;SELECT keyspace_name, table_name, comment  FROM system_schema.tables&quot;</span><span class="p">,</span>
+            <span class="n">keyspaces</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_all</span><span class="p">(</span><span class="n">tables_query</span><span class="p">)</span>
 
-        <span class="c1"># Fetch filtered table details</span>
-        <span class="n">tables_query</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;SELECT keyspace_name, table_name, comment </span>
-<span class="s2">                           FROM system_schema.tables </span>
-<span class="s2">                           WHERE keyspace_name </span>
-<span class="s2">                           IN (</span><span class="si">{</span><span class="n">keyspace_in_clause</span><span class="si">}</span><span class="s2">)&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_fetch_columns_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspaces</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetches columns schema data, filtered by a list of keyspaces.</span>
+<span class="sd">        This method allows for efficiently fetching schema information for multiple</span>
+<span class="sd">        keyspaces in a single operation, enabling applications to programmatically</span>
+<span class="sd">        analyze or document the database schema.</span>
 
-        <span class="n">tables_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tables_query</span><span class="p">,</span> <span class="n">fetch</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+<span class="sd">        Args:</span>
+<span class="sd">            keyspaces: A list of keyspace names from which to fetch tables schema data.</span>
 
-        <span class="c1"># Fetch filtered column details</span>
-        <span class="n">columns_query</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;SELECT keyspace_name, table_name, column_name, type, </span>
-<span class="s2">                                 kind, clustering_order, position </span>
-<span class="s2">                          FROM system_schema.columns </span>
-<span class="s2">                          WHERE keyspace_name </span>
-<span class="s2">                          IN (</span><span class="si">{</span><span class="n">keyspace_in_clause</span><span class="si">}</span><span class="s2">)&quot;&quot;&quot;</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionaries of column details (keyspace name, table name, column name,</span>
+<span class="sd">            type, kind, and position).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tables_query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_keyspace_query</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    SELECT keyspace_name, table_name, column_name, type, kind, </span>
+<span class="sd">                        clustering_order, position </span>
+<span class="sd">                    FROM system_schema.columns</span>
+<span class="sd">                    &quot;&quot;&quot;</span><span class="p">,</span>
+            <span class="n">keyspaces</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_all</span><span class="p">(</span><span class="n">tables_query</span><span class="p">)</span>
 
-        <span class="n">columns_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">columns_query</span><span class="p">,</span> <span class="n">fetch</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">_fetch_indexes_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyspaces</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetches indexes schema data, filtered by a list of keyspaces.</span>
+<span class="sd">        This method allows for efficiently fetching schema information for multiple</span>
+<span class="sd">        keyspaces in a single operation, enabling applications to programmatically</span>
+<span class="sd">        analyze or document the database schema.</span>
 
-        <span class="c1"># Fetch filtered index details</span>
-        <span class="n">indexes_query</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;SELECT keyspace_name, table_name, index_name, </span>
-<span class="s2">                                 kind, options </span>
-<span class="s2">                          FROM system_schema.indexes </span>
-<span class="s2">                          WHERE keyspace_name </span>
-<span class="s2">                          IN (</span><span class="si">{</span><span class="n">keyspace_in_clause</span><span class="si">}</span><span class="s2">)&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            keyspaces: A list of keyspace names from which to fetch tables schema data.</span>
 
-        <span class="n">indexes_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">indexes_query</span><span class="p">,</span> <span class="n">fetch</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">tables_data</span><span class="p">,</span> <span class="n">columns_data</span><span class="p">,</span> <span class="n">indexes_data</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionaries of index details (keyspace name, table name, index name, kind,</span>
+<span class="sd">            and options).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tables_query</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_keyspace_query</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    SELECT keyspace_name, table_name, index_name, </span>
+<span class="sd">                        kind, options </span>
+<span class="sd">                    FROM system_schema.indexes</span>
+<span class="sd">                    &quot;&quot;&quot;</span><span class="p">,</span>
+            <span class="n">keyspaces</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fetch_all</span><span class="p">(</span><span class="n">tables_query</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_resolve_schema</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">keyspace_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">keyspaces</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Table</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Efficiently fetches and organizes Cassandra table schema information,</span>
 <span class="sd">        such as comments, columns, and indexes, into a dictionary mapping keyspace</span>
 <span class="sd">        names to lists of Table objects.</span>
 
-<span class="sd">        Returns:</span>
-<span class="sd">        A dictionary with keyspace names as keys and lists of Table objects as values,</span>
-<span class="sd">        where each Table object is populated with schema details appropriate for its</span>
-<span class="sd">        keyspace and table name.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">keyspace_list</span><span class="p">:</span>
-            <span class="n">keyspace_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_keyspaces</span><span class="p">()</span>
+<span class="sd">        Args:</span>
+<span class="sd">            keyspaces: An optional list of keyspace names from which to fetch tables</span>
+<span class="sd">                schema data.</span>
 
-        <span class="n">tables_data</span><span class="p">,</span> <span class="n">columns_data</span><span class="p">,</span> <span class="n">indexes_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_schema_data</span><span class="p">(</span><span class="n">keyspace_list</span><span class="p">)</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            A dictionary with keyspace names as keys and lists of Table objects as</span>
+<span class="sd">            values, where each Table object is populated with schema details</span>
+<span class="sd">            appropriate for its keyspace and table name.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">keyspaces</span><span class="p">:</span>
+            <span class="n">keyspaces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_keyspaces</span><span class="p">()</span>
+
+        <span class="n">tables_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_tables_data</span><span class="p">(</span><span class="n">keyspaces</span><span class="p">)</span>
+        <span class="n">columns_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_columns_data</span><span class="p">(</span><span class="n">keyspaces</span><span class="p">)</span>
+        <span class="n">indexes_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_indexes_data</span><span class="p">(</span><span class="n">keyspaces</span><span class="p">)</span>
 
         <span class="n">keyspace_dict</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">table_data</span> <span class="ow">in</span> <span class="n">tables_data</span><span class="p">:</span>
@@ -617,11 +595,11 @@
 
         <span class="k">return</span> <span class="n">keyspace_dict</span>
 
+    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_resolve_session</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
         <span class="n">session</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Session</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cassio_init_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Session</span><span class="p">:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Session</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Attempts to resolve and return a Session object for use in database operations.</span>
 
@@ -632,18 +610,17 @@
 <span class="sd">        3. A new `cassio` session derived from `cassio_init_kwargs`,</span>
 <span class="sd">        4. `None`</span>
 
-<span class="sd">        Parameters:</span>
-<span class="sd">        - session (Optional[Session]): An optional session to use directly.</span>
-<span class="sd">        - cassio_init_kwargs (Optional[Dict[str, Any]]): An optional dictionary of</span>
-<span class="sd">          keyword arguments to `cassio`.</span>
+<span class="sd">        Args:</span>
+<span class="sd">            session: An optional session to use directly.</span>
+<span class="sd">            cassio_init_kwargs: An optional dictionary of keyword arguments to `cassio`.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        - Session: The resolved session object if successful, or `None` if the session</span>
-<span class="sd">          cannot be resolved.</span>
+<span class="sd">            The resolved session object if successful, or `None` if the session</span>
+<span class="sd">            cannot be resolved.</span>
 
 <span class="sd">        Raises:</span>
-<span class="sd">        - ValueError: If `cassio_init_kwargs` is provided but is not a dictionary of</span>
-<span class="sd">          keyword arguments.</span>
+<span class="sd">            ValueError: If `cassio_init_kwargs` is provided but is not a dictionary of</span>
+<span class="sd">            keyword arguments.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="c1"># Prefer given session</span>
@@ -737,20 +714,18 @@
 <span class="sd">        Generates a Markdown representation of the Cassandra table schema, allowing for</span>
 <span class="sd">        customizable header levels for the table name section.</span>
 
-<span class="sd">        Parameters:</span>
-<span class="sd">        - include_keyspace (bool): If True, includes the keyspace in the output.</span>
-<span class="sd">          Defaults to True.</span>
-<span class="sd">        - header_level (Optional[int]): Specifies the markdown header level for the</span>
-<span class="sd">          table name.</span>
-<span class="sd">          If None, the table name is included without a header. Defaults to None</span>
-<span class="sd">          (no header level).</span>
+<span class="sd">        Args:</span>
+<span class="sd">            include_keyspace: If True, includes the keyspace in the output.</span>
+<span class="sd">                Defaults to True.</span>
+<span class="sd">            header_level: Specifies the markdown header level for the table name.</span>
+<span class="sd">                If None, the table name is included without a header.</span>
+<span class="sd">                Defaults to None (no header level).</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">        - str: A string in Markdown format detailing the table name</span>
-<span class="sd">          (with optional header level),</span>
-<span class="sd">          keyspace (optional), comment, columns, partition keys, clustering keys</span>
-<span class="sd">          (with optional clustering order),</span>
-<span class="sd">          and indexes.</span>
+<span class="sd">            A string in Markdown format detailing the table name</span>
+<span class="sd">            (with optional header level), keyspace (optional), comment, columns,</span>
+<span class="sd">            partition keys, clustering keys (with optional clustering order),</span>
+<span class="sd">            and indexes.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">output</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="k">if</span> <span class="n">header_level</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -886,7 +861,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 02, 2024.
+          Last updated on May 03, 2024.
       </footer>
     </div>
   </div>

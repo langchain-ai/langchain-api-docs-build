@@ -965,7 +965,9 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind tool-like objects to this chat model.</span>
@@ -978,40 +980,55 @@
 <span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
 <span class="sd">                their schema dictionary representation.</span>
 <span class="sd">            tool_choice: Which tool to require the model to call.</span>
-<span class="sd">                Must be the name of the single provided function or</span>
-<span class="sd">                &quot;auto&quot; to automatically determine which function to call</span>
-<span class="sd">                (if any), or a dict of the form:</span>
+<span class="sd">                Options are:</span>
+<span class="sd">                name of the tool (str): calls corresponding tool;</span>
+<span class="sd">                &quot;auto&quot;: automatically selects a tool (including no tool);</span>
+<span class="sd">                &quot;none&quot;: does not call a tool;</span>
+<span class="sd">                &quot;any&quot; or &quot;required&quot;: force at least one tool to be called;</span>
+<span class="sd">                True: forces tool call (requires `tools` be length 1);</span>
+<span class="sd">                False: no effect;</span>
+
+<span class="sd">                or a dict of the form:</span>
 <span class="sd">                {&quot;type&quot;: &quot;function&quot;, &quot;function&quot;: {&quot;name&quot;: &lt;&lt;tool_name&gt;&gt;}}.</span>
 <span class="sd">            **kwargs: Any additional parameters to pass to the</span>
 <span class="sd">                :class:`~langchain.runnable.Runnable` constructor.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">tool_choice</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">formatted_tools</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;When specifying `tool_choice`, you must provide exactly one &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;tool. Received </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">formatted_tools</span><span class="p">)</span><span class="si">}</span><span class="s2"> tools.&quot;</span>
-                <span class="p">)</span>
+        <span class="k">if</span> <span class="n">tool_choice</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">):</span>
+                <span class="c1"># tool_choice is a tool/function name</span>
+                <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">):</span>
                     <span class="n">tool_choice</span> <span class="o">=</span> <span class="p">{</span>
                         <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
                         <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_choice</span><span class="p">},</span>
                     <span class="p">}</span>
+                <span class="c1"># &#39;any&#39; is not natively supported by OpenAI API.</span>
+                <span class="c1"># We support &#39;any&#39; since other models use this instead of &#39;required&#39;.</span>
+                <span class="k">if</span> <span class="n">tool_choice</span> <span class="o">==</span> <span class="s2">&quot;any&quot;</span><span class="p">:</span>
+                    <span class="n">tool_choice</span> <span class="o">=</span> <span class="s2">&quot;required&quot;</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tools</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;tool_choice=True can only be used when a single tool is &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;passed in, received </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">tools</span><span class="p">)</span><span class="si">}</span><span class="s2"> tools.&quot;</span>
+                    <span class="p">)</span>
                 <span class="n">tool_choice</span> <span class="o">=</span> <span class="p">{</span>
                     <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
                     <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">formatted_tools</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]},</span>
                 <span class="p">}</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="n">formatted_tools</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-                    <span class="o">!=</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="n">tool_names</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">formatted_tool</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">formatted_tool</span> <span class="ow">in</span> <span class="n">formatted_tools</span>
+                <span class="p">]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span>
+                    <span class="n">tool_name</span> <span class="o">==</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">tool_name</span> <span class="ow">in</span> <span class="n">tool_names</span>
                 <span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Tool choice </span><span class="si">{</span><span class="n">tool_choice</span><span class="si">}</span><span class="s2"> was specified, but the only &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;provided tool was </span><span class="si">{</span><span class="n">formatted_tools</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s1">&#39;function&#39;</span><span class="p">][</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;provided tools were </span><span class="si">{</span><span class="n">tool_names</span><span class="si">}</span><span class="s2">.&quot;</span>
                     <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1329,7 +1346,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 02, 2024.
+          Last updated on May 03, 2024.
       </footer>
     </div>
   </div>
