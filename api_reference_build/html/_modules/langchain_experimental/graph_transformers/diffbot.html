@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_experimental.graph_transformers.diffbot &mdash; 🦜🔗 LangChain 0.1.17</title>
+  <title>langchain_experimental.graph_transformers.diffbot &mdash; 🦜🔗 LangChain 0.1.18</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_experimental/graph_transformers/diffbot.html" />
 
@@ -200,12 +200,18 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_experimental.graph_transformers.diffbot</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span></span><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>
 <span class="kn">from</span> <span class="nn">langchain.utils</span> <span class="kn">import</span> <span class="n">get_from_env</span>
 <span class="kn">from</span> <span class="nn">langchain_community.graphs.graph_document</span> <span class="kn">import</span> <span class="n">GraphDocument</span><span class="p">,</span> <span class="n">Node</span><span class="p">,</span> <span class="n">Relationship</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
+
+
+<div class="viewcode-block" id="TypeOption"><a class="viewcode-back" href="../../../graph_transformers/langchain_experimental.graph_transformers.diffbot.TypeOption.html#langchain_experimental.graph_transformers.diffbot.TypeOption">[docs]</a><span class="k">class</span> <span class="nc">TypeOption</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">Enum</span><span class="p">):</span>
+    <span class="n">FACTS</span> <span class="o">=</span> <span class="s2">&quot;facts&quot;</span>
+    <span class="n">ENTITIES</span> <span class="o">=</span> <span class="s2">&quot;entities&quot;</span></div>
 
 
 <div class="viewcode-block" id="format_property_key"><a class="viewcode-back" href="../../../graph_transformers/langchain_experimental.graph_transformers.diffbot.format_property_key.html#langchain_experimental.graph_transformers.diffbot.format_property_key">[docs]</a><span class="k">def</span> <span class="nf">format_property_key</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -343,6 +349,7 @@
         <span class="n">include_qualifiers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">include_evidence</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">simplified_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">extract_types</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">TypeOption</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">TypeOption</span><span class="o">.</span><span class="n">FACTS</span><span class="p">],</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Initialize the graph transformer with various options.</span>
@@ -359,6 +366,11 @@
 <span class="sd">                Whether to include evidence for the relationships.</span>
 <span class="sd">            simplified_schema (bool):</span>
 <span class="sd">                Whether to use a simplified schema for relationships.</span>
+<span class="sd">            extract_types (List[TypeOption]):</span>
+<span class="sd">                A list of data types to extract. Only facts or entities</span>
+<span class="sd">                are supported. By default, the option is set to facts.</span>
+<span class="sd">                A fact represents a combination of source and target</span>
+<span class="sd">                nodes with a relationship type.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">diffbot_api_key</span> <span class="o">=</span> <span class="n">diffbot_api_key</span> <span class="ow">or</span> <span class="n">get_from_env</span><span class="p">(</span>
             <span class="s2">&quot;diffbot_api_key&quot;</span><span class="p">,</span> <span class="s2">&quot;DIFFBOT_API_KEY&quot;</span>
@@ -368,7 +380,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">include_evidence</span> <span class="o">=</span> <span class="n">include_evidence</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">simplified_schema</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span> <span class="o">=</span> <span class="n">SimplifiedSchema</span><span class="p">()</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span> <span class="o">=</span> <span class="n">SimplifiedSchema</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">extract_types</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;`extract_types` cannot be an empty array. &quot;</span>
+                <span class="s2">&quot;Allowed values are &#39;facts&#39;, &#39;entities&#39;, or both.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">extract_types</span> <span class="o">=</span> <span class="n">extract_types</span></div>
 
 <div class="viewcode-block" id="DiffbotGraphTransformer.nlp_request"><a class="viewcode-back" href="../../../graph_transformers/langchain_experimental.graph_transformers.diffbot.DiffbotGraphTransformer.html#langchain_experimental.graph_transformers.diffbot.DiffbotGraphTransformer.nlp_request">[docs]</a>    <span class="k">def</span> <span class="nf">nlp_request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -387,7 +406,7 @@
             <span class="s2">&quot;lang&quot;</span><span class="p">:</span> <span class="s2">&quot;en&quot;</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="n">FIELDS</span> <span class="o">=</span> <span class="s2">&quot;facts&quot;</span>
+        <span class="n">FIELDS</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">extract_types</span><span class="p">)</span>
         <span class="n">HOST</span> <span class="o">=</span> <span class="s2">&quot;nl.diffbot.com&quot;</span>
         <span class="n">url</span> <span class="o">=</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;https://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">/v1/?fields=</span><span class="si">{</span><span class="n">FIELDS</span><span class="si">}</span><span class="s2">&amp;&quot;</span>
@@ -411,77 +430,97 @@
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="c1"># Return empty result if there are no facts</span>
-        <span class="k">if</span> <span class="s2">&quot;facts&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;facts&quot;</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="s2">&quot;facts&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;facts&quot;</span><span class="p">])</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="s2">&quot;entities&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span>
+        <span class="p">):</span>
             <span class="k">return</span> <span class="n">GraphDocument</span><span class="p">(</span><span class="n">nodes</span><span class="o">=</span><span class="p">[],</span> <span class="n">relationships</span><span class="o">=</span><span class="p">[],</span> <span class="n">source</span><span class="o">=</span><span class="n">document</span><span class="p">)</span>
 
         <span class="c1"># Nodes are a custom class because we need to deduplicate</span>
         <span class="n">nodes_list</span> <span class="o">=</span> <span class="n">NodesList</span><span class="p">()</span>
-        <span class="c1"># Relationships are a list because we don&#39;t deduplicate nor anything else</span>
+        <span class="k">if</span> <span class="s2">&quot;entities&quot;</span> <span class="ow">in</span> <span class="n">payload</span> <span class="ow">and</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;entities&quot;</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;entities&quot;</span><span class="p">]:</span>
+                <span class="c1"># Ignore if it doesn&#39;t have a type</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;allTypes&quot;</span><span class="p">]:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Define source node</span>
+                <span class="n">source_id</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">record</span><span class="p">[</span><span class="s2">&quot;allUris&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;allUris&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="n">source_label</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;allTypes&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+                <span class="n">source_name</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="n">nodes_list</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">source_id</span><span class="p">,</span> <span class="n">source_label</span><span class="p">),</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">source_name</span><span class="p">}</span>
+                <span class="p">)</span>
         <span class="n">relationships</span> <span class="o">=</span> <span class="nb">list</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;facts&quot;</span><span class="p">]:</span>
-            <span class="c1"># Skip if the fact is below the threshold confidence</span>
-            <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;confidence&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fact_threshold_confidence</span><span class="p">:</span>
-                <span class="k">continue</span>
+        <span class="c1"># Relationships are a list because we don&#39;t deduplicate nor anything else</span>
+        <span class="k">if</span> <span class="s2">&quot;facts&quot;</span> <span class="ow">in</span> <span class="n">payload</span> <span class="ow">and</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;facts&quot;</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;facts&quot;</span><span class="p">]:</span>
+                <span class="c1"># Skip if the fact is below the threshold confidence</span>
+                <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;confidence&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fact_threshold_confidence</span><span class="p">:</span>
+                    <span class="k">continue</span>
 
-            <span class="c1"># TODO: It should probably be treated as a node property</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allTypes&quot;</span><span class="p">]:</span>
-                <span class="k">continue</span>
+                <span class="c1"># TODO: It should probably be treated as a node property</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allTypes&quot;</span><span class="p">]:</span>
+                    <span class="k">continue</span>
 
-            <span class="c1"># Define source node</span>
-            <span class="n">source_id</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">]</span>
-                <span class="k">else</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-            <span class="p">)</span>
-            <span class="n">source_label</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;allTypes&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
-            <span class="n">source_name</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-            <span class="n">source_node</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">source_id</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">source_label</span><span class="p">)</span>
-            <span class="n">nodes_list</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span>
-                <span class="p">(</span><span class="n">source_id</span><span class="p">,</span> <span class="n">source_label</span><span class="p">),</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">source_name</span><span class="p">}</span>
-            <span class="p">)</span>
-
-            <span class="c1"># Define target node</span>
-            <span class="n">target_id</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">]</span>
-                <span class="k">else</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-            <span class="p">)</span>
-            <span class="n">target_label</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allTypes&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
-            <span class="n">target_name</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-            <span class="c1"># Some facts are better suited as node properties</span>
-            <span class="k">if</span> <span class="n">target_label</span> <span class="ow">in</span> <span class="n">FACT_TO_PROPERTY_TYPE</span><span class="p">:</span>
+                <span class="c1"># Define source node</span>
+                <span class="n">source_id</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">]</span>
+                    <span class="k">else</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
+                <span class="n">source_label</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;allTypes&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+                <span class="n">source_name</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;entity&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="n">source_node</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">source_id</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">source_label</span><span class="p">)</span>
                 <span class="n">nodes_list</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span>
-                    <span class="p">(</span><span class="n">source_id</span><span class="p">,</span> <span class="n">source_label</span><span class="p">),</span>
-                    <span class="p">{</span><span class="n">format_property_key</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]):</span> <span class="n">target_name</span><span class="p">},</span>
+                    <span class="p">(</span><span class="n">source_id</span><span class="p">,</span> <span class="n">source_label</span><span class="p">),</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">source_name</span><span class="p">}</span>
                 <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>  <span class="c1"># Define relationship</span>
-                <span class="c1"># Define target node object</span>
-                <span class="n">target_node</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">target_id</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">target_label</span><span class="p">)</span>
-                <span class="n">nodes_list</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span>
-                    <span class="p">(</span><span class="n">target_id</span><span class="p">,</span> <span class="n">target_label</span><span class="p">),</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">target_name</span><span class="p">}</span>
-                <span class="p">)</span>
-                <span class="c1"># Define relationship type</span>
-                <span class="n">rel_type</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span><span class="p">:</span>
-                    <span class="n">rel_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span><span class="o">.</span><span class="n">get_type</span><span class="p">(</span><span class="n">rel_type</span><span class="p">)</span>
 
-                <span class="c1"># Relationship qualifiers/properties</span>
-                <span class="n">rel_properties</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-                <span class="n">relationship_evidence</span> <span class="o">=</span> <span class="p">[</span><span class="n">el</span><span class="p">[</span><span class="s2">&quot;passage&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;evidence&quot;</span><span class="p">]][</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_evidence</span><span class="p">:</span>
-                    <span class="n">rel_properties</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;evidence&quot;</span><span class="p">:</span> <span class="n">relationship_evidence</span><span class="p">})</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_qualifiers</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;qualifiers&quot;</span><span class="p">):</span>
-                    <span class="k">for</span> <span class="nb">property</span> <span class="ow">in</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;qualifiers&quot;</span><span class="p">]:</span>
-                        <span class="n">prop_key</span> <span class="o">=</span> <span class="n">format_property_key</span><span class="p">(</span><span class="nb">property</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
-                        <span class="n">rel_properties</span><span class="p">[</span><span class="n">prop_key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">property</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
-
-                <span class="n">relationship</span> <span class="o">=</span> <span class="n">Relationship</span><span class="p">(</span>
-                    <span class="n">source</span><span class="o">=</span><span class="n">source_node</span><span class="p">,</span>
-                    <span class="n">target</span><span class="o">=</span><span class="n">target_node</span><span class="p">,</span>
-                    <span class="nb">type</span><span class="o">=</span><span class="n">rel_type</span><span class="p">,</span>
-                    <span class="n">properties</span><span class="o">=</span><span class="n">rel_properties</span><span class="p">,</span>
+                <span class="c1"># Define target node</span>
+                <span class="n">target_id</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allUris&quot;</span><span class="p">]</span>
+                    <span class="k">else</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
                 <span class="p">)</span>
-                <span class="n">relationships</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">relationship</span><span class="p">)</span>
+                <span class="n">target_label</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;allTypes&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">capitalize</span><span class="p">()</span>
+                <span class="n">target_name</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+                <span class="c1"># Some facts are better suited as node properties</span>
+                <span class="k">if</span> <span class="n">target_label</span> <span class="ow">in</span> <span class="n">FACT_TO_PROPERTY_TYPE</span><span class="p">:</span>
+                    <span class="n">nodes_list</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span>
+                        <span class="p">(</span><span class="n">source_id</span><span class="p">,</span> <span class="n">source_label</span><span class="p">),</span>
+                        <span class="p">{</span><span class="n">format_property_key</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]):</span> <span class="n">target_name</span><span class="p">},</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>  <span class="c1"># Define relationship</span>
+                    <span class="c1"># Define target node object</span>
+                    <span class="n">target_node</span> <span class="o">=</span> <span class="n">Node</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">target_id</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">target_label</span><span class="p">)</span>
+                    <span class="n">nodes_list</span><span class="o">.</span><span class="n">add_node_property</span><span class="p">(</span>
+                        <span class="p">(</span><span class="n">target_id</span><span class="p">,</span> <span class="n">target_label</span><span class="p">),</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">target_name</span><span class="p">}</span>
+                    <span class="p">)</span>
+                    <span class="c1"># Define relationship type</span>
+                    <span class="n">rel_type</span> <span class="o">=</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span><span class="p">:</span>
+                        <span class="n">rel_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">simplified_schema</span><span class="o">.</span><span class="n">get_type</span><span class="p">(</span><span class="n">rel_type</span><span class="p">)</span>
+
+                    <span class="c1"># Relationship qualifiers/properties</span>
+                    <span class="n">rel_properties</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+                    <span class="n">relationship_evidence</span> <span class="o">=</span> <span class="p">[</span>
+                        <span class="n">el</span><span class="p">[</span><span class="s2">&quot;passage&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;evidence&quot;</span><span class="p">]</span>
+                    <span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_evidence</span><span class="p">:</span>
+                        <span class="n">rel_properties</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;evidence&quot;</span><span class="p">:</span> <span class="n">relationship_evidence</span><span class="p">})</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_qualifiers</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;qualifiers&quot;</span><span class="p">):</span>
+                        <span class="k">for</span> <span class="nb">property</span> <span class="ow">in</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;qualifiers&quot;</span><span class="p">]:</span>
+                            <span class="n">prop_key</span> <span class="o">=</span> <span class="n">format_property_key</span><span class="p">(</span><span class="nb">property</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
+                            <span class="n">rel_properties</span><span class="p">[</span><span class="n">prop_key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">property</span><span class="p">[</span><span class="s2">&quot;value&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+
+                    <span class="n">relationship</span> <span class="o">=</span> <span class="n">Relationship</span><span class="p">(</span>
+                        <span class="n">source</span><span class="o">=</span><span class="n">source_node</span><span class="p">,</span>
+                        <span class="n">target</span><span class="o">=</span><span class="n">target_node</span><span class="p">,</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">rel_type</span><span class="p">,</span>
+                        <span class="n">properties</span><span class="o">=</span><span class="n">rel_properties</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">relationships</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">relationship</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">GraphDocument</span><span class="p">(</span>
             <span class="n">nodes</span><span class="o">=</span><span class="n">nodes_list</span><span class="o">.</span><span class="n">return_node_list</span><span class="p">(),</span>
@@ -513,7 +552,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 06, 2024.
+          Last updated on May 07, 2024.
       </footer>
     </div>
   </div>

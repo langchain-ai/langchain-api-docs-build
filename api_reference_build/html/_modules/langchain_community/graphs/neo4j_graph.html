@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_community.graphs.neo4j_graph &mdash; 🦜🔗 LangChain 0.1.17</title>
+  <title>langchain_community.graphs.neo4j_graph &mdash; 🦜🔗 LangChain 0.1.18</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_community/graphs/neo4j_graph.html" />
 
@@ -344,123 +344,6 @@
         <span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_enhanced_schema_cypher</span><span class="p">(</span>
-    <span class="n">label_or_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">properties</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
-    <span class="n">exhaustive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">is_relationship</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">is_relationship</span><span class="p">:</span>
-        <span class="n">match_clause</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;MATCH ()-[n:</span><span class="si">{</span><span class="n">label_or_type</span><span class="si">}</span><span class="s2">]-&gt;()&quot;</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">match_clause</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;MATCH (n:</span><span class="si">{</span><span class="n">label_or_type</span><span class="si">}</span><span class="s2">)&quot;</span>
-
-    <span class="n">with_clauses</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">return_clauses</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">output_dict</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">if</span> <span class="n">exhaustive</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">properties</span><span class="p">:</span>
-            <span class="n">prop_name</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">]</span>
-            <span class="n">prop_type</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;STRING&quot;</span><span class="p">:</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;collect(distinct substring(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`, 0, 50)) &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-                <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;values:`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`[..</span><span class="si">{</span><span class="n">DISTINCT_VALUE_LIMIT</span><span class="si">}</span><span class="s2">],&quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot; distinct_count: size(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`)&quot;</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span>
-                <span class="s2">&quot;INTEGER&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;FLOAT&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;DATE&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;DATE_TIME&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;LOCAL_DATE_TIME&quot;</span><span class="p">,</span>
-            <span class="p">]:</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;min(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_min`&quot;</span><span class="p">)</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;max(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_max`&quot;</span><span class="p">)</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;count(distinct n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_distinct`&quot;</span>
-                <span class="p">)</span>
-                <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;min: toString(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_min`), &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;max: toString(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_max`), &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;distinct_count: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_distinct`&quot;</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;LIST&quot;</span><span class="p">:</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;min(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;max(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-                <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;min_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;max_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;BOOLEAN&quot;</span><span class="p">,</span> <span class="s2">&quot;POINT&quot;</span><span class="p">,</span> <span class="s2">&quot;DURATION&quot;</span><span class="p">]:</span>
-                <span class="k">continue</span>
-            <span class="n">output_dict</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;{&quot;</span> <span class="o">+</span> <span class="n">return_clauses</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;}&quot;</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Just sample 5 random nodes</span>
-        <span class="n">match_clause</span> <span class="o">+=</span> <span class="s2">&quot; WITH n LIMIT 5&quot;</span>
-        <span class="k">for</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">properties</span><span class="p">:</span>
-            <span class="n">prop_name</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">]</span>
-            <span class="n">prop_type</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;STRING&quot;</span><span class="p">:</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;collect(distinct substring(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`, 0, 50)) &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-                <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;values: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span>
-                <span class="s2">&quot;INTEGER&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;FLOAT&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;DATE&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;DATE_TIME&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;LOCAL_DATE_TIME&quot;</span><span class="p">,</span>
-            <span class="p">]:</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;collect(distinct toString(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span>
-                <span class="p">)</span>
-                <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;values: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;LIST&quot;</span><span class="p">:</span>
-                <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;min(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;max(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-                <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;min_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`,max_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;BOOLEAN&quot;</span><span class="p">,</span> <span class="s2">&quot;POINT&quot;</span><span class="p">,</span> <span class="s2">&quot;DURATION&quot;</span><span class="p">]:</span>
-                <span class="k">continue</span>
-
-            <span class="n">output_dict</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;{&quot;</span> <span class="o">+</span> <span class="n">return_clauses</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;}&quot;</span>
-
-    <span class="n">with_clause</span> <span class="o">=</span> <span class="s2">&quot;WITH &quot;</span> <span class="o">+</span> <span class="s2">&quot;,</span><span class="se">\n</span><span class="s2">     &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">with_clauses</span><span class="p">)</span>
-    <span class="n">return_clause</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="s2">&quot;RETURN {&quot;</span>
-        <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">`: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">output_dict</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
-        <span class="o">+</span> <span class="s2">&quot;} AS output&quot;</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Combine all parts of the Cypher query</span>
-    <span class="n">cypher_query</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">match_clause</span><span class="p">,</span> <span class="n">with_clause</span><span class="p">,</span> <span class="n">return_clause</span><span class="p">])</span>
-    <span class="k">return</span> <span class="n">cypher_query</span>
-
-
 <span class="k">def</span> <span class="nf">_format_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">:</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">is_enhanced</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="n">formatted_node_props</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">formatted_rel_props</span> <span class="o">=</span> <span class="p">[]</span>
@@ -498,17 +381,19 @@
                         <span class="n">example</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;Min: </span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s2">&quot;min&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">, Max: </span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s2">&quot;max&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">example</span> <span class="o">=</span> <span class="p">(</span>
-                            <span class="sa">f</span><span class="s1">&#39;Example: &quot;</span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s1">&quot;&#39;</span> <span class="k">if</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+                            <span class="sa">f</span><span class="s1">&#39;Example: &quot;</span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s2">&quot;values&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s1">&quot;&#39;</span>
+                            <span class="k">if</span> <span class="n">prop</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;values&quot;</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="s2">&quot;&quot;</span>
                         <span class="p">)</span>
                 <span class="k">elif</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;LIST&quot;</span><span class="p">:</span>
                     <span class="c1"># Skip embeddings</span>
-                    <span class="k">if</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;min_size&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">LIST_LIMIT</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">prop</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;min_size&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;min_size&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">LIST_LIMIT</span><span class="p">:</span>
                         <span class="k">continue</span>
                     <span class="n">example</span> <span class="o">=</span> <span class="p">(</span>
                         <span class="sa">f</span><span class="s1">&#39;Min Size: </span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s2">&quot;min_size&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">, Max Size: </span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s2">&quot;max_size&quot;</span><span class="p">]</span><span class="si">}</span><span class="s1">&#39;</span>
                     <span class="p">)</span>
                 <span class="n">formatted_node_props</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;  - `</span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s1">&#39;property&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">`: </span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">` </span><span class="si">{</span><span class="n">example</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;  - `</span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s1">&#39;property&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">`: </span><span class="si">{</span><span class="n">prop</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">example</span><span class="si">}</span><span class="s2">&quot;</span>
                 <span class="p">)</span>
 
         <span class="c1"># Enhanced formatting for relationships</span>
@@ -743,7 +628,11 @@
         <span class="c1"># Get constraints &amp; indexes</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">constraint</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">&quot;SHOW CONSTRAINTS&quot;</span><span class="p">)</span>
-            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="s2">&quot;SHOW INDEXES YIELD *&quot;</span><span class="p">)</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+                <span class="s2">&quot;CALL apoc.schema.nodes() YIELD label, properties, type, size, &quot;</span>
+                <span class="s2">&quot;valuesSelectivity WHERE type = &#39;RANGE&#39; RETURN *, &quot;</span>
+                <span class="s2">&quot;size * valuesSelectivity as distinctValues&quot;</span>
+            <span class="p">)</span>
         <span class="k">except</span> <span class="p">(</span>
             <span class="n">ClientError</span>
         <span class="p">):</span>  <span class="c1"># Read-only user might not have access to schema information</span>
@@ -756,7 +645,6 @@
             <span class="s2">&quot;relationships&quot;</span><span class="p">:</span> <span class="n">relationships</span><span class="p">,</span>
             <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;constraint&quot;</span><span class="p">:</span> <span class="n">constraint</span><span class="p">,</span> <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">index</span><span class="p">},</span>
         <span class="p">}</span>
-
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enhanced_schema</span><span class="p">:</span>
             <span class="n">schema_counts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
                 <span class="s2">&quot;CALL apoc.meta.graphSample() YIELD nodes, relationships &quot;</span>
@@ -772,7 +660,7 @@
                 <span class="n">node_props</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structured_schema</span><span class="p">[</span><span class="s2">&quot;node_props&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">node_props</span><span class="p">:</span>  <span class="c1"># The node has no properties</span>
                     <span class="k">continue</span>
-                <span class="n">enhanced_cypher</span> <span class="o">=</span> <span class="n">_enhanced_schema_cypher</span><span class="p">(</span>
+                <span class="n">enhanced_cypher</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enhanced_schema_cypher</span><span class="p">(</span>
                     <span class="n">node</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">node_props</span><span class="p">,</span> <span class="n">node</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">EXHAUSTIVE_SEARCH_LIMIT</span>
                 <span class="p">)</span>
                 <span class="n">enhanced_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">enhanced_cypher</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;output&quot;</span><span class="p">]</span>
@@ -787,7 +675,7 @@
                 <span class="n">rel_props</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">structured_schema</span><span class="p">[</span><span class="s2">&quot;rel_props&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">rel</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">])</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">rel_props</span><span class="p">:</span>  <span class="c1"># The rel has no properties</span>
                     <span class="k">continue</span>
-                <span class="n">enhanced_cypher</span> <span class="o">=</span> <span class="n">_enhanced_schema_cypher</span><span class="p">(</span>
+                <span class="n">enhanced_cypher</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_enhanced_schema_cypher</span><span class="p">(</span>
                     <span class="n">rel</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
                     <span class="n">rel_props</span><span class="p">,</span>
                     <span class="n">rel</span><span class="p">[</span><span class="s2">&quot;count&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">EXHAUSTIVE_SEARCH_LIMIT</span><span class="p">,</span>
@@ -877,14 +765,178 @@
                         <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">document</span><span class="o">.</span><span class="n">relationships</span>
                     <span class="p">]</span>
                 <span class="p">},</span>
-            <span class="p">)</span></div></div>
+            <span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_enhanced_schema_cypher</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">label_or_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">properties</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">exhaustive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">is_relationship</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">is_relationship</span><span class="p">:</span>
+            <span class="n">match_clause</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;MATCH ()-[n:</span><span class="si">{</span><span class="n">label_or_type</span><span class="si">}</span><span class="s2">]-&gt;()&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">match_clause</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;MATCH (n:</span><span class="si">{</span><span class="n">label_or_type</span><span class="si">}</span><span class="s2">)&quot;</span>
+
+        <span class="n">with_clauses</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">return_clauses</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">output_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">exhaustive</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">properties</span><span class="p">:</span>
+                <span class="n">prop_name</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">]</span>
+                <span class="n">prop_type</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;STRING&quot;</span><span class="p">:</span>
+                    <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;collect(distinct substring(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`, 0, 50)) &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;values:`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`[..</span><span class="si">{</span><span class="n">DISTINCT_VALUE_LIMIT</span><span class="si">}</span><span class="s2">],&quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot; distinct_count: size(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`)&quot;</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span>
+                    <span class="s2">&quot;INTEGER&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;FLOAT&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;DATE&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;DATE_TIME&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;LOCAL_DATE_TIME&quot;</span><span class="p">,</span>
+                <span class="p">]:</span>
+                    <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;min(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_min`&quot;</span><span class="p">)</span>
+                    <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;max(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_max`&quot;</span><span class="p">)</span>
+                    <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;count(distinct n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_distinct`&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;min: toString(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_min`), &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;max: toString(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_max`), &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;distinct_count: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_distinct`&quot;</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;LIST&quot;</span><span class="p">:</span>
+                    <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;min(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;max(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;min_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;max_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;BOOLEAN&quot;</span><span class="p">,</span> <span class="s2">&quot;POINT&quot;</span><span class="p">,</span> <span class="s2">&quot;DURATION&quot;</span><span class="p">]:</span>
+                    <span class="k">continue</span>
+                <span class="n">output_dict</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;{&quot;</span> <span class="o">+</span> <span class="n">return_clauses</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;}&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Just sample 5 random nodes</span>
+            <span class="n">match_clause</span> <span class="o">+=</span> <span class="s2">&quot; WITH n LIMIT 5&quot;</span>
+            <span class="k">for</span> <span class="n">prop</span> <span class="ow">in</span> <span class="n">properties</span><span class="p">:</span>
+                <span class="n">prop_name</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;property&quot;</span><span class="p">]</span>
+                <span class="n">prop_type</span> <span class="o">=</span> <span class="n">prop</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span>
+
+                <span class="c1"># Check if indexed property, we can still do exhaustive</span>
+                <span class="n">prop_index</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">el</span>
+                    <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">structured_schema</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">][</span><span class="s2">&quot;index&quot;</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">el</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">label_or_type</span>
+                    <span class="ow">and</span> <span class="n">el</span><span class="p">[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="p">[</span><span class="n">prop_name</span><span class="p">]</span>
+                    <span class="ow">and</span> <span class="n">el</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;RANGE&quot;</span>
+                <span class="p">]</span>
+                <span class="k">if</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;STRING&quot;</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">prop_index</span>
+                        <span class="ow">and</span> <span class="n">prop_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;size&quot;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                        <span class="ow">and</span> <span class="n">prop_index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;distinctValues&quot;</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">DISTINCT_VALUE_LIMIT</span>
+                    <span class="p">):</span>
+                        <span class="n">distinct_values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;CALL apoc.schema.properties.distinct(&quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">label_or_type</span><span class="si">}</span><span class="s2">&#39;, &#39;</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">&#39;) YIELD value&quot;</span>
+                        <span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+                        <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;values: </span><span class="si">{</span><span class="n">distinct_values</span><span class="si">}</span><span class="s2">,&quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot; distinct_count: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">distinct_values</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;collect(distinct substring(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`, 0, 50)) &quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot;AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span>
+                        <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;values: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span>
+                    <span class="s2">&quot;INTEGER&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;FLOAT&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;DATE&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;DATE_TIME&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;LOCAL_DATE_TIME&quot;</span><span class="p">,</span>
+                <span class="p">]:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">prop_index</span><span class="p">:</span>
+                        <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;collect(distinct toString(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;values: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_values`&quot;</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;min(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_min`&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;max(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_max`&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;count(distinct n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_distinct`&quot;</span>
+                        <span class="p">)</span>
+                        <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                            <span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">&quot;min: toString(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_min`), &quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot;max: toString(`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_max`), &quot;</span>
+                                <span class="sa">f</span><span class="s2">&quot;distinct_count: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_distinct`&quot;</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span>
+
+                <span class="k">elif</span> <span class="n">prop_type</span> <span class="o">==</span> <span class="s2">&quot;LIST&quot;</span><span class="p">:</span>
+                    <span class="n">with_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;min(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;max(size(n.`</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">`)) AS `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">return_clauses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;min_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_min`, &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;max_size: `</span><span class="si">{</span><span class="n">prop_name</span><span class="si">}</span><span class="s2">_size_max`&quot;</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">elif</span> <span class="n">prop_type</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;BOOLEAN&quot;</span><span class="p">,</span> <span class="s2">&quot;POINT&quot;</span><span class="p">,</span> <span class="s2">&quot;DURATION&quot;</span><span class="p">]:</span>
+                    <span class="k">continue</span>
+
+                <span class="n">output_dict</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;{&quot;</span> <span class="o">+</span> <span class="n">return_clauses</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="o">+</span> <span class="s2">&quot;}&quot;</span>
+
+        <span class="n">with_clause</span> <span class="o">=</span> <span class="s2">&quot;WITH &quot;</span> <span class="o">+</span> <span class="s2">&quot;,</span><span class="se">\n</span><span class="s2">     &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">with_clauses</span><span class="p">)</span>
+        <span class="n">return_clause</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s2">&quot;RETURN {&quot;</span>
+            <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">`: </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">output_dict</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="o">+</span> <span class="s2">&quot;} AS output&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Combine all parts of the Cypher query</span>
+        <span class="n">cypher_query</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">match_clause</span><span class="p">,</span> <span class="n">with_clause</span><span class="p">,</span> <span class="n">return_clause</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">cypher_query</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 06, 2024.
+          Last updated on May 07, 2024.
       </footer>
     </div>
   </div>

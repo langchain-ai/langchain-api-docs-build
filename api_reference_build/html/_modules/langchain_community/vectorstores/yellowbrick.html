@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_community.vectorstores.yellowbrick &mdash; 🦜🔗 LangChain 0.1.17</title>
+  <title>langchain_community.vectorstores.yellowbrick &mdash; 🦜🔗 LangChain 0.1.18</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_community/vectorstores/yellowbrick.html" />
 
@@ -202,13 +202,19 @@
   <h1>Source code for langchain_community.vectorstores.yellowbrick</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">atexit</span>
+<span class="kn">import</span> <span class="nn">csv</span>
+<span class="kn">import</span> <span class="nn">enum</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">repeat</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">contextmanager</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">StringIO</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Generator</span><span class="p">,</span>
     <span class="n">Iterable</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
@@ -221,12 +227,13 @@
 
 <span class="kn">from</span> <span class="nn">langchain_community.docstore.document</span> <span class="kn">import</span> <span class="n">Document</span>
 
-<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">psycopg2.extensions</span> <span class="kn">import</span> <span class="n">connection</span> <span class="k">as</span> <span class="n">PgConnection</span>
+    <span class="kn">from</span> <span class="nn">psycopg2.extensions</span> <span class="kn">import</span> <span class="n">cursor</span> <span class="k">as</span> <span class="n">PgCursor</span>
 
 
 <div class="viewcode-block" id="Yellowbrick"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick">[docs]</a><span class="k">class</span> <span class="nc">Yellowbrick</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Yellowbrick as a vector database.</span>
-
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
 <span class="sd">            from langchain_community.vectorstores import Yellowbrick</span>
@@ -234,11 +241,37 @@
 <span class="sd">            ...</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="k">class</span> <span class="nc">IndexType</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enumerator for the supported Index types within Yellowbrick.&quot;&quot;&quot;</span>
+
+        <span class="n">NONE</span> <span class="o">=</span> <span class="s2">&quot;none&quot;</span>
+        <span class="n">LSH</span> <span class="o">=</span> <span class="s2">&quot;lsh&quot;</span>
+
+    <span class="k">class</span> <span class="nc">IndexParams</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parameters for configuring a Yellowbrick index.&quot;&quot;&quot;</span>
+
+        <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">index_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;Yellowbrick.IndexType&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="n">index_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">index_type</span> <span class="o">=</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">NONE</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">index_type</span> <span class="o">=</span> <span class="n">index_type</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span> <span class="ow">or</span> <span class="p">{}</span>
+
+        <span class="k">def</span> <span class="nf">get_param</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+
 <div class="viewcode-block" id="Yellowbrick.__init__"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
         <span class="n">connection_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">logger</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">drop</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize with yellowbrick client.</span>
 <span class="sd">        Args:</span>
@@ -246,79 +279,232 @@
 <span class="sd">            connection_string: Format &#39;postgres://username:password@host:port/database&#39;</span>
 <span class="sd">            table: Table used to store / retrieve embeddings from</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">extras</span>
 
-        <span class="kn">import</span> <span class="nn">psycopg2</span>
+        <span class="n">extras</span><span class="o">.</span><span class="n">register_uuid</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">ERROR</span><span class="p">)</span>
+            <span class="n">handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">()</span>
+            <span class="n">handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+            <span class="n">formatter</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> - </span><span class="si">%(levelname)s</span><span class="s2"> - </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">formatter</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">handler</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">Embeddings</span><span class="p">):</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;embeddings input must be Embeddings object.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;embeddings input must be Embeddings object.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;_lsh_index&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;_lsh_hyperplane&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;_content&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">connection_string</span> <span class="o">=</span> <span class="n">connection_string</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">connection</span> <span class="o">=</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">DatabaseConnection</span><span class="p">(</span><span class="n">connection_string</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="p">)</span>
+        <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">close_connection</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="o">=</span> <span class="n">schema</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">=</span> <span class="n">table</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span> <span class="o">=</span> <span class="n">embedding</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="n">psycopg2</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">connection_string</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_embedding_len</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_database_utf8</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">__post_init__</span><span class="p">()</span></div>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">drop</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,</span> <span class="n">cursor</span><span class="o">=</span><span class="n">cursor</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span>
+                    <span class="n">table</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">,</span>
+                    <span class="n">schema</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,</span>
+                    <span class="n">cursor</span><span class="o">=</span><span class="n">cursor</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_drop_lsh_index_tables</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the store.&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">check_database_utf8</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">create_table_if_not_exists</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_create_schema</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_create_table</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">class</span> <span class="nc">DatabaseConnection</span><span class="p">:</span>
+        <span class="n">_instance</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">_connection_string</span><span class="p">:</span> <span class="nb">str</span>
+        <span class="n">_connection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;PgConnection&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">_logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span>
 
-<div class="viewcode-block" id="Yellowbrick.create_table_if_not_exists"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.create_table_if_not_exists">[docs]</a>    <span class="k">def</span> <span class="nf">create_table_if_not_exists</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">def</span> <span class="fm">__new__</span><span class="p">(</span>
+            <span class="bp">cls</span><span class="p">,</span> <span class="n">connection_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Yellowbrick.DatabaseConnection&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span><span class="o">.</span><span class="n">_connection_string</span> <span class="o">=</span> <span class="n">connection_string</span>
+                <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_instance</span>
+
+        <span class="k">def</span> <span class="nf">close_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">def</span> <span class="nf">get_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;PgConnection&quot;</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">psycopg2</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">closed</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span> <span class="o">=</span> <span class="n">psycopg2</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_connection_string</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">autocommit</span> <span class="o">=</span> <span class="kc">False</span>
+
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span>
+
+        <span class="nd">@contextmanager</span>
+        <span class="k">def</span> <span class="nf">get_managed_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="s2">&quot;PgConnection&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+            <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">DatabaseError</span>
+
+            <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_connection</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">conn</span>
+            <span class="k">except</span> <span class="n">DatabaseError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">rollback</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="s2">&quot;Database error occurred, rolling back transaction.&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span>
+                <span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Database transaction failed.&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+
+        <span class="nd">@contextmanager</span>
+        <span class="k">def</span> <span class="nf">get_cursor</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Generator</span><span class="p">[</span><span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_managed_connection</span><span class="p">()</span> <span class="k">as</span> <span class="n">conn</span><span class="p">:</span>
+                <span class="n">cursor</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="k">yield</span> <span class="n">cursor</span>
+                <span class="k">finally</span><span class="p">:</span>
+                    <span class="n">cursor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_create_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Helper function: create schema if not exists</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">:</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    CREATE SCHEMA IF NOT EXISTS {s}</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">s</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_create_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Helper function: create table if not exists</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
 
-        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">)</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span> <span class="o">+</span> <span class="s2">&quot;_pk_doc_id&quot;</span><span class="p">)</span>
         <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
             <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
-                <span class="s2">&quot;CREATE TABLE IF NOT EXISTS </span><span class="si">{}</span><span class="s2"> ( </span><span class="se">\</span>
-<span class="s2">            id UUID, </span><span class="se">\</span>
-<span class="s2">            embedding_id INTEGER, </span><span class="se">\</span>
-<span class="s2">            text VARCHAR(60000), </span><span class="se">\</span>
-<span class="s2">            metadata VARCHAR(1024), </span><span class="se">\</span>
-<span class="s2">            embedding FLOAT)&quot;</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">))</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                CREATE TABLE IF NOT EXISTS {t} (</span>
+<span class="sd">                doc_id UUID NOT NULL,</span>
+<span class="sd">                text VARCHAR(60000) NOT NULL,</span>
+<span class="sd">                metadata VARCHAR(1024) NOT NULL,</span>
+<span class="sd">                CONSTRAINT {c} PRIMARY KEY (doc_id))</span>
+<span class="sd">                DISTRIBUTE ON (doc_id) SORT ON (doc_id)</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span>
+                <span class="n">c</span><span class="o">=</span><span class="n">c</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Yellowbrick.drop"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.drop">[docs]</a>    <span class="k">def</span> <span class="nf">drop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">t1</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+        <span class="n">t2</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">)</span>
+        <span class="n">c1</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span> <span class="o">+</span> <span class="s2">&quot;_pk_doc_id_embedding_id&quot;</span>
+        <span class="p">)</span>
+        <span class="n">c2</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span> <span class="o">+</span> <span class="s2">&quot;_fk_doc_id&quot;</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                CREATE TABLE IF NOT EXISTS {t1} (</span>
+<span class="sd">                doc_id UUID NOT NULL,</span>
+<span class="sd">                embedding_id SMALLINT NOT NULL,</span>
+<span class="sd">                embedding FLOAT NOT NULL,</span>
+<span class="sd">                CONSTRAINT {c1} PRIMARY KEY (doc_id, embedding_id),</span>
+<span class="sd">                CONSTRAINT {c2} FOREIGN KEY (doc_id) REFERENCES {t2}(doc_id))</span>
+<span class="sd">                DISTRIBUTE ON (doc_id) SORT ON (doc_id)</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
+                <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
+                <span class="n">c1</span><span class="o">=</span><span class="n">c1</span><span class="p">,</span>
+                <span class="n">c2</span><span class="o">=</span><span class="n">c2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Yellowbrick.drop"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.drop">[docs]</a>    <span class="k">def</span> <span class="nf">drop</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">cursor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;PgCursor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Helper function: Drop data</span>
+<span class="sd">        Helper function: Drop data. If a cursor is provided, use it;</span>
+<span class="sd">        otherwise, obtain a new cursor for the operation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">cursor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_drop_table</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">table</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_drop_table</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">table</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_drop_table</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span>
+        <span class="n">table</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Executes the drop table command using the given cursor.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
 
-        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;DROP TABLE IF EXISTS </span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">table</span><span class="p">)))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="n">schema</span><span class="p">:</span>
+            <span class="n">table_name</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">table</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">table_name</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
 
-<div class="viewcode-block" id="Yellowbrick.check_database_utf8"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.check_database_utf8">[docs]</a>    <span class="k">def</span> <span class="nf">check_database_utf8</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">drop_table_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        DROP TABLE IF EXISTS {} CASCADE</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">table_name</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">drop_table_query</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_check_database_utf8</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Helper function: Test the database is UTF-8 encoded</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
-        <span class="n">query</span> <span class="o">=</span> <span class="s2">&quot;SELECT pg_encoding_to_char(encoding) </span><span class="se">\</span>
-<span class="s2">        FROM pg_database </span><span class="se">\</span>
-<span class="s2">        WHERE datname = current_database();&quot;</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-        <span class="n">encoding</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">                SELECT pg_encoding_to_char(encoding)</span>
+<span class="s2">                FROM pg_database</span>
+<span class="s2">                WHERE datname = current_database();</span>
+<span class="s2">            &quot;&quot;&quot;</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+            <span class="n">encoding</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
         <span class="k">if</span> <span class="n">encoding</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;utf8&quot;</span> <span class="ow">or</span> <span class="n">encoding</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;utf-8&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">True</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Database </span><span class="se">\</span>
-<span class="s2">           &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">connection_string</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">&#39; encoding is not UTF-8&quot;</span>
-            <span class="p">)</span></div>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Database encoding is not UTF-8&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="kc">False</span>
 
 <div class="viewcode-block" id="Yellowbrick.add_texts"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.add_texts">[docs]</a>    <span class="k">def</span> <span class="nf">add_texts</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -326,51 +512,82 @@
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add more texts to the vectorstore index.</span>
-<span class="sd">        Args:</span>
-<span class="sd">            texts: Iterable of strings to add to the vectorstore.</span>
-<span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
-<span class="sd">            kwargs: vectorstore specific parameters</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">10000</span>
 
         <span class="n">texts</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
-        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
         <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">))</span>
         <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">metadatas</span><span class="p">:</span>
             <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span>
-        <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">)):</span>
-            <span class="n">doc_uuid</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span>
-            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">doc_uuid</span><span class="p">))</span>
-            <span class="n">data_input</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">id</span><span class="p">),</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">metadata</span><span class="p">),</span> <span class="n">embedding</span><span class="p">)</span>
-                <span class="k">for</span> <span class="nb">id</span><span class="p">,</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">embedding</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-                    <span class="n">repeat</span><span class="p">(</span><span class="n">doc_uuid</span><span class="p">),</span>
-                    <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[</span><span class="nb">id</span><span class="p">])),</span>
-                    <span class="n">repeat</span><span class="p">(</span><span class="n">texts</span><span class="p">[</span><span class="nb">id</span><span class="p">]),</span>
-                    <span class="n">repeat</span><span class="p">(</span><span class="n">metadatas</span><span class="p">[</span><span class="nb">id</span><span class="p">]),</span>
-                    <span class="n">embeddings</span><span class="p">[</span><span class="nb">id</span><span class="p">],</span>
-                <span class="p">)</span>
-            <span class="p">]</span>
-            <span class="n">flattened_input</span> <span class="o">=</span> <span class="p">[</span><span class="n">val</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">data_input</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]</span>
-            <span class="n">insert_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
-                <span class="s2">&quot;INSERT INTO </span><span class="si">{t}</span><span class="s2"> </span><span class="se">\</span>
-<span class="s2">                (id, embedding_id, text, metadata, embedding) VALUES </span><span class="si">{v}</span><span class="s2">&quot;</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="n">t</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">),</span>
-                <span class="n">v</span><span class="o">=</span><span class="p">(</span>
-                    <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-                        <span class="p">[</span>
-                            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;(</span><span class="si">%s</span><span class="s2">,</span><span class="si">%s</span><span class="s2">,</span><span class="si">%s</span><span class="s2">,</span><span class="si">%s</span><span class="s2">,</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">)</span>
-                            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[</span><span class="nb">id</span><span class="p">]))</span>
-                        <span class="p">]</span>
-                    <span class="p">)</span>
-                <span class="p">),</span>
+
+        <span class="n">index_params</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index_params&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="n">content_io</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+            <span class="n">embeddings_io</span> <span class="o">=</span> <span class="n">StringIO</span><span class="p">()</span>
+            <span class="n">content_writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span>
+                <span class="n">content_io</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">quotechar</span><span class="o">=</span><span class="s1">&#39;&quot;&#39;</span><span class="p">,</span> <span class="n">quoting</span><span class="o">=</span><span class="n">csv</span><span class="o">.</span><span class="n">QUOTE_MINIMAL</span>
             <span class="p">)</span>
-            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">insert_query</span><span class="p">,</span> <span class="n">flattened_input</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+            <span class="n">embeddings_writer</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">writer</span><span class="p">(</span>
+                <span class="n">embeddings_io</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">quotechar</span><span class="o">=</span><span class="s1">&#39;&quot;&#39;</span><span class="p">,</span> <span class="n">quoting</span><span class="o">=</span><span class="n">csv</span><span class="o">.</span><span class="n">QUOTE_MINIMAL</span>
+            <span class="p">)</span>
+            <span class="n">current_batch_size</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">texts</span><span class="p">):</span>
+                <span class="n">doc_uuid</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_uuid</span><span class="p">)</span>
+
+                <span class="n">content_writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="n">doc_uuid</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">metadatas</span><span class="p">[</span><span class="n">i</span><span class="p">])])</span>
+
+                <span class="k">for</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">embedding</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[</span><span class="n">i</span><span class="p">]):</span>
+                    <span class="n">embeddings_writer</span><span class="o">.</span><span class="n">writerow</span><span class="p">([</span><span class="n">doc_uuid</span><span class="p">,</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">embedding</span><span class="p">])</span>
+
+                <span class="n">current_batch_size</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="k">if</span> <span class="n">current_batch_size</span> <span class="o">&gt;=</span> <span class="n">batch_size</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_copy_to_db</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">content_io</span><span class="p">,</span> <span class="n">embeddings_io</span><span class="p">)</span>
+
+                    <span class="n">content_io</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">content_io</span><span class="o">.</span><span class="n">truncate</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">embeddings_io</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">embeddings_io</span><span class="o">.</span><span class="n">truncate</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">current_batch_size</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="k">if</span> <span class="n">current_batch_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_copy_to_db</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">content_io</span><span class="p">,</span> <span class="n">embeddings_io</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span> <span class="o">==</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">LSH</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_update_index</span><span class="p">(</span><span class="n">index_params</span><span class="p">,</span> <span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span><span class="p">(</span><span class="n">doc_uuid</span><span class="p">))</span>
+
         <span class="k">return</span> <span class="n">results</span></div>
+
+    <span class="k">def</span> <span class="nf">_copy_to_db</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span> <span class="n">content_io</span><span class="p">:</span> <span class="n">StringIO</span><span class="p">,</span> <span class="n">embeddings_io</span><span class="p">:</span> <span class="n">StringIO</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">content_io</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">embeddings_io</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">)</span>
+        <span class="n">content_copy_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            COPY {table} (doc_id, text, metadata) FROM </span>
+<span class="sd">            STDIN WITH (FORMAT CSV, DELIMITER E&#39;\\t&#39;, QUOTE &#39;\&quot;&#39;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">copy_expert</span><span class="p">(</span><span class="n">content_copy_query</span><span class="p">,</span> <span class="n">content_io</span><span class="p">)</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+        <span class="n">embeddings_copy_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            COPY {table} (doc_id, embedding_id, embedding) FROM </span>
+<span class="sd">            STDIN WITH (FORMAT CSV, DELIMITER E&#39;\\t&#39;, QUOTE &#39;\&quot;&#39;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">copy_expert</span><span class="p">(</span><span class="n">embeddings_copy_query</span><span class="p">,</span> <span class="n">embeddings_io</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Yellowbrick.from_texts"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.from_texts">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_texts</span><span class="p">(</span>
@@ -380,6 +597,8 @@
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">connection_string</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
         <span class="n">table</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;langchain&quot;</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;public&quot;</span><span class="p">,</span>
+        <span class="n">drop</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Yellowbrick</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add texts to the vectorstore index.</span>
@@ -391,15 +610,109 @@
 <span class="sd">            table: table to store embeddings</span>
 <span class="sd">            kwargs: vectorstore specific parameters</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">connection_string</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;connection_string must be provided&quot;</span><span class="p">)</span>
         <span class="n">vss</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
             <span class="n">connection_string</span><span class="o">=</span><span class="n">connection_string</span><span class="p">,</span>
             <span class="n">table</span><span class="o">=</span><span class="n">table</span><span class="p">,</span>
+            <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
+            <span class="n">drop</span><span class="o">=</span><span class="n">drop</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">vss</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">)</span>
+        <span class="n">vss</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">vss</span></div>
+
+<div class="viewcode-block" id="Yellowbrick.delete"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">delete_all</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete vectors by uuids.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ids: List of ids to delete, where each id is a uuid string.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="k">if</span> <span class="n">delete_all</span><span class="p">:</span>
+            <span class="n">where_sql</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                WHERE 1=1</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">uuids</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span><span class="nb">id</span><span class="p">)</span> <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">)</span>
+            <span class="n">ids_formatted</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;, &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">uuids</span><span class="p">)</span>
+            <span class="n">where_sql</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                WHERE doc_id IN ({ids})</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">ids</span><span class="o">=</span><span class="n">ids_formatted</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either ids or delete_all must be provided.&quot;</span><span class="p">)</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="n">table_identifier</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+                <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span>
+            <span class="p">)</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;DELETE FROM </span><span class="si">{table}</span><span class="s2"> </span><span class="si">{where_sql}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">table</span><span class="o">=</span><span class="n">table_identifier</span><span class="p">,</span> <span class="n">where_sql</span><span class="o">=</span><span class="n">where_sql</span>
+            <span class="p">)</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+
+            <span class="n">table_identifier</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+            <span class="n">query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;DELETE FROM </span><span class="si">{table}</span><span class="s2"> </span><span class="si">{where_sql}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">table</span><span class="o">=</span><span class="n">table_identifier</span><span class="p">,</span> <span class="n">where_sql</span><span class="o">=</span><span class="n">where_sql</span>
+            <span class="p">)</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table_exists</span><span class="p">(</span>
+                <span class="n">cursor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span><span class="p">,</span> <span class="o">*</span><span class="n">schema_prefix</span>
+            <span class="p">):</span>
+                <span class="n">table_identifier</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+                    <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span>
+                <span class="p">)</span>
+                <span class="n">query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;DELETE FROM </span><span class="si">{table}</span><span class="s2"> </span><span class="si">{where_sql}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">table</span><span class="o">=</span><span class="n">table_identifier</span><span class="p">,</span> <span class="n">where_sql</span><span class="o">=</span><span class="n">where_sql</span>
+                <span class="p">)</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+    <span class="k">def</span> <span class="nf">_table_exists</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span> <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">schema</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;public&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks if a table exists in the given schema</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="n">schema</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+        <span class="n">table_name</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span><span class="n">table_name</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                SELECT COUNT(*)</span>
+<span class="sd">                FROM sys.table t INNER JOIN sys.schema s ON t.schema_id = s.schema_id</span>
+<span class="sd">                WHERE s.name = {schema} AND t.name = {table_name}</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
+                <span class="n">table_name</span><span class="o">=</span><span class="n">table_name</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">_generate_vector_uuid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vector</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span><span class="p">:</span>
+        <span class="kn">import</span> <span class="nn">hashlib</span>
+
+        <span class="n">vector_str</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">vector</span><span class="p">))</span>
+        <span class="n">hash_object</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha1</span><span class="p">(</span><span class="n">vector_str</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+        <span class="n">hash_digest</span> <span class="o">=</span> <span class="n">hash_object</span><span class="o">.</span><span class="n">digest</span><span class="p">()</span>
+        <span class="n">vector_uuid</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span><span class="p">(</span><span class="nb">bytes</span><span class="o">=</span><span class="n">hash_digest</span><span class="p">[:</span><span class="mi">16</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">vector_uuid</span>
 
 <div class="viewcode-block" id="Yellowbrick.similarity_search_with_score_by_vector"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.similarity_search_with_score_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score_by_vector</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
@@ -417,46 +730,133 @@
 <span class="sd">            List[Document, float]: List of Documents and scores</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+        <span class="kn">from</span> <span class="nn">psycopg2.extras</span> <span class="kn">import</span> <span class="n">execute_values</span>
 
-        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span>
-        <span class="n">tmp_table</span> <span class="o">=</span> <span class="s2">&quot;tmp_&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
-                <span class="s2">&quot;CREATE TEMPORARY TABLE </span><span class="si">{}</span><span class="s2"> ( </span><span class="se">\</span>
-<span class="s2">            embedding_id INTEGER, embedding FLOAT)&quot;</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_table</span><span class="p">))</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+        <span class="n">index_params</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index_params&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">()</span>
 
-        <span class="n">data_input</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">(</span><span class="n">embedding_id</span><span class="p">,</span> <span class="n">embedding</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">embedding</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">embedding</span><span class="p">)),</span> <span class="n">embedding</span><span class="p">)</span>
-        <span class="p">]</span>
-        <span class="n">flattened_input</span> <span class="o">=</span> <span class="p">[</span><span class="n">val</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">data_input</span> <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]</span>
-        <span class="n">insert_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
-            <span class="s2">&quot;INSERT INTO </span><span class="si">{t}</span><span class="s2"> </span><span class="se">\</span>
-<span class="s2">            (embedding_id, embedding) VALUES </span><span class="si">{v}</span><span class="s2">&quot;</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-            <span class="n">t</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_table</span><span class="p">),</span>
-            <span class="n">v</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;(</span><span class="si">%s</span><span class="s2">,</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">embedding</span><span class="p">))]),</span>
-        <span class="p">)</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">insert_query</span><span class="p">,</span> <span class="n">flattened_input</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
-        <span class="n">sql_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
-            <span class="s2">&quot;SELECT text, </span><span class="se">\</span>
-<span class="s2">            metadata, </span><span class="se">\</span>
-<span class="s2">            sum(v1.embedding * v2.embedding) / </span><span class="se">\</span>
-<span class="s2">            ( sqrt(sum(v1.embedding * v1.embedding)) * </span><span class="se">\</span>
-<span class="s2">            sqrt(sum(v2.embedding * v2.embedding))) AS score </span><span class="se">\</span>
-<span class="s2">            FROM </span><span class="si">{v1}</span><span class="s2"> v1 INNER JOIN </span><span class="si">{v2}</span><span class="s2"> v2 </span><span class="se">\</span>
-<span class="s2">            ON v1.embedding_id = v2.embedding_id </span><span class="se">\</span>
-<span class="s2">            GROUP BY v2.id, v2.text, v2.metadata </span><span class="se">\</span>
-<span class="s2">            ORDER BY score DESC </span><span class="se">\</span>
-<span class="s2">            LIMIT </span><span class="si">%s</span><span class="s2">&quot;</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">v1</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_table</span><span class="p">),</span> <span class="n">v2</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">))</span>
-        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql_query</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span><span class="p">,))</span>
-        <span class="n">results</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">tmp_table</span><span class="p">)</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="n">tmp_embeddings_table</span> <span class="o">=</span> <span class="s2">&quot;tmp_&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span>
+            <span class="n">tmp_doc_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_vector_uuid</span><span class="p">(</span><span class="n">embedding</span><span class="p">)</span>
+            <span class="n">create_table_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot; </span>
+<span class="sd">                CREATE TEMPORARY TABLE {} (</span>
+<span class="sd">                doc_id UUID,</span>
+<span class="sd">                embedding_id SMALLINT,</span>
+<span class="sd">                embedding FLOAT)</span>
+<span class="sd">                ON COMMIT DROP</span>
+<span class="sd">                DISTRIBUTE REPLICATE</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_embeddings_table</span><span class="p">))</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">create_table_query</span><span class="p">)</span>
+            <span class="n">data_input</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">tmp_doc_id</span><span class="p">),</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">embedding_value</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">embedding_id</span><span class="p">,</span> <span class="n">embedding_value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">embedding</span><span class="p">)</span>
+            <span class="p">]</span>
+            <span class="n">insert_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+                <span class="s2">&quot;INSERT INTO </span><span class="si">{}</span><span class="s2"> (doc_id, embedding_id, embedding) VALUES </span><span class="si">%s</span><span class="s2">&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_embeddings_table</span><span class="p">))</span>
+            <span class="n">execute_values</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">insert_query</span><span class="p">,</span> <span class="n">data_input</span><span class="p">)</span>
+
+            <span class="n">v1</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_embeddings_table</span><span class="p">)</span>
+            <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+            <span class="n">v2</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+            <span class="n">v3</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span> <span class="o">==</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">LSH</span><span class="p">:</span>
+                <span class="n">tmp_hash_table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="s2">&quot;_tmp_hash&quot;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_generate_tmp_lsh_hashes</span><span class="p">(</span>
+                    <span class="n">cursor</span><span class="p">,</span>
+                    <span class="n">tmp_embeddings_table</span><span class="p">,</span>
+                    <span class="n">tmp_hash_table</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+                <span class="n">lsh_index</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+                    <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span>
+                <span class="p">)</span>
+                <span class="n">input_hash_table</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_hash_table</span><span class="p">)</span>
+                <span class="n">sql_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    WITH index_docs AS (</span>
+<span class="sd">                    SELECT</span>
+<span class="sd">                        t1.doc_id,</span>
+<span class="sd">                        SUM(ABS(t1.hash-t2.hash)) as hamming_distance</span>
+<span class="sd">                    FROM</span>
+<span class="sd">                        {lsh_index} t1</span>
+<span class="sd">                    INNER JOIN</span>
+<span class="sd">                        {input_hash_table} t2</span>
+<span class="sd">                    ON t1.hash_index = t2.hash_index</span>
+<span class="sd">                    GROUP BY t1.doc_id</span>
+<span class="sd">                    HAVING hamming_distance &lt;= {hamming_distance}</span>
+<span class="sd">                    )</span>
+<span class="sd">                    SELECT</span>
+<span class="sd">                        text,</span>
+<span class="sd">                        metadata,</span>
+<span class="sd">                       SUM(v1.embedding * v2.embedding) /</span>
+<span class="sd">                        (SQRT(SUM(v1.embedding * v1.embedding)) *</span>
+<span class="sd">                       SQRT(SUM(v2.embedding * v2.embedding))) AS score</span>
+<span class="sd">                    FROM</span>
+<span class="sd">                        {v1} v1</span>
+<span class="sd">                    INNER JOIN</span>
+<span class="sd">                        {v2} v2</span>
+<span class="sd">                    ON v1.embedding_id = v2.embedding_id</span>
+<span class="sd">                    INNER JOIN</span>
+<span class="sd">                        {v3} v3</span>
+<span class="sd">                    ON v2.doc_id = v3.doc_id</span>
+<span class="sd">                    INNER JOIN</span>
+<span class="sd">                        index_docs v4</span>
+<span class="sd">                    ON v2.doc_id = v4.doc_id</span>
+<span class="sd">                    GROUP BY v3.doc_id, v3.text, v3.metadata</span>
+<span class="sd">                    ORDER BY score DESC</span>
+<span class="sd">                    LIMIT %s</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">v1</span><span class="o">=</span><span class="n">v1</span><span class="p">,</span>
+                    <span class="n">v2</span><span class="o">=</span><span class="n">v2</span><span class="p">,</span>
+                    <span class="n">v3</span><span class="o">=</span><span class="n">v3</span><span class="p">,</span>
+                    <span class="n">lsh_index</span><span class="o">=</span><span class="n">lsh_index</span><span class="p">,</span>
+                    <span class="n">input_hash_table</span><span class="o">=</span><span class="n">input_hash_table</span><span class="p">,</span>
+                    <span class="n">hamming_distance</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span>
+                        <span class="n">index_params</span><span class="o">.</span><span class="n">get_param</span><span class="p">(</span><span class="s2">&quot;hamming_distance&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                    <span class="n">sql_query</span><span class="p">,</span>
+                    <span class="p">(</span><span class="n">k</span><span class="p">,),</span>
+                <span class="p">)</span>
+                <span class="n">results</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">sql_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    SELECT </span>
+<span class="sd">                        text,</span>
+<span class="sd">                        metadata,</span>
+<span class="sd">                        score</span>
+<span class="sd">                    FROM</span>
+<span class="sd">                        (SELECT</span>
+<span class="sd">                            v2.doc_id doc_id,</span>
+<span class="sd">                            SUM(v1.embedding * v2.embedding) /</span>
+<span class="sd">                            (SQRT(SUM(v1.embedding * v1.embedding)) *</span>
+<span class="sd">                            SQRT(SUM(v2.embedding * v2.embedding))) AS score</span>
+<span class="sd">                        FROM</span>
+<span class="sd">                            {v1} v1</span>
+<span class="sd">                        INNER JOIN</span>
+<span class="sd">                            {v2} v2</span>
+<span class="sd">                        ON v1.embedding_id = v2.embedding_id</span>
+<span class="sd">                        GROUP BY v2.doc_id</span>
+<span class="sd">                        ORDER BY score DESC LIMIT %s</span>
+<span class="sd">                        ) v4</span>
+<span class="sd">                    INNER JOIN</span>
+<span class="sd">                        {v3} v3</span>
+<span class="sd">                    ON v4.doc_id = v3.doc_id</span>
+<span class="sd">                    ORDER BY score DESC</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">v1</span><span class="o">=</span><span class="n">v1</span><span class="p">,</span>
+                    <span class="n">v2</span><span class="o">=</span><span class="n">v2</span><span class="p">,</span>
+                    <span class="n">v3</span><span class="o">=</span><span class="n">v3</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql_query</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span><span class="p">,))</span>
+                <span class="n">results</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchall</span><span class="p">()</span>
 
         <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
@@ -464,7 +864,6 @@
             <span class="n">doc</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
             <span class="n">documents</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">doc</span><span class="p">,</span> <span class="n">result</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
 
-        <span class="n">cursor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">documents</span></div>
 
 <div class="viewcode-block" id="Yellowbrick.similarity_search"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.similarity_search">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search</span><span class="p">(</span>
@@ -484,7 +883,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="n">documents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span></div>
 
@@ -505,7 +904,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="n">documents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">documents</span></div>
 
@@ -525,16 +924,262 @@
 <span class="sd">            List[Document]: List of documents</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">documents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span></div></div>
+        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span></div>
+
+    <span class="k">def</span> <span class="nf">_update_lsh_hashes</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span>
+        <span class="n">doc_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add hashes to LSH index&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">lsh_hyperplane_table</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span>
+        <span class="p">)</span>
+        <span class="n">lsh_index_table_id</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span>
+        <span class="p">)</span>
+        <span class="n">embedding_table_id</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+        <span class="n">query_prefix_id</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;INSERT INTO </span><span class="si">{}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">lsh_index_table_id</span><span class="p">)</span>
+        <span class="n">condition</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;WHERE e.doc_id = </span><span class="si">{doc_id}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">doc_id</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">doc_id</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="n">doc_id</span>
+            <span class="k">else</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">group_by</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;GROUP BY 1, 2&quot;</span><span class="p">)</span>
+
+        <span class="n">input_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            {query_prefix}</span>
+<span class="sd">            SELECT</span>
+<span class="sd">                e.doc_id as doc_id,</span>
+<span class="sd">                h.id as hash_index,</span>
+<span class="sd">                CASE WHEN SUM(e.embedding * h.hyperplane) &gt; 0 THEN 1 ELSE 0 END as hash</span>
+<span class="sd">            FROM {embedding_table} e</span>
+<span class="sd">            INNER JOIN {hyperplanes} h ON e.embedding_id = h.hyperplane_id</span>
+<span class="sd">            {condition}</span>
+<span class="sd">            {group_by}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">query_prefix</span><span class="o">=</span><span class="n">query_prefix_id</span><span class="p">,</span>
+            <span class="n">embedding_table</span><span class="o">=</span><span class="n">embedding_table_id</span><span class="p">,</span>
+            <span class="n">hyperplanes</span><span class="o">=</span><span class="n">lsh_hyperplane_table</span><span class="p">,</span>
+            <span class="n">condition</span><span class="o">=</span><span class="n">condition</span><span class="p">,</span>
+            <span class="n">group_by</span><span class="o">=</span><span class="n">group_by</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">input_query</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_generate_tmp_lsh_hashes</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span> <span class="n">tmp_embedding_table</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">tmp_hash_table</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate temp LSH&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">lsh_hyperplane_table</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span>
+        <span class="p">)</span>
+        <span class="n">tmp_embedding_table_id</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_embedding_table</span><span class="p">)</span>
+        <span class="n">tmp_hash_table_id</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="n">tmp_hash_table</span><span class="p">)</span>
+        <span class="n">query_prefix</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;CREATE TEMPORARY TABLE </span><span class="si">{}</span><span class="s2"> ON COMMIT DROP AS&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">tmp_hash_table_id</span>
+        <span class="p">)</span>
+        <span class="n">group_by</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;GROUP BY 1&quot;</span><span class="p">)</span>
+
+        <span class="n">input_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            {query_prefix}</span>
+<span class="sd">            SELECT</span>
+<span class="sd">                h.id as hash_index,</span>
+<span class="sd">                CASE WHEN SUM(e.embedding * h.hyperplane) &gt; 0 THEN 1 ELSE 0 END as hash</span>
+<span class="sd">            FROM {embedding_table} e</span>
+<span class="sd">            INNER JOIN {hyperplanes} h ON e.embedding_id = h.hyperplane_id</span>
+<span class="sd">            {group_by}</span>
+<span class="sd">            DISTRIBUTE REPLICATE</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">query_prefix</span><span class="o">=</span><span class="n">query_prefix</span><span class="p">,</span>
+            <span class="n">embedding_table</span><span class="o">=</span><span class="n">tmp_embedding_table_id</span><span class="p">,</span>
+            <span class="n">hyperplanes</span><span class="o">=</span><span class="n">lsh_hyperplane_table</span><span class="p">,</span>
+            <span class="n">group_by</span><span class="o">=</span><span class="n">group_by</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">input_query</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_populate_hyperplanes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">,</span> <span class="n">num_hyperplanes</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate random hyperplanes and store in Yellowbrick&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">hyperplanes_table</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span>
+        <span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;SELECT COUNT(*) FROM </span><span class="si">{t}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="o">=</span><span class="n">hyperplanes_table</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">t</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;SELECT MAX(embedding_id) FROM </span><span class="si">{t}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">))</span>
+        <span class="n">num_dimensions</span> <span class="o">=</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">num_dimensions</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">insert_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">            </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            WITH parameters AS (</span>
+<span class="sd">                SELECT {num_hyperplanes} AS num_hyperplanes,</span>
+<span class="sd">                    {dims_per_hyperplane} AS dims_per_hyperplane</span>
+<span class="sd">            )</span>
+<span class="sd">            INSERT INTO {hyperplanes_table} (id, hyperplane_id, hyperplane)</span>
+<span class="sd">                SELECT id, hyperplane_id, (random() * 2 - 1) AS hyperplane</span>
+<span class="sd">                FROM</span>
+<span class="sd">                (SELECT range-1 id FROM sys.rowgenerator</span>
+<span class="sd">                    WHERE range BETWEEN 1 AND</span>
+<span class="sd">                    (SELECT num_hyperplanes FROM parameters) AND</span>
+<span class="sd">                    worker_lid = 0 AND thread_id = 0) a,</span>
+<span class="sd">                (SELECT range-1 hyperplane_id FROM sys.rowgenerator</span>
+<span class="sd">                    WHERE range BETWEEN 1 AND</span>
+<span class="sd">                    (SELECT dims_per_hyperplane FROM parameters) AND</span>
+<span class="sd">                    worker_lid = 0 AND thread_id = 0) b</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">num_hyperplanes</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span><span class="n">num_hyperplanes</span><span class="p">),</span>
+            <span class="n">dims_per_hyperplane</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">Literal</span><span class="p">(</span><span class="n">num_dimensions</span><span class="p">),</span>
+            <span class="n">hyperplanes_table</span><span class="o">=</span><span class="n">hyperplanes_table</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">insert_query</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_create_lsh_index_tables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create LSH index and hyperplane tables&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">t1</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span><span class="p">)</span>
+        <span class="n">t2</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span><span class="p">)</span>
+        <span class="n">c1</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span> <span class="o">+</span> <span class="s2">&quot;_pk_doc_id&quot;</span><span class="p">)</span>
+        <span class="n">c2</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span> <span class="o">+</span> <span class="s2">&quot;_fk_doc_id&quot;</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                CREATE TABLE IF NOT EXISTS {t1} (</span>
+<span class="sd">                doc_id UUID NOT NULL,</span>
+<span class="sd">                hash_index SMALLINT NOT NULL,</span>
+<span class="sd">                hash SMALLINT NOT NULL,</span>
+<span class="sd">                CONSTRAINT {c1} PRIMARY KEY (doc_id, hash_index),</span>
+<span class="sd">                CONSTRAINT {c2} FOREIGN KEY (doc_id) REFERENCES {t2}(doc_id))</span>
+<span class="sd">                DISTRIBUTE ON (doc_id) SORT ON (doc_id)</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">t1</span><span class="o">=</span><span class="n">t1</span><span class="p">,</span>
+                <span class="n">t2</span><span class="o">=</span><span class="n">t2</span><span class="p">,</span>
+                <span class="n">c1</span><span class="o">=</span><span class="n">c1</span><span class="p">,</span>
+                <span class="n">c2</span><span class="o">=</span><span class="n">c2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span><span class="p">)</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span> <span class="o">+</span> <span class="s2">&quot;_pk_id_hp_id&quot;</span><span class="p">)</span>
+        <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+            <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                CREATE TABLE IF NOT EXISTS {t} (</span>
+<span class="sd">                id SMALLINT NOT NULL,</span>
+<span class="sd">                hyperplane_id SMALLINT NOT NULL,</span>
+<span class="sd">                hyperplane FLOAT NOT NULL,</span>
+<span class="sd">                CONSTRAINT {c} PRIMARY KEY (id, hyperplane_id))</span>
+<span class="sd">                DISTRIBUTE REPLICATE SORT ON (id)</span>
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span>
+                <span class="n">c</span><span class="o">=</span><span class="n">c</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_drop_lsh_index_tables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cursor</span><span class="p">:</span> <span class="s2">&quot;PgCursor&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop LSH index tables&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span>
+            <span class="n">schema</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_INDEX_TABLE</span><span class="p">,</span> <span class="n">cursor</span><span class="o">=</span><span class="n">cursor</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span>
+            <span class="n">schema</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,</span>
+            <span class="n">table</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">LSH_HYPERPLANE_TABLE</span><span class="p">,</span>
+            <span class="n">cursor</span><span class="o">=</span><span class="n">cursor</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Yellowbrick.create_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.create_index">[docs]</a>    <span class="k">def</span> <span class="nf">create_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index_params</span><span class="p">:</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create index from existing vectors&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span> <span class="o">==</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">LSH</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_drop_lsh_index_tables</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_create_lsh_index_tables</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_populate_hyperplanes</span><span class="p">(</span>
+                    <span class="n">cursor</span><span class="p">,</span> <span class="n">index_params</span><span class="o">.</span><span class="n">get_param</span><span class="p">(</span><span class="s2">&quot;num_hyperplanes&quot;</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_lsh_hashes</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Yellowbrick.drop_index"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.drop_index">[docs]</a>    <span class="k">def</span> <span class="nf">drop_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index_params</span><span class="p">:</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Drop an index&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span> <span class="o">==</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">LSH</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_drop_lsh_index_tables</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_update_index</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">index_params</span><span class="p">:</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">,</span> <span class="n">doc_id</span><span class="p">:</span> <span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update an index with a new or modified embedding in the embeddings table&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">index_params</span><span class="o">.</span><span class="n">index_type</span> <span class="o">==</span> <span class="n">Yellowbrick</span><span class="o">.</span><span class="n">IndexType</span><span class="o">.</span><span class="n">LSH</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_lsh_hashes</span><span class="p">(</span><span class="n">cursor</span><span class="p">,</span> <span class="n">doc_id</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Yellowbrick.migrate_schema_v1_to_v2"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.yellowbrick.Yellowbrick.html#langchain_community.vectorstores.yellowbrick.Yellowbrick.migrate_schema_v1_to_v2">[docs]</a>    <span class="k">def</span> <span class="nf">migrate_schema_v1_to_v2</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">psycopg2</span> <span class="kn">import</span> <span class="n">sql</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">get_cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+                <span class="n">schema_prefix</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_schema</span><span class="p">,)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schema</span> <span class="k">else</span> <span class="p">()</span>
+                <span class="n">embeddings</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="p">)</span>
+                <span class="n">old_embeddings</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span><span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="s2">&quot;_v1&quot;</span><span class="p">)</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Identifier</span><span class="p">(</span>
+                    <span class="o">*</span><span class="n">schema_prefix</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_table</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">CONTENT_TABLE</span>
+                <span class="p">)</span>
+                <span class="n">alter_table_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span><span class="s2">&quot;ALTER TABLE </span><span class="si">{t1}</span><span class="s2"> RENAME TO </span><span class="si">{t2}</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">t1</span><span class="o">=</span><span class="n">embeddings</span><span class="p">,</span>
+                    <span class="n">t2</span><span class="o">=</span><span class="n">old_embeddings</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">alter_table_query</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_create_table</span><span class="p">(</span><span class="n">cursor</span><span class="p">)</span>
+
+                <span class="n">insert_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    INSERT INTO {t1} (doc_id, embedding_id, embedding) </span>
+<span class="sd">                    SELECT id, embedding_id, embedding FROM {t2}</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">t1</span><span class="o">=</span><span class="n">embeddings</span><span class="p">,</span>
+                    <span class="n">t2</span><span class="o">=</span><span class="n">old_embeddings</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">insert_query</span><span class="p">)</span>
+
+                <span class="n">insert_content_query</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">SQL</span><span class="p">(</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">                    INSERT INTO {t1} (doc_id, text, metadata) </span>
+<span class="sd">                    SELECT DISTINCT id, text, metadata FROM {t2}</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+                <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">t1</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="n">old_embeddings</span><span class="p">)</span>
+                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">insert_content_query</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to migrate schema: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 06, 2024.
+          Last updated on May 07, 2024.
       </footer>
     </div>
   </div>
