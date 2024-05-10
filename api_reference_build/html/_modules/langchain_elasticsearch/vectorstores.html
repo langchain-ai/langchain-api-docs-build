@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_elasticsearch.vectorstores &mdash; 🦜🔗 LangChain 0.2.0rc1</title>
+  <title>langchain_elasticsearch.vectorstores &mdash; 🦜🔗 LangChain 0.2.0rc2</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_elasticsearch/vectorstores.html" />
 
@@ -73,6 +73,9 @@
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../astradb_api_reference.html">astradb</a>
+        </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../chroma_api_reference.html">chroma</a>
@@ -144,6 +147,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
@@ -201,7 +205,6 @@
         
   <h1>Source code for langchain_elasticsearch.vectorstores</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -215,24 +218,36 @@
     <span class="n">Union</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">elasticsearch</span> <span class="kn">import</span> <span class="n">Elasticsearch</span>
-<span class="kn">from</span> <span class="nn">elasticsearch.helpers</span> <span class="kn">import</span> <span class="n">BulkIndexError</span><span class="p">,</span> <span class="n">bulk</span>
+<span class="kn">from</span> <span class="nn">elasticsearch.helpers.vectorstore</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BM25Strategy</span><span class="p">,</span>
+    <span class="n">DenseVectorScriptScoreStrategy</span><span class="p">,</span>
+    <span class="n">DenseVectorStrategy</span><span class="p">,</span>
+    <span class="n">DistanceMetric</span><span class="p">,</span>
+    <span class="n">RetrievalStrategy</span><span class="p">,</span>
+    <span class="n">SparseVectorStrategy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">elasticsearch.helpers.vectorstore</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">VectorStore</span> <span class="k">as</span> <span class="n">EVectorStore</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core._api.deprecation</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VectorStore</span>
 
 <span class="kn">from</span> <span class="nn">langchain_elasticsearch._utilities</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">DistanceStrategy</span><span class="p">,</span>
-    <span class="n">maximal_marginal_relevance</span><span class="p">,</span>
     <span class="n">model_must_be_deployed</span><span class="p">,</span>
-    <span class="n">with_user_agent_header</span><span class="p">,</span>
+    <span class="n">user_agent</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_elasticsearch.client</span> <span class="kn">import</span> <span class="n">create_elasticsearch_client</span>
+<span class="kn">from</span> <span class="nn">langchain_elasticsearch.embeddings</span> <span class="kn">import</span> <span class="n">EmbeddingServiceAdapter</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="BaseRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.BaseRetrievalStrategy.html#langchain_elasticsearch.vectorstores.BaseRetrievalStrategy">[docs]</a><span class="k">class</span> <span class="nc">BaseRetrievalStrategy</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<div class="viewcode-block" id="BaseRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.BaseRetrievalStrategy.html#langchain_elasticsearch.vectorstores.BaseRetrievalStrategy">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;RetrievalStrategy&quot;</span><span class="p">,</span> <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">BaseRetrievalStrategy</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for `Elasticsearch` retrieval strategies.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="BaseRetrievalStrategy.query"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.BaseRetrievalStrategy.html#langchain_elasticsearch.vectorstores.BaseRetrievalStrategy.query">[docs]</a>    <span class="nd">@abstractmethod</span>
@@ -317,7 +332,8 @@
         <span class="k">return</span> <span class="kc">True</span></div></div>
 
 
-<div class="viewcode-block" id="ApproxRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ApproxRetrievalStrategy.html#langchain_elasticsearch.vectorstores.ApproxRetrievalStrategy">[docs]</a><span class="k">class</span> <span class="nc">ApproxRetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
+<div class="viewcode-block" id="ApproxRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ApproxRetrievalStrategy.html#langchain_elasticsearch.vectorstores.ApproxRetrievalStrategy">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;DenseVectorStrategy&quot;</span><span class="p">,</span> <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ApproxRetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Approximate retrieval strategy using the `HNSW` algorithm.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ApproxRetrievalStrategy.__init__"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ApproxRetrievalStrategy.html#langchain_elasticsearch.vectorstores.ApproxRetrievalStrategy.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -444,7 +460,8 @@
         <span class="p">}</span></div></div>
 
 
-<div class="viewcode-block" id="ExactRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ExactRetrievalStrategy.html#langchain_elasticsearch.vectorstores.ExactRetrievalStrategy">[docs]</a><span class="k">class</span> <span class="nc">ExactRetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
+<div class="viewcode-block" id="ExactRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ExactRetrievalStrategy.html#langchain_elasticsearch.vectorstores.ExactRetrievalStrategy">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;DenseVectorScriptScoreStrategy&quot;</span><span class="p">,</span> <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ExactRetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Exact retrieval strategy using the `script_score` query.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="ExactRetrievalStrategy.query"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ExactRetrievalStrategy.html#langchain_elasticsearch.vectorstores.ExactRetrievalStrategy.query">[docs]</a>    <span class="k">def</span> <span class="nf">query</span><span class="p">(</span>
@@ -512,7 +529,8 @@
         <span class="p">}</span></div></div>
 
 
-<div class="viewcode-block" id="SparseRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.SparseRetrievalStrategy.html#langchain_elasticsearch.vectorstores.SparseRetrievalStrategy">[docs]</a><span class="k">class</span> <span class="nc">SparseRetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
+<div class="viewcode-block" id="SparseRetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.SparseRetrievalStrategy.html#langchain_elasticsearch.vectorstores.SparseRetrievalStrategy">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;SparseVectorStrategy&quot;</span><span class="p">,</span> <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">SparseRetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Sparse retrieval strategy using the `text_expansion` processor.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="SparseRetrievalStrategy.__init__"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.SparseRetrievalStrategy.html#langchain_elasticsearch.vectorstores.SparseRetrievalStrategy.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
@@ -596,7 +614,8 @@
         <span class="k">return</span> <span class="kc">False</span></div></div>
 
 
-<div class="viewcode-block" id="BM25RetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.BM25RetrievalStrategy.html#langchain_elasticsearch.vectorstores.BM25RetrievalStrategy">[docs]</a><span class="k">class</span> <span class="nc">BM25RetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
+<div class="viewcode-block" id="BM25RetrievalStrategy"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.BM25RetrievalStrategy.html#langchain_elasticsearch.vectorstores.BM25RetrievalStrategy">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;BM25Strategy&quot;</span><span class="p">,</span> <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">BM25RetrievalStrategy</span><span class="p">(</span><span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Retrieval strategy using the native BM25 algorithm of Elasticsearch.&quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="BM25RetrievalStrategy.__init__"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.BM25RetrievalStrategy.html#langchain_elasticsearch.vectorstores.BM25RetrievalStrategy.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k1</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
@@ -666,6 +685,77 @@
         <span class="k">return</span> <span class="kc">False</span></div></div>
 
 
+<span class="k">def</span> <span class="nf">_convert_retrieval_strategy</span><span class="p">(</span>
+    <span class="n">langchain_strategy</span><span class="p">:</span> <span class="n">BaseRetrievalStrategy</span><span class="p">,</span>
+    <span class="n">distance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DistanceStrategy</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RetrievalStrategy</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">langchain_strategy</span><span class="p">,</span> <span class="n">ApproxRetrievalStrategy</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">distance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;ApproxRetrievalStrategy requires a distance strategy to be provided.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">DenseVectorStrategy</span><span class="p">(</span>
+            <span class="n">distance</span><span class="o">=</span><span class="n">DistanceMetric</span><span class="p">[</span><span class="n">distance</span><span class="p">],</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="n">langchain_strategy</span><span class="o">.</span><span class="n">query_model_id</span><span class="p">,</span>
+            <span class="n">hybrid</span><span class="o">=</span><span class="p">(</span>
+                <span class="kc">False</span>
+                <span class="k">if</span> <span class="n">langchain_strategy</span><span class="o">.</span><span class="n">hybrid</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">langchain_strategy</span><span class="o">.</span><span class="n">hybrid</span>
+            <span class="p">),</span>
+            <span class="n">rrf</span><span class="o">=</span><span class="kc">False</span> <span class="k">if</span> <span class="n">langchain_strategy</span><span class="o">.</span><span class="n">rrf</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">langchain_strategy</span><span class="o">.</span><span class="n">rrf</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">langchain_strategy</span><span class="p">,</span> <span class="n">ExactRetrievalStrategy</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">distance</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;ExactRetrievalStrategy requires a distance strategy to be provided.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">DenseVectorScriptScoreStrategy</span><span class="p">(</span><span class="n">distance</span><span class="o">=</span><span class="n">DistanceMetric</span><span class="p">[</span><span class="n">distance</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">langchain_strategy</span><span class="p">,</span> <span class="n">SparseRetrievalStrategy</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SparseVectorStrategy</span><span class="p">(</span><span class="n">langchain_strategy</span><span class="o">.</span><span class="n">model_id</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">langchain_strategy</span><span class="p">,</span> <span class="n">BM25RetrievalStrategy</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">BM25Strategy</span><span class="p">(</span><span class="n">k1</span><span class="o">=</span><span class="n">langchain_strategy</span><span class="o">.</span><span class="n">k1</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">langchain_strategy</span><span class="o">.</span><span class="n">b</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Strategy </span><span class="si">{</span><span class="n">langchain_strategy</span><span class="si">}</span><span class="s2"> not supported. To provide a &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;custom strategy, please subclass </span><span class="si">{</span><span class="n">RetrievalStrategy</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_hits_to_docs_scores</span><span class="p">(</span>
+    <span class="n">hits</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="n">content_field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">doc_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+    <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">documents</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span> <span class="nf">default_doc_builder</span><span class="p">(</span><span class="n">hit</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Document</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Document</span><span class="p">(</span>
+            <span class="n">page_content</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">content_field</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">{}),</span>
+        <span class="p">)</span>
+
+    <span class="n">doc_builder</span> <span class="o">=</span> <span class="n">doc_builder</span> <span class="ow">or</span> <span class="n">default_doc_builder</span>
+
+    <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">hits</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]:</span>
+                <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">,</span>
+                <span class="n">content_field</span><span class="p">,</span>
+            <span class="p">]:</span>
+                <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">][</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="n">field</span><span class="p">]</span>
+
+        <span class="n">doc</span> <span class="o">=</span> <span class="n">doc_builder</span><span class="p">(</span><span class="n">hit</span><span class="p">)</span>
+        <span class="n">documents</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">doc</span><span class="p">,</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_score&quot;</span><span class="p">]))</span>
+
+    <span class="k">return</span> <span class="n">documents</span>
+
+
 <div class="viewcode-block" id="ElasticsearchStore"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore">[docs]</a><span class="k">class</span> <span class="nc">ElasticsearchStore</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;`Elasticsearch` vector store.</span>
 
@@ -675,7 +765,7 @@
 <span class="sd">            from langchain_elasticsearch.vectorstores import ElasticsearchStore</span>
 <span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
 
-<span class="sd">            vectorstore = ElasticsearchStore(</span>
+<span class="sd">            store = ElasticsearchStore(</span>
 <span class="sd">                embedding=OpenAIEmbeddings(),</span>
 <span class="sd">                index_name=&quot;langchain-demo&quot;,</span>
 <span class="sd">                es_url=&quot;http://localhost:9200&quot;</span>
@@ -710,7 +800,7 @@
 <span class="sd">            from langchain_elasticsearch.vectorstores import ElasticsearchStore</span>
 <span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
 
-<span class="sd">            vectorstore = ElasticsearchStore(</span>
+<span class="sd">            store = ElasticsearchStore(</span>
 <span class="sd">                embedding=OpenAIEmbeddings(),</span>
 <span class="sd">                index_name=&quot;langchain-demo&quot;,</span>
 <span class="sd">                es_cloud_id=&quot;&lt;cloud_id&gt;&quot;</span>
@@ -731,7 +821,7 @@
 
 <span class="sd">            es_connection = Elasticsearch(&quot;http://localhost:9200&quot;)</span>
 
-<span class="sd">            vectorstore = ElasticsearchStore(</span>
+<span class="sd">            store = ElasticsearchStore(</span>
 <span class="sd">                embedding=OpenAIEmbeddings(),</span>
 <span class="sd">                index_name=&quot;langchain-demo&quot;,</span>
 <span class="sd">                es_connection=es_connection</span>
@@ -750,7 +840,7 @@
 <span class="sd">            from langchain_elasticsearch.vectorstores import ElasticsearchStore</span>
 <span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
 
-<span class="sd">            vectorstore = ElasticsearchStore(</span>
+<span class="sd">            store = ElasticsearchStore(</span>
 <span class="sd">                embedding=OpenAIEmbeddings(),</span>
 <span class="sd">                index_name=&quot;langchain-demo&quot;,</span>
 <span class="sd">                es_url=&quot;http://localhost:9200&quot;,</span>
@@ -768,7 +858,7 @@
 <span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
 <span class="sd">            from langchain_community.vectorstores.utils import DistanceStrategy</span>
 
-<span class="sd">            vectorstore = ElasticsearchStore(</span>
+<span class="sd">            store = ElasticsearchStore(</span>
 <span class="sd">                &quot;langchain-demo&quot;,</span>
 <span class="sd">                embedding=OpenAIEmbeddings(),</span>
 <span class="sd">                es_url=&quot;http://localhost:9200&quot;,</span>
@@ -782,7 +872,7 @@
         <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">es_connection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;Elasticsearch&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">es_connection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Elasticsearch</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_cloud_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_user</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -798,38 +888,51 @@
                 <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">MAX_INNER_PRODUCT</span><span class="p">,</span>
             <span class="p">]</span>
         <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">strategy</span><span class="p">:</span> <span class="n">BaseRetrievalStrategy</span> <span class="o">=</span> <span class="n">ApproxRetrievalStrategy</span><span class="p">(),</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
+            <span class="n">BaseRetrievalStrategy</span><span class="p">,</span> <span class="n">RetrievalStrategy</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">ApproxRetrievalStrategy</span><span class="p">(),</span>
         <span class="n">es_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">index_name</span> <span class="o">=</span> <span class="n">index_name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">query_field</span> <span class="o">=</span> <span class="n">query_field</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span> <span class="o">=</span> <span class="n">vector_query_field</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">COSINE</span>
-            <span class="k">if</span> <span class="n">distance_strategy</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="k">else</span> <span class="n">DistanceStrategy</span><span class="p">[</span><span class="n">distance_strategy</span><span class="p">]</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span> <span class="o">=</span> <span class="n">strategy</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">strategy</span><span class="p">,</span> <span class="n">BaseRetrievalStrategy</span><span class="p">):</span>
+            <span class="n">strategy</span> <span class="o">=</span> <span class="n">_convert_retrieval_strategy</span><span class="p">(</span>
+                <span class="n">strategy</span><span class="p">,</span> <span class="n">distance</span><span class="o">=</span><span class="n">distance_strategy</span> <span class="ow">or</span> <span class="n">DistanceStrategy</span><span class="o">.</span><span class="n">COSINE</span>
+            <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">es_connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">es_connection</span>
-        <span class="k">elif</span> <span class="n">es_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">es_cloud_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">ElasticsearchStore</span><span class="o">.</span><span class="n">connect_to_elasticsearch</span><span class="p">(</span>
-                <span class="n">es_url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
-                <span class="n">username</span><span class="o">=</span><span class="n">es_user</span><span class="p">,</span>
-                <span class="n">password</span><span class="o">=</span><span class="n">es_password</span><span class="p">,</span>
+        <span class="n">embedding_service</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">embedding</span><span class="p">:</span>
+            <span class="n">embedding_service</span> <span class="o">=</span> <span class="n">EmbeddingServiceAdapter</span><span class="p">(</span><span class="n">embedding</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">es_connection</span><span class="p">:</span>
+            <span class="n">es_connection</span> <span class="o">=</span> <span class="n">create_elasticsearch_client</span><span class="p">(</span>
+                <span class="n">url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
                 <span class="n">cloud_id</span><span class="o">=</span><span class="n">es_cloud_id</span><span class="p">,</span>
                 <span class="n">api_key</span><span class="o">=</span><span class="n">es_api_key</span><span class="p">,</span>
-                <span class="n">es_params</span><span class="o">=</span><span class="n">es_params</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;Either provide a pre-existing Elasticsearch connection, \</span>
-<span class="sd">                or valid credentials for creating a new connection.&quot;&quot;&quot;</span>
+                <span class="n">username</span><span class="o">=</span><span class="n">es_user</span><span class="p">,</span>
+                <span class="n">password</span><span class="o">=</span><span class="n">es_password</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="n">es_params</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">client</span> <span class="o">=</span> <span class="n">with_user_agent_header</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span> <span class="s2">&quot;langchain-py-vs&quot;</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store</span> <span class="o">=</span> <span class="n">EVectorStore</span><span class="p">(</span>
+            <span class="n">client</span><span class="o">=</span><span class="n">es_connection</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span>
+            <span class="n">retrieval_strategy</span><span class="o">=</span><span class="n">strategy</span><span class="p">,</span>
+            <span class="n">embedding_service</span><span class="o">=</span><span class="n">embedding_service</span><span class="p">,</span>
+            <span class="n">text_field</span><span class="o">=</span><span class="n">query_field</span><span class="p">,</span>
+            <span class="n">vector_field</span><span class="o">=</span><span class="n">vector_query_field</span><span class="p">,</span>
+            <span class="n">user_agent</span><span class="o">=</span><span class="n">user_agent</span><span class="p">(</span><span class="s2">&quot;langchain-py-vs&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_embedding_service</span> <span class="o">=</span> <span class="n">embedding_service</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">query_field</span> <span class="o">=</span> <span class="n">query_field</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span> <span class="o">=</span> <span class="n">vector_query_field</span></div>
+
+<div class="viewcode-block" id="ElasticsearchStore.close"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.close">[docs]</a>    <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span>
 
 <div class="viewcode-block" id="ElasticsearchStore.connect_to_elasticsearch"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.connect_to_elasticsearch">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">connect_to_elasticsearch</span><span class="p">(</span>
@@ -840,41 +943,15 @@
         <span class="n">username</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">password</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;Elasticsearch&quot;</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">es_url</span> <span class="ow">and</span> <span class="n">cloud_id</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Both es_url and cloud_id are defined. Please provide only one.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="n">connection_params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-
-        <span class="k">if</span> <span class="n">es_url</span><span class="p">:</span>
-            <span class="n">connection_params</span><span class="p">[</span><span class="s2">&quot;hosts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">es_url</span><span class="p">]</span>
-        <span class="k">elif</span> <span class="n">cloud_id</span><span class="p">:</span>
-            <span class="n">connection_params</span><span class="p">[</span><span class="s2">&quot;cloud_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">cloud_id</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Please provide either elasticsearch_url or cloud_id.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">api_key</span><span class="p">:</span>
-            <span class="n">connection_params</span><span class="p">[</span><span class="s2">&quot;api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">api_key</span>
-        <span class="k">elif</span> <span class="n">username</span> <span class="ow">and</span> <span class="n">password</span><span class="p">:</span>
-            <span class="n">connection_params</span><span class="p">[</span><span class="s2">&quot;basic_auth&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">es_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">connection_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">es_params</span><span class="p">)</span>
-
-        <span class="n">es_client</span> <span class="o">=</span> <span class="n">Elasticsearch</span><span class="p">(</span><span class="o">**</span><span class="n">connection_params</span><span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">es_client</span><span class="o">.</span><span class="n">info</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error connecting to Elasticsearch: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">e</span>
-
-        <span class="k">return</span> <span class="n">es_client</span></div>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Elasticsearch</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">create_elasticsearch_client</span><span class="p">(</span>
+            <span class="n">url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
+            <span class="n">cloud_id</span><span class="o">=</span><span class="n">cloud_id</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">username</span><span class="o">=</span><span class="n">username</span><span class="p">,</span>
+            <span class="n">password</span><span class="o">=</span><span class="n">password</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">es_params</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.similarity_search"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.similarity_search">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -882,6 +959,11 @@
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">custom_query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">doc_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return Elasticsearch documents most similar to query.</span>
@@ -896,11 +978,19 @@
 <span class="sd">            List of Documents most similar to the query,</span>
 <span class="sd">            in descending order of similarity.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search</span><span class="p">(</span>
-            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="n">hits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">num_candidates</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">custom_query</span><span class="o">=</span><span class="n">custom_query</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">results</span><span class="p">]</span></div>
+        <span class="n">docs</span> <span class="o">=</span> <span class="n">_hits_to_docs_scores</span><span class="p">(</span>
+            <span class="n">hits</span><span class="o">=</span><span class="n">hits</span><span class="p">,</span>
+            <span class="n">content_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
+            <span class="n">doc_builder</span><span class="o">=</span><span class="n">doc_builder</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_score</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">]</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.max_marginal_relevance_search"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.max_marginal_relevance_search">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -909,6 +999,11 @@
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
         <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">custom_query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">doc_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs selected using the maximal marginal relevance.</span>
@@ -930,38 +1025,30 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List[Document]: A list of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;You must provide an embedding function to perform MMR&quot;</span><span class="p">)</span>
-        <span class="n">remove_vector_query_field_from_metadata</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">]</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-            <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">remove_vector_query_field_from_metadata</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding_service</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;maximal marginal relevance search requires an embedding service.&quot;</span>
+            <span class="p">)</span>
 
-        <span class="c1"># Embed the query</span>
-        <span class="n">query_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-
-        <span class="c1"># Fetch the initial documents</span>
-        <span class="n">got_docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search</span><span class="p">(</span>
-            <span class="n">query_vector</span><span class="o">=</span><span class="n">query_embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span> <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="n">hits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">max_marginal_relevance_search</span><span class="p">(</span>
+            <span class="n">embedding_service</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_service</span><span class="p">,</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">vector_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">num_candidates</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span>
+            <span class="n">custom_query</span><span class="o">=</span><span class="n">custom_query</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="c1"># Get the embeddings for the fetched documents</span>
-        <span class="n">got_embeddings</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">]</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">got_docs</span><span class="p">]</span>
-
-        <span class="c1"># Select documents using maximal marginal relevance</span>
-        <span class="n">selected_indices</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">query_embedding</span><span class="p">),</span> <span class="n">got_embeddings</span><span class="p">,</span> <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span>
+        <span class="n">docs_scores</span> <span class="o">=</span> <span class="n">_hits_to_docs_scores</span><span class="p">(</span>
+            <span class="n">hits</span><span class="o">=</span><span class="n">hits</span><span class="p">,</span>
+            <span class="n">content_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
+            <span class="n">fields</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span>
+            <span class="n">doc_builder</span><span class="o">=</span><span class="n">doc_builder</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">selected_docs</span> <span class="o">=</span> <span class="p">[</span><span class="n">got_docs</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">selected_indices</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">remove_vector_query_field_from_metadata</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">selected_docs</span><span class="p">:</span>
-                <span class="k">del</span> <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">]</span>
-
-        <span class="k">return</span> <span class="n">selected_docs</span></div>
+        <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_score</span> <span class="ow">in</span> <span class="n">docs_scores</span><span class="p">]</span></div>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_identity_fn</span><span class="p">(</span><span class="n">score</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
@@ -983,7 +1070,16 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_identity_fn</span>
 
 <div class="viewcode-block" id="ElasticsearchStore.similarity_search_with_score"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.similarity_search_with_score">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">custom_query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">doc_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return Elasticsearch documents most similar to query, along with scores.</span>
 
@@ -995,16 +1091,31 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents most similar to the query and score for each</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span> <span class="n">ApproxRetrievalStrategy</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="o">.</span><span class="n">hybrid</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">retrieval_strategy</span><span class="p">,</span> <span class="n">DenseVectorStrategy</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">retrieval_strategy</span><span class="o">.</span><span class="n">hybrid</span>
+        <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;scores are currently not supported in hybrid mode&quot;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search</span><span class="p">(</span><span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="n">hits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="n">custom_query</span><span class="o">=</span><span class="n">custom_query</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_hits_to_docs_scores</span><span class="p">(</span>
+            <span class="n">hits</span><span class="o">=</span><span class="n">hits</span><span class="p">,</span>
+            <span class="n">content_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
+            <span class="n">doc_builder</span><span class="o">=</span><span class="n">doc_builder</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.similarity_search_by_vector_with_relevance_scores"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.similarity_search_by_vector_with_relevance_scores">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_by_vector_with_relevance_scores</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">custom_query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">doc_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return Elasticsearch documents most similar to query, along with scores.</span>
@@ -1017,103 +1128,24 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents most similar to the embedding and score for each</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="p">,</span> <span class="n">ApproxRetrievalStrategy</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="o">.</span><span class="n">hybrid</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">retrieval_strategy</span><span class="p">,</span> <span class="n">DenseVectorStrategy</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">retrieval_strategy</span><span class="o">.</span><span class="n">hybrid</span>
+        <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;scores are currently not supported in hybrid mode&quot;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search</span><span class="p">(</span><span class="n">query_vector</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
-
-    <span class="k">def</span> <span class="nf">_search</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
-        <span class="n">query_vector</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
-        <span class="n">fields</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="nb">filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">custom_query</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">]],</span> <span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">doc_builder</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return Elasticsearch documents most similar to query, along with scores.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            query: Text to look up documents similar to.</span>
-<span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
-<span class="sd">            query_vector: Embedding to look up documents similar to.</span>
-<span class="sd">            fetch_k: Number of candidates to fetch from each shard.</span>
-<span class="sd">                    Defaults to 50.</span>
-<span class="sd">            fields: List of fields to return from Elasticsearch.</span>
-<span class="sd">                    Defaults to only returning the text field.</span>
-<span class="sd">            filter: Array of Elasticsearch filter clauses to apply to the query.</span>
-<span class="sd">            custom_query: Function to modify the Elasticsearch</span>
-<span class="sd">                         query body before it is sent to Elasticsearch.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            List of Documents most similar to the query and score for each</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">fields</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-            <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-            <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">and</span> <span class="n">query</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">query_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-
-        <span class="n">query_body</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
-            <span class="n">query_vector</span><span class="o">=</span><span class="n">query_vector</span><span class="p">,</span>
-            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+        <span class="n">hits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+            <span class="n">query</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">query_vector</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
-            <span class="n">vector_query_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">,</span>
-            <span class="n">text_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
-            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span> <span class="ow">or</span> <span class="p">[],</span>
-            <span class="n">similarity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+            <span class="n">custom_query</span><span class="o">=</span><span class="n">custom_query</span><span class="p">,</span>
         <span class="p">)</span>
-
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Query body: </span><span class="si">{</span><span class="n">query_body</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">custom_query</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">query_body</span> <span class="o">=</span> <span class="n">custom_query</span><span class="p">(</span><span class="n">query_body</span><span class="p">,</span> <span class="n">query</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Calling custom_query, Query body now: </span><span class="si">{</span><span class="n">query_body</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="c1"># Perform the kNN search on the Elasticsearch index and return the results.</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
-            <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index_name</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">query_body</span><span class="p">,</span>
-            <span class="n">size</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-            <span class="n">source</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">source_includes</span><span class="o">=</span><span class="n">fields</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="k">def</span> <span class="nf">default_doc_builder</span><span class="p">(</span><span class="n">hit</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Document</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Document</span><span class="p">(</span>
-                <span class="n">page_content</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">{}),</span>
-            <span class="p">)</span>
-
-        <span class="n">doc_builder</span> <span class="o">=</span> <span class="n">doc_builder</span> <span class="ow">or</span> <span class="n">default_doc_builder</span>
-
-        <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;hits&quot;</span><span class="p">][</span><span class="s2">&quot;hits&quot;</span><span class="p">]:</span>
-            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-                <span class="k">if</span> <span class="s2">&quot;metadata&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]:</span>
-                    <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-                <span class="k">if</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
-                <span class="p">]:</span>
-                    <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;metadata&quot;</span><span class="p">][</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="n">field</span><span class="p">]</span>
-
-            <span class="n">docs_and_scores</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="p">(</span>
-                    <span class="n">doc_builder</span><span class="p">(</span><span class="n">hit</span><span class="p">),</span>
-                    <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_score&quot;</span><span class="p">],</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">docs_and_scores</span>
+        <span class="k">return</span> <span class="n">_hits_to_docs_scores</span><span class="p">(</span>
+            <span class="n">hits</span><span class="o">=</span><span class="n">hits</span><span class="p">,</span>
+            <span class="n">content_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
+            <span class="n">doc_builder</span><span class="o">=</span><span class="n">doc_builder</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.delete"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1128,133 +1160,10 @@
 <span class="sd">            refresh_indices: Whether to refresh the index</span>
 <span class="sd">                            after deleting documents. Defaults to True.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">body</span> <span class="o">=</span> <span class="p">[]</span>
-
         <span class="k">if</span> <span class="n">ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ids must be provided.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;please specify some IDs&quot;</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">_id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
-            <span class="n">body</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;_op_type&quot;</span><span class="p">:</span> <span class="s2">&quot;delete&quot;</span><span class="p">,</span> <span class="s2">&quot;_index&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_name</span><span class="p">,</span> <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">_id</span><span class="p">})</span>
-
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">bulk</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span> <span class="n">body</span><span class="p">,</span> <span class="n">refresh</span><span class="o">=</span><span class="n">refresh_indices</span><span class="p">,</span> <span class="n">ignore_status</span><span class="o">=</span><span class="mi">404</span><span class="p">)</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Deleted </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">body</span><span class="p">)</span><span class="si">}</span><span class="s2"> texts from index&quot;</span><span class="p">)</span>
-
-                <span class="k">return</span> <span class="kc">True</span>
-            <span class="k">except</span> <span class="n">BulkIndexError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error deleting texts: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="n">firstError</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="p">{})</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;First error reason: </span><span class="si">{</span><span class="n">firstError</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;reason&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No texts to delete from index&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">False</span></div>
-
-    <span class="k">def</span> <span class="nf">_create_index_if_not_exists</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dims_length</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create the Elasticsearch index if it doesn&#39;t already exist.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            index_name: Name of the Elasticsearch index to create.</span>
-<span class="sd">            dims_length: Length of the embedding vectors.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index_name</span><span class="p">):</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Index </span><span class="si">{</span><span class="n">index_name</span><span class="si">}</span><span class="s2"> already exists. Skipping creation.&quot;</span><span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">dims_length</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="o">.</span><span class="n">require_inference</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot create index without specifying dims_length &quot;</span>
-                    <span class="s2">&quot;when the index doesn&#39;t already exist. We infer &quot;</span>
-                    <span class="s2">&quot;dims_length from the first embedding. Check that &quot;</span>
-                    <span class="s2">&quot;you have provided an embedding function.&quot;</span>
-                <span class="p">)</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="o">.</span><span class="n">before_index_setup</span><span class="p">(</span>
-                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
-                <span class="n">text_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
-                <span class="n">vector_query_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="n">indexSettings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">strategy</span><span class="o">.</span><span class="n">index</span><span class="p">(</span>
-                <span class="n">vector_query_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">,</span>
-                <span class="n">text_field</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">,</span>
-                <span class="n">dims_length</span><span class="o">=</span><span class="n">dims_length</span><span class="p">,</span>
-                <span class="n">similarity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Creating index </span><span class="si">{</span><span class="n">index_name</span><span class="si">}</span><span class="s2"> with mappings </span><span class="si">{</span><span class="n">indexSettings</span><span class="p">[</span><span class="s1">&#39;mappings&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span> <span class="o">**</span><span class="n">indexSettings</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__add</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">texts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-        <span class="n">embeddings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]],</span>
-        <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">refresh_indices</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">create_index_if_not_exists</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">bulk_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-        <span class="n">bulk_kwargs</span> <span class="o">=</span> <span class="n">bulk_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span> <span class="ow">or</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span>
-        <span class="n">requests</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="k">if</span> <span class="n">create_index_if_not_exists</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">embeddings</span><span class="p">:</span>
-                <span class="n">dims_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeddings</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">dims_length</span> <span class="o">=</span> <span class="kc">None</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">_create_index_if_not_exists</span><span class="p">(</span>
-                <span class="n">index_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">index_name</span><span class="p">,</span> <span class="n">dims_length</span><span class="o">=</span><span class="n">dims_length</span>
-            <span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">texts</span><span class="p">):</span>
-            <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadatas</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="n">metadatas</span> <span class="k">else</span> <span class="p">{}</span>
-
-            <span class="n">request</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;_op_type&quot;</span><span class="p">:</span> <span class="s2">&quot;index&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;_index&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">index_name</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">query_field</span><span class="p">:</span> <span class="n">text</span><span class="p">,</span>
-                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
-                <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">ids</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
-            <span class="p">}</span>
-            <span class="k">if</span> <span class="n">embeddings</span><span class="p">:</span>
-                <span class="n">request</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">vector_query_field</span><span class="p">]</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-
-            <span class="n">requests</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">requests</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">success</span><span class="p">,</span> <span class="n">failed</span> <span class="o">=</span> <span class="n">bulk</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">,</span>
-                    <span class="n">requests</span><span class="p">,</span>
-                    <span class="n">stats_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">refresh</span><span class="o">=</span><span class="n">refresh_indices</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">bulk_kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Added </span><span class="si">{</span><span class="n">success</span><span class="si">}</span><span class="s2"> and failed to add </span><span class="si">{</span><span class="n">failed</span><span class="si">}</span><span class="s2"> texts to index&quot;</span>
-                <span class="p">)</span>
-
-                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;added texts </span><span class="si">{</span><span class="n">ids</span><span class="si">}</span><span class="s2"> to index&quot;</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">ids</span>
-            <span class="k">except</span> <span class="n">BulkIndexError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error adding texts: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="n">firstError</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="p">{})</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;First error reason: </span><span class="si">{</span><span class="n">firstError</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;reason&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;No texts to add to index&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span> <span class="n">refresh_indices</span><span class="o">=</span><span class="n">refresh_indices</span> <span class="ow">or</span> <span class="kc">False</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.add_texts"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.add_texts">[docs]</a>    <span class="k">def</span> <span class="nf">add_texts</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1266,10 +1175,10 @@
         <span class="n">bulk_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run more texts through the embeddings and add to the vectorstore.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run more texts through the embeddings and add to the store.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            texts: Iterable of strings to add to the vectorstore.</span>
+<span class="sd">            texts: Iterable of strings to add to the store.</span>
 <span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
 <span class="sd">            ids: Optional list of ids to associate with the texts.</span>
 <span class="sd">            refresh_indices: Whether to refresh the Elasticsearch indices</span>
@@ -1281,26 +1190,15 @@
 <span class="sd">                    index at a time. Defaults to 500.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            List of ids from adding the texts into the vectorstore.</span>
+<span class="sd">            List of ids from adding the texts into the store.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># If no search_type requires inference, we use the provided</span>
-            <span class="c1"># embedding function to embed the texts.</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">))</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># the search_type doesn&#39;t require inference, so we don&#39;t need to</span>
-            <span class="c1"># embed the texts.</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="kc">None</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__add</span><span class="p">(</span>
-            <span class="n">texts</span><span class="p">,</span>
-            <span class="n">embeddings</span><span class="p">,</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
+            <span class="n">texts</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">),</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
             <span class="n">refresh_indices</span><span class="o">=</span><span class="n">refresh_indices</span><span class="p">,</span>
             <span class="n">create_index_if_not_exists</span><span class="o">=</span><span class="n">create_index_if_not_exists</span><span class="p">,</span>
             <span class="n">bulk_kwargs</span><span class="o">=</span><span class="n">bulk_kwargs</span><span class="p">,</span>
-            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.add_embeddings"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.add_embeddings">[docs]</a>    <span class="k">def</span> <span class="nf">add_embeddings</span><span class="p">(</span>
@@ -1313,11 +1211,11 @@
         <span class="n">bulk_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add the given texts and embeddings to the vectorstore.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add the given texts and embeddings to the store.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            text_embeddings: Iterable pairs of string and embedding to</span>
-<span class="sd">                add to the vectorstore.</span>
+<span class="sd">                add to the store.</span>
 <span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
 <span class="sd">            ids: Optional list of unique IDs.</span>
 <span class="sd">            refresh_indices: Whether to refresh the Elasticsearch indices</span>
@@ -1329,18 +1227,17 @@
 <span class="sd">                    index at a time. Defaults to 500.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            List of ids from adding the texts into the vectorstore.</span>
+<span class="sd">            List of ids from adding the texts into the store.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">texts</span><span class="p">,</span> <span class="n">embeddings</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">text_embeddings</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__add</span><span class="p">(</span>
-            <span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">),</span>
-            <span class="nb">list</span><span class="p">(</span><span class="n">embeddings</span><span class="p">),</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
+            <span class="n">texts</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">),</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
+            <span class="n">vectors</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">embeddings</span><span class="p">),</span>
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
             <span class="n">refresh_indices</span><span class="o">=</span><span class="n">refresh_indices</span><span class="p">,</span>
             <span class="n">create_index_if_not_exists</span><span class="o">=</span><span class="n">create_index_if_not_exists</span><span class="p">,</span>
             <span class="n">bulk_kwargs</span><span class="o">=</span><span class="n">bulk_kwargs</span><span class="p">,</span>
-            <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.from_texts"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.from_texts">[docs]</a>    <span class="nd">@classmethod</span>
@@ -1392,58 +1289,18 @@
 <span class="sd">                        Elasticsearch bulk.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="n">elasticsearchStore</span> <span class="o">=</span> <span class="n">ElasticsearchStore</span><span class="o">.</span><span class="n">_create_cls_from_kwargs</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Encode the provided texts and add them to the newly created index.</span>
-        <span class="n">elasticsearchStore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
-            <span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span> <span class="n">bulk_kwargs</span><span class="o">=</span><span class="n">bulk_kwargs</span>
-        <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">elasticsearchStore</span></div>
-
-    <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_create_cls_from_kwargs</span><span class="p">(</span>
-        <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ElasticsearchStore&quot;</span><span class="p">:</span>
         <span class="n">index_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index_name&quot;</span><span class="p">)</span>
-
         <span class="k">if</span> <span class="n">index_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Please provide an index_name.&quot;</span><span class="p">)</span>
 
-        <span class="n">es_connection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;es_connection&quot;</span><span class="p">)</span>
-        <span class="n">es_cloud_id</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;es_cloud_id&quot;</span><span class="p">)</span>
-        <span class="n">es_url</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;es_url&quot;</span><span class="p">)</span>
-        <span class="n">es_user</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;es_user&quot;</span><span class="p">)</span>
-        <span class="n">es_password</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;es_password&quot;</span><span class="p">)</span>
-        <span class="n">es_api_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;es_api_key&quot;</span><span class="p">)</span>
-        <span class="n">vector_query_field</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vector_query_field&quot;</span><span class="p">)</span>
-        <span class="n">query_field</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;query_field&quot;</span><span class="p">)</span>
-        <span class="n">distance_strategy</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;distance_strategy&quot;</span><span class="p">)</span>
-        <span class="n">strategy</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;strategy&quot;</span><span class="p">,</span> <span class="n">ElasticsearchStore</span><span class="o">.</span><span class="n">ApproxRetrievalStrategy</span><span class="p">())</span>
+        <span class="n">elasticsearchStore</span> <span class="o">=</span> <span class="n">ElasticsearchStore</span><span class="p">(</span><span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-        <span class="n">optional_args</span> <span class="o">=</span> <span class="p">{}</span>
-
-        <span class="k">if</span> <span class="n">vector_query_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">optional_args</span><span class="p">[</span><span class="s2">&quot;vector_query_field&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vector_query_field</span>
-
-        <span class="k">if</span> <span class="n">query_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">optional_args</span><span class="p">[</span><span class="s2">&quot;query_field&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">query_field</span>
-
-        <span class="k">return</span> <span class="n">ElasticsearchStore</span><span class="p">(</span>
-            <span class="n">index_name</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
-            <span class="n">es_url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
-            <span class="n">es_connection</span><span class="o">=</span><span class="n">es_connection</span><span class="p">,</span>
-            <span class="n">es_cloud_id</span><span class="o">=</span><span class="n">es_cloud_id</span><span class="p">,</span>
-            <span class="n">es_user</span><span class="o">=</span><span class="n">es_user</span><span class="p">,</span>
-            <span class="n">es_password</span><span class="o">=</span><span class="n">es_password</span><span class="p">,</span>
-            <span class="n">es_api_key</span><span class="o">=</span><span class="n">es_api_key</span><span class="p">,</span>
-            <span class="n">strategy</span><span class="o">=</span><span class="n">strategy</span><span class="p">,</span>
-            <span class="n">distance_strategy</span><span class="o">=</span><span class="n">distance_strategy</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">optional_args</span><span class="p">,</span>
+        <span class="c1"># Encode the provided texts and add them to the newly created index.</span>
+        <span class="n">elasticsearchStore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
+            <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span> <span class="n">bulk_kwargs</span><span class="o">=</span><span class="n">bulk_kwargs</span>
         <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">elasticsearchStore</span></div>
 
 <div class="viewcode-block" id="ElasticsearchStore.from_documents"><a class="viewcode-back" href="../../vectorstores/langchain_elasticsearch.vectorstores.ElasticsearchStore.html#langchain_elasticsearch.vectorstores.ElasticsearchStore.from_documents">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_documents</span><span class="p">(</span>
@@ -1488,9 +1345,12 @@
 <span class="sd">                        Elasticsearch bulk.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="n">elasticsearchStore</span> <span class="o">=</span> <span class="n">ElasticsearchStore</span><span class="o">.</span><span class="n">_create_cls_from_kwargs</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span>
+        <span class="n">index_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index_name&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">index_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Please provide an index_name.&quot;</span><span class="p">)</span>
+
+        <span class="n">elasticsearchStore</span> <span class="o">=</span> <span class="n">ElasticsearchStore</span><span class="p">(</span><span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
         <span class="c1"># Encode the provided texts and add them to the newly created index.</span>
         <span class="n">elasticsearchStore</span><span class="o">.</span><span class="n">add_documents</span><span class="p">(</span><span class="n">documents</span><span class="p">,</span> <span class="n">bulk_kwargs</span><span class="o">=</span><span class="n">bulk_kwargs</span><span class="p">)</span>
 
@@ -1582,7 +1442,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 09, 2024.
+          Last updated on May 10, 2024.
       </footer>
     </div>
   </div>

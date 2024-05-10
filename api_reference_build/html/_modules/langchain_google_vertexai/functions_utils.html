@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_google_vertexai.functions_utils &mdash; 🦜🔗 LangChain 0.2.0rc1</title>
+  <title>langchain_google_vertexai.functions_utils &mdash; 🦜🔗 LangChain 0.2.0rc2</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_google_vertexai/functions_utils.html" />
 
@@ -73,6 +73,9 @@
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../astradb_api_reference.html">astradb</a>
+        </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../chroma_api_reference.html">chroma</a>
@@ -144,6 +147,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
@@ -213,8 +217,25 @@
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">TypedDict</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
+    <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="kn">from</span> <span class="nn">google.cloud.aiplatform_v1beta1.types</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FunctionCallingConfig</span><span class="p">,</span>
+    <span class="n">Schema</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">google.cloud.aiplatform_v1beta1.types</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FunctionDeclaration</span> <span class="k">as</span> <span class="n">GapicFunctionDeclaration</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">google.cloud.aiplatform_v1beta1.types</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Tool</span> <span class="k">as</span> <span class="n">GapicTool</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">google.cloud.aiplatform_v1beta1.types</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ToolConfig</span> <span class="k">as</span> <span class="n">GapicToolConfig</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">google.cloud.aiplatform_v1beta1.types</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Type</span> <span class="k">as</span> <span class="n">ParameterType</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.exceptions</span> <span class="kn">import</span> <span class="n">OutputParserException</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseOutputParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">Generation</span>
@@ -242,6 +263,35 @@
     <span class="p">}</span>
 
 
+<span class="k">def</span> <span class="nf">_format_dict_to_function_declaration</span><span class="p">(</span>
+    <span class="n">function_declaration</span><span class="p">:</span> <span class="n">FunctionDescription</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Schema</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_format_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Schema</span><span class="p">:</span>
+        <span class="n">parameter_type</span> <span class="o">=</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type_&quot;</span><span class="p">))</span>
+        <span class="n">title</span> <span class="o">=</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">)</span>
+        <span class="n">formatted_parameter_type</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">parameter_type</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parameter_type</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">formatted_parameter_type</span> <span class="o">=</span> <span class="n">ParameterType</span><span class="p">[</span><span class="n">parameter_type</span><span class="o">.</span><span class="n">upper</span><span class="p">()]</span>  <span class="c1"># type: ignore[misc]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">formatted_parameter_type</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">ParameterType</span><span class="p">,</span> <span class="n">parameter_type</span><span class="p">)</span>
+        <span class="n">properties</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">_format_schema</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">Schema</span><span class="p">(</span>
+            <span class="n">description</span><span class="o">=</span><span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
+            <span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span>
+            <span class="n">properties</span><span class="o">=</span><span class="n">properties</span><span class="p">,</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">formatted_parameter_type</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">GapicFunctionDeclaration</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">function_declaration</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">function_declaration</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="n">function_declaration</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)),</span>
+        <span class="n">parameters</span><span class="o">=</span><span class="n">_format_schema</span><span class="p">(</span><span class="n">function_declaration</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;parameters&quot;</span><span class="p">,</span> <span class="p">{})),</span>
+    <span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">_format_base_tool_to_vertex_function</span><span class="p">(</span><span class="n">tool</span><span class="p">:</span> <span class="n">BaseTool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionDescription</span><span class="p">:</span>
     <span class="s2">&quot;Format tool into the Vertex function API.&quot;</span>
     <span class="k">if</span> <span class="n">tool</span><span class="o">.</span><span class="n">args_schema</span><span class="p">:</span>
@@ -261,7 +311,6 @@
                     <span class="s2">&quot;__arg1&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">},</span>
                 <span class="p">},</span>
                 <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;__arg1&quot;</span><span class="p">],</span>
-                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
             <span class="p">},</span>
         <span class="p">}</span>
 
@@ -311,9 +360,11 @@
 
 
 <span class="k">def</span> <span class="nf">_format_to_vertex_tool</span><span class="p">(</span>
-    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">VertexTool</span><span class="p">,</span> <span class="n">_VertexToolDict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">_FunctionDeclarationLike</span><span class="p">]],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VertexTool</span><span class="p">:</span>
+    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">VertexTool</span><span class="p">,</span> <span class="n">GapicTool</span><span class="p">,</span> <span class="n">_VertexToolDict</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">_FunctionDeclarationLike</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GapicTool</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">VertexTool</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tool</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">GapicTool</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">tool</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)):</span>
         <span class="n">tool</span> <span class="o">=</span> <span class="p">(</span>
@@ -321,23 +372,24 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
             <span class="k">else</span> <span class="n">tool</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">VertexTool</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">GapicTool</span><span class="p">(</span>
             <span class="n">function_declarations</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">FunctionDeclaration</span><span class="p">(</span><span class="o">**</span><span class="n">fd</span><span class="p">)</span> <span class="k">for</span> <span class="n">fd</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">]</span>
+                <span class="n">_format_dict_to_function_declaration</span><span class="p">(</span><span class="n">FunctionDescription</span><span class="p">(</span><span class="o">**</span><span class="n">fd</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">fd</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;function_declarations&quot;</span><span class="p">]</span>
             <span class="p">]</span>
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected tool value:</span><span class="se">\n\n</span><span class="si">{</span><span class="n">tool</span><span class="si">=}</span><span class="s2">&quot;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_format_tool_config</span><span class="p">(</span><span class="n">tool_config</span><span class="p">:</span> <span class="n">_ToolConfigDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ToolConfig</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">_format_tool_config</span><span class="p">(</span><span class="n">tool_config</span><span class="p">:</span> <span class="n">_ToolConfigDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">GapicToolConfig</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
     <span class="k">if</span> <span class="s2">&quot;function_calling_config&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tool_config</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Invalid ToolConfig, missing &#39;function_calling_config&#39; key. Received:</span><span class="se">\n\n</span><span class="s2">&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool_config</span><span class="si">=}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">ToolConfig</span><span class="p">(</span>
-        <span class="n">function_calling_config</span><span class="o">=</span><span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="p">(</span>
+    <span class="k">return</span> <span class="n">GapicToolConfig</span><span class="p">(</span>
+        <span class="n">function_calling_config</span><span class="o">=</span><span class="n">FunctionCallingConfig</span><span class="p">(</span>
             <span class="o">**</span><span class="n">tool_config</span><span class="p">[</span><span class="s2">&quot;function_calling_config&quot;</span><span class="p">]</span>
         <span class="p">)</span>
     <span class="p">)</span>
@@ -444,7 +496,7 @@
 
 
 <span class="k">class</span> <span class="nc">_FunctionCallingConfigDict</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
-    <span class="n">mode</span><span class="p">:</span> <span class="n">ToolConfig</span><span class="o">.</span><span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span>
+    <span class="n">mode</span><span class="p">:</span> <span class="n">FunctionCallingConfig</span><span class="o">.</span><span class="n">Mode</span>
     <span class="n">allowed_function_names</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span>
 
 
@@ -503,7 +555,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 09, 2024.
+          Last updated on May 10, 2024.
       </footer>
     </div>
   </div>
