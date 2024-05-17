@@ -1263,11 +1263,43 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Cache that uses Cassandra / Astra DB as a backend.</span>
 
+<span class="sd">    Example:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            import cassio</span>
+
+<span class="sd">            from langchain_community.cache import CassandraCache</span>
+<span class="sd">            from langchain_core.globals import set_llm_cache</span>
+
+<span class="sd">            cassio.init(auto=True)  # Requires env. variables, see CassIO docs</span>
+
+<span class="sd">            set_llm_cache(CassandraCache())</span>
+
 <span class="sd">    It uses a single Cassandra table.</span>
 <span class="sd">    The lookup keys (which get to form the primary key) are:</span>
 <span class="sd">        - prompt, a string</span>
 <span class="sd">        - llm_string, a deterministic str representation of the model parameters.</span>
-<span class="sd">          (needed to prevent collisions same-prompt-different-model collisions)</span>
+<span class="sd">          (needed to prevent same-prompt-different-model collisions)</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        session: an open Cassandra session.</span>
+<span class="sd">            Leave unspecified to use the global cassio init (see below)</span>
+<span class="sd">        keyspace: the keyspace to use for storing the cache.</span>
+<span class="sd">            Leave unspecified to use the global cassio init (see below)</span>
+<span class="sd">        table_name: name of the Cassandra table to use as cache</span>
+<span class="sd">        ttl_seconds: time-to-live for cache entries</span>
+<span class="sd">            (default: None, i.e. forever)</span>
+<span class="sd">        setup_mode: a value in langchain_community.utilities.cassandra.SetupMode.</span>
+<span class="sd">            Choose between SYNC, ASYNC and OFF - the latter if the Cassandra</span>
+<span class="sd">            table is guaranteed to exist already, for a faster initialization.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The session and keyspace parameters, when left out (or passed as None),</span>
+<span class="sd">        fall back to the globally-available cassio settings if any are available.</span>
+<span class="sd">        In other words, if a previously-run &#39;cassio.init(...)&#39; has been</span>
+<span class="sd">        executed previously anywhere in the code, Cassandra-based objects</span>
+<span class="sd">        need not specify the connection parameters at all.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="CassandraCache.__init__"><a class="viewcode-back" href="../../cache/langchain_community.cache.CassandraCache.html#langchain_community.cache.CassandraCache.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -1279,25 +1311,21 @@
         <span class="n">skip_provisioning</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">setup_mode</span><span class="p">:</span> <span class="n">CassandraSetupMode</span> <span class="o">=</span> <span class="n">CassandraSetupMode</span><span class="o">.</span><span class="n">SYNC</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Initialize with a ready session and a keyspace name.</span>
-<span class="sd">        Args:</span>
-<span class="sd">            session (cassandra.cluster.Session): an open Cassandra session</span>
-<span class="sd">            keyspace (str): the keyspace to use for storing the cache</span>
-<span class="sd">            table_name (str): name of the Cassandra table to use as cache</span>
-<span class="sd">            ttl_seconds (optional int): time-to-live for cache entries</span>
-<span class="sd">                (default: None, i.e. forever)</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">skip_provisioning</span><span class="p">:</span>
             <span class="n">warn_deprecated</span><span class="p">(</span>
-                <span class="s2">&quot;0.0.33&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;Use setup_mode=CassandraSetupMode.OFF instead.&quot;</span>
+                <span class="s2">&quot;0.0.33&quot;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;skip_provisioning&quot;</span><span class="p">,</span>
+                <span class="n">alternative</span><span class="o">=</span><span class="p">(</span>
+                    <span class="s2">&quot;setup_mode=langchain_community.utilities.cassandra.SetupMode.OFF&quot;</span>
+                <span class="p">),</span>
+                <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">cassio.table</span> <span class="kn">import</span> <span class="n">ElasticCassandraTable</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">ImportError</span><span class="p">,</span> <span class="ne">ModuleNotFoundError</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;Could not import cassio python package. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install cassio`.&quot;</span>
+                <span class="s2">&quot;Please install it with `pip install -U cassio`.&quot;</span>
             <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="n">session</span>
@@ -1388,6 +1416,7 @@
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">kv_cache</span><span class="o">.</span><span class="n">aclear</span><span class="p">()</span></div></div>
 
 
+<span class="c1"># This constant is in fact a similarity - the &#39;distance&#39; name is kept for compatibility:</span>
 <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_DISTANCE_METRIC</span> <span class="o">=</span> <span class="s2">&quot;dot&quot;</span>
 <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_SCORE_THRESHOLD</span> <span class="o">=</span> <span class="mf">0.85</span>
 <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_TABLE_NAME</span> <span class="o">=</span> <span class="s2">&quot;langchain_llm_semantic_cache&quot;</span>
@@ -1400,60 +1429,117 @@
 <span class="sd">    Cache that uses Cassandra as a vector-store backend for semantic</span>
 <span class="sd">    (i.e. similarity-based) lookup.</span>
 
+<span class="sd">    Example:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            import cassio</span>
+
+<span class="sd">            from langchain_community.cache import CassandraSemanticCache</span>
+<span class="sd">            from langchain_core.globals import set_llm_cache</span>
+
+<span class="sd">            cassio.init(auto=True)  # Requires env. variables, see CassIO docs</span>
+
+<span class="sd">            my_embedding = ...</span>
+
+<span class="sd">            set_llm_cache(CassandraSemanticCache(</span>
+<span class="sd">                embedding=my_embedding,</span>
+<span class="sd">                table_name=&quot;my_semantic_cache&quot;,</span>
+<span class="sd">            ))</span>
+
 <span class="sd">    It uses a single (vector) Cassandra table and stores, in principle,</span>
 <span class="sd">    cached values from several LLMs, so the LLM&#39;s llm_string is part</span>
 <span class="sd">    of the rows&#39; primary keys.</span>
 
-<span class="sd">    The similarity is based on one of several distance metrics (default: &quot;dot&quot;).</span>
-<span class="sd">    If choosing another metric, the default threshold is to be re-tuned accordingly.</span>
+<span class="sd">    One can choose a similarity measure (default: &quot;dot&quot; for dot-product).</span>
+<span class="sd">    Choosing another one (&quot;cos&quot;, &quot;l2&quot;) almost certainly requires threshold tuning.</span>
+<span class="sd">    (which may be in order nevertheless, even if sticking to &quot;dot&quot;).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        session: an open Cassandra session.</span>
+<span class="sd">            Leave unspecified to use the global cassio init (see below)</span>
+<span class="sd">        keyspace: the keyspace to use for storing the cache.</span>
+<span class="sd">            Leave unspecified to use the global cassio init (see below)</span>
+<span class="sd">        embedding: Embedding provider for semantic</span>
+<span class="sd">            encoding and search.</span>
+<span class="sd">        table_name: name of the Cassandra (vector) table</span>
+<span class="sd">            to use as cache. There is a default for &quot;simple&quot; usage, but</span>
+<span class="sd">            remember to explicitly specify different tables if several embedding</span>
+<span class="sd">            models coexist in your app (they cannot share one cache table).</span>
+<span class="sd">        distance_metric: an alias for the &#39;similarity_measure&#39; parameter (see below).</span>
+<span class="sd">            As the &quot;distance&quot; terminology is misleading, please prefer</span>
+<span class="sd">            &#39;similarity_measure&#39; for clarity.</span>
+<span class="sd">        score_threshold: numeric value to use as</span>
+<span class="sd">            cutoff for the similarity searches</span>
+<span class="sd">        ttl_seconds: time-to-live for cache entries</span>
+<span class="sd">            (default: None, i.e. forever)</span>
+<span class="sd">        similarity_measure: which measure to adopt for similarity searches.</span>
+<span class="sd">            Note: this parameter is aliased by &#39;distance_metric&#39; - however,</span>
+<span class="sd">            it is suggested to use the &quot;similarity&quot; terminology since this value</span>
+<span class="sd">            is in fact a similarity (i.e. higher means closer).</span>
+<span class="sd">            Note that at most one of the two parameters &#39;distance_metric&#39;</span>
+<span class="sd">            and &#39;similarity_measure&#39; can be provided.</span>
+<span class="sd">        setup_mode: a value in langchain_community.utilities.cassandra.SetupMode.</span>
+<span class="sd">            Choose between SYNC, ASYNC and OFF - the latter if the Cassandra</span>
+<span class="sd">            table is guaranteed to exist already, for a faster initialization.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        The session and keyspace parameters, when left out (or passed as None),</span>
+<span class="sd">        fall back to the globally-available cassio settings if any are available.</span>
+<span class="sd">        In other words, if a previously-run &#39;cassio.init(...)&#39; has been</span>
+<span class="sd">        executed previously anywhere in the code, Cassandra-based objects</span>
+<span class="sd">        need not specify the connection parameters at all.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="CassandraSemanticCache.__init__"><a class="viewcode-back" href="../../cache/langchain_community.cache.CassandraSemanticCache.html#langchain_community.cache.CassandraSemanticCache.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">session</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CassandraSession</span><span class="p">],</span>
-        <span class="n">keyspace</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
-        <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
+        <span class="n">session</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CassandraSession</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">keyspace</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_TABLE_NAME</span><span class="p">,</span>
-        <span class="n">distance_metric</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_DISTANCE_METRIC</span><span class="p">,</span>
+        <span class="n">distance_metric</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">score_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_SCORE_THRESHOLD</span><span class="p">,</span>
         <span class="n">ttl_seconds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_TTL_SECONDS</span><span class="p">,</span>
         <span class="n">skip_provisioning</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">similarity_measure</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CASSANDRA_SEMANTIC_CACHE_DEFAULT_DISTANCE_METRIC</span><span class="p">,</span>
         <span class="n">setup_mode</span><span class="p">:</span> <span class="n">CassandraSetupMode</span> <span class="o">=</span> <span class="n">CassandraSetupMode</span><span class="o">.</span><span class="n">SYNC</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Initialize the cache with all relevant parameters.</span>
-<span class="sd">        Args:</span>
-<span class="sd">            session (cassandra.cluster.Session): an open Cassandra session</span>
-<span class="sd">            keyspace (str): the keyspace to use for storing the cache</span>
-<span class="sd">            embedding (Embedding): Embedding provider for semantic</span>
-<span class="sd">                encoding and search.</span>
-<span class="sd">            table_name (str): name of the Cassandra (vector) table</span>
-<span class="sd">                to use as cache</span>
-<span class="sd">            distance_metric (str, &#39;dot&#39;): which measure to adopt for</span>
-<span class="sd">                similarity searches</span>
-<span class="sd">            score_threshold (optional float): numeric value to use as</span>
-<span class="sd">                cutoff for the similarity searches</span>
-<span class="sd">            ttl_seconds (optional int): time-to-live for cache entries</span>
-<span class="sd">                (default: None, i.e. forever)</span>
-<span class="sd">        The default score threshold is tuned to the default metric.</span>
-<span class="sd">        Tune it carefully yourself if switching to another distance metric.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">skip_provisioning</span><span class="p">:</span>
             <span class="n">warn_deprecated</span><span class="p">(</span>
-                <span class="s2">&quot;0.0.33&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;Use setup_mode=CassandraSetupMode.OFF instead.&quot;</span>
+                <span class="s2">&quot;0.0.33&quot;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;skip_provisioning&quot;</span><span class="p">,</span>
+                <span class="n">alternative</span><span class="o">=</span><span class="p">(</span>
+                    <span class="s2">&quot;setup_mode=langchain_community.utilities.cassandra.SetupMode.OFF&quot;</span>
+                <span class="p">),</span>
+                <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">cassio.table</span> <span class="kn">import</span> <span class="n">MetadataVectorCassandraTable</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">ImportError</span><span class="p">,</span> <span class="ne">ModuleNotFoundError</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;Could not import cassio python package. &quot;</span>
-                <span class="s2">&quot;Please install it with `pip install cassio`.&quot;</span>
+                <span class="s2">&quot;Please install it with `pip install -U cassio`.&quot;</span>
             <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">embedding</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Missing required parameter &#39;embedding&#39;.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># detect if legacy &#39;distance_metric&#39; parameter used</span>
+        <span class="k">if</span> <span class="n">distance_metric</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># if passed, takes precedence over &#39;similarity_measure&#39;, but we warn:</span>
+            <span class="n">warn_deprecated</span><span class="p">(</span>
+                <span class="s2">&quot;0.0.33&quot;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;distance_metric&quot;</span><span class="p">,</span>
+                <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;similarity_measure&quot;</span><span class="p">,</span>
+                <span class="n">pending</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">similarity_measure</span> <span class="o">=</span> <span class="n">distance_metric</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">session</span> <span class="o">=</span> <span class="n">session</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">keyspace</span> <span class="o">=</span> <span class="n">keyspace</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span> <span class="o">=</span> <span class="n">table_name</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">distance_metric</span> <span class="o">=</span> <span class="n">distance_metric</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">similarity_measure</span> <span class="o">=</span> <span class="n">similarity_measure</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span> <span class="o">=</span> <span class="n">score_threshold</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ttl_seconds</span> <span class="o">=</span> <span class="n">ttl_seconds</span>
 
@@ -1565,7 +1651,7 @@
                 <span class="n">vector</span><span class="o">=</span><span class="n">prompt_embedding</span><span class="p">,</span>
                 <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;_llm_string_hash&quot;</span><span class="p">:</span> <span class="n">_hash</span><span class="p">(</span><span class="n">llm_string</span><span class="p">)},</span>
                 <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_metric</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">similarity_measure</span><span class="p">,</span>
                 <span class="n">metric_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
@@ -1596,7 +1682,7 @@
                 <span class="n">vector</span><span class="o">=</span><span class="n">prompt_embedding</span><span class="p">,</span>
                 <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;_llm_string_hash&quot;</span><span class="p">:</span> <span class="n">_hash</span><span class="p">(</span><span class="n">llm_string</span><span class="p">)},</span>
                 <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_metric</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">similarity_measure</span><span class="p">,</span>
                 <span class="n">metric_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">score_threshold</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
@@ -2511,7 +2597,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 16, 2024.
+          Last updated on May 17, 2024.
       </footer>
     </div>
   </div>
