@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_core.tracers.event_stream &mdash; 🦜🔗 LangChain 0.2.0rc2</title>
+  <title>langchain_core.tracers.event_stream &mdash; 🦜🔗 LangChain 0.2.0</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_core/tracers/event_stream.html" />
 
@@ -227,6 +227,7 @@
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Sequence</span><span class="p">,</span>
@@ -320,10 +321,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">send_stream</span> <span class="o">=</span> <span class="n">memory_stream</span><span class="o">.</span><span class="n">get_send_stream</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">receive_stream</span> <span class="o">=</span> <span class="n">memory_stream</span><span class="o">.</span><span class="n">get_receive_stream</span><span class="p">()</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">StreamEvent</span><span class="p">,</span> <span class="n">event_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">StreamEvent</span><span class="p">,</span> <span class="n">event_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Send an event to the stream.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">root_event_filter</span><span class="o">.</span><span class="n">include_event</span><span class="p">(</span><span class="n">event</span><span class="p">,</span> <span class="n">event_type</span><span class="p">):</span>
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_stream</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">send_stream</span><span class="o">.</span><span class="n">send_nowait</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__aiter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Iterate over the receive stream.&quot;&quot;&quot;</span>
@@ -337,7 +338,26 @@
             <span class="n">run_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">run_info</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Run ID </span><span class="si">{</span><span class="n">run_id</span><span class="si">}</span><span class="s2"> not found in run map.&quot;</span><span class="p">)</span>
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;on_</span><span class="si">{</span><span class="n">run_info</span><span class="p">[</span><span class="s1">&#39;run_type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">_stream&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;chunk&quot;</span><span class="p">:</span> <span class="n">chunk</span><span class="p">},</span>
+                    <span class="s2">&quot;run_id&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">run_id</span><span class="p">),</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">run_info</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;tags&quot;</span><span class="p">:</span> <span class="n">run_info</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">run_info</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
+                <span class="p">},</span>
+                <span class="n">run_info</span><span class="p">[</span><span class="s2">&quot;run_type&quot;</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="k">yield</span> <span class="n">chunk</span>
+
+    <span class="k">def</span> <span class="nf">tap_output_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run_id</span><span class="p">:</span> <span class="n">UUID</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Tap the output aiter.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">output</span><span class="p">:</span>
+            <span class="n">run_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">run_info</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Run ID </span><span class="si">{</span><span class="n">run_id</span><span class="si">}</span><span class="s2"> not found in run map.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
                 <span class="p">{</span>
                     <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;on_</span><span class="si">{</span><span class="n">run_info</span><span class="p">[</span><span class="s1">&#39;run_type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">_stream&quot;</span><span class="p">,</span>
                     <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;chunk&quot;</span><span class="p">:</span> <span class="n">chunk</span><span class="p">},</span>
@@ -373,7 +393,7 @@
             <span class="s2">&quot;inputs&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="n">messages</span><span class="p">},</span>
         <span class="p">}</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="s2">&quot;on_chat_model_start&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -410,7 +430,7 @@
             <span class="s2">&quot;inputs&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;prompts&quot;</span><span class="p">:</span> <span class="n">prompts</span><span class="p">},</span>
         <span class="p">}</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="s2">&quot;on_llm_start&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -459,7 +479,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected run type: </span><span class="si">{</span><span class="n">run_info</span><span class="p">[</span><span class="s1">&#39;run_type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="n">event</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -513,7 +533,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected run type: </span><span class="si">{</span><span class="n">run_info</span><span class="p">[</span><span class="s1">&#39;run_type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="n">event</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">output</span><span class="p">,</span> <span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">inputs_</span><span class="p">},</span>
@@ -558,7 +578,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">run_map</span><span class="p">[</span><span class="n">run_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_info</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;on_</span><span class="si">{</span><span class="n">run_type_</span><span class="si">}</span><span class="s2">_start&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span>
@@ -591,7 +611,7 @@
             <span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">inputs</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="n">event</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">data</span><span class="p">,</span>
@@ -626,7 +646,7 @@
             <span class="s2">&quot;inputs&quot;</span><span class="p">:</span> <span class="n">inputs</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="s2">&quot;on_tool_start&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -650,7 +670,7 @@
             <span class="p">)</span>
         <span class="n">inputs</span> <span class="o">=</span> <span class="n">run_info</span><span class="p">[</span><span class="s2">&quot;inputs&quot;</span><span class="p">]</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="s2">&quot;on_tool_end&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -688,7 +708,7 @@
             <span class="s2">&quot;inputs&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
         <span class="p">}</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="s2">&quot;on_retriever_start&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -710,7 +730,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run when Retriever ends running.&quot;&quot;&quot;</span>
         <span class="n">run_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_map</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">run_id</span><span class="p">)</span>
 
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send</span><span class="p">(</span>
             <span class="p">{</span>
                 <span class="s2">&quot;event&quot;</span><span class="p">:</span> <span class="s2">&quot;on_retriever_end&quot;</span><span class="p">,</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="p">{</span>
@@ -1012,7 +1032,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 17, 2024.
+          Last updated on May 18, 2024.
       </footer>
     </div>
   </div>
