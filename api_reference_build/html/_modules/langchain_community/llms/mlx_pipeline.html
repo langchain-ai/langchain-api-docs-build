@@ -120,9 +120,6 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
         </li>
         <li class="nav-item">
-          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
-        </li>
-        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../openai_api_reference.html">openai</a>
         </li>
         <li class="nav-item">
@@ -171,7 +168,6 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../mongodb_api_reference.html">mongodb</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nomic_api_reference.html">nomic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
-              <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_trt_api_reference.html">nvidia-trt</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
@@ -219,7 +215,7 @@
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.llms</span> <span class="kn">import</span> <span class="n">LLM</span>
@@ -242,7 +238,7 @@
 <span class="sd">            from langchain_community.llms import MLXPipeline</span>
 <span class="sd">            pipe = MLXPipeline.from_model_id(</span>
 <span class="sd">                model_id=&quot;mlx-community/quantized-gemma-2b&quot;,</span>
-<span class="sd">                pipeline_kwargs={&quot;max_tokens&quot;: 10},</span>
+<span class="sd">                pipeline_kwargs={&quot;max_tokens&quot;: 10, &quot;temp&quot;: 0.7},</span>
 <span class="sd">            )</span>
 <span class="sd">    Example passing model and tokenizer in directly:</span>
 <span class="sd">        .. code-block:: python</span>
@@ -277,7 +273,21 @@
 <span class="sd">        when needed. Default: ``False``</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">pipeline_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Keyword arguments passed to the pipeline.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Keyword arguments passed to the pipeline. Defaults include:</span>
+<span class="sd">        - temp (float): Temperature for generation, default is 0.0.</span>
+<span class="sd">        - max_tokens (int): Maximum tokens to generate, default is 100.</span>
+<span class="sd">        - verbose (bool): Whether to output verbose logging, default is False.</span>
+<span class="sd">        - formatter (Optional[Callable]): A callable to format the output.</span>
+<span class="sd">          Default is None.</span>
+<span class="sd">        - repetition_penalty (Optional[float]): The penalty factor for</span>
+<span class="sd">          repeated sequences, default is None.</span>
+<span class="sd">        - repetition_context_size (Optional[int]): Size of the context</span>
+<span class="sd">          for applying repetition penalty, default is None.</span>
+<span class="sd">        - top_p (float): The cumulative probability threshold for</span>
+<span class="sd">          top-p filtering, default is 1.0.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
@@ -353,9 +363,32 @@
                 <span class="s2">&quot;Please install it with `pip install mlx_lm`.&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">pipeline_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pipeline_kwargs&quot;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">pipeline_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pipeline_kwargs&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_kwargs</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">generate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span> <span class="o">**</span><span class="n">pipeline_kwargs</span><span class="p">)</span>
+        <span class="n">temp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temp&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">max_tokens</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+        <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verbose&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">formatter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">]</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;formatter&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">repetition_penalty</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;repetition_penalty&quot;</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">repetition_context_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;repetition_context_size&quot;</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="n">top_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;top_p&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">generate</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="n">tokenizer</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">,</span>
+            <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span>
+            <span class="n">temp</span><span class="o">=</span><span class="n">temp</span><span class="p">,</span>
+            <span class="n">max_tokens</span><span class="o">=</span><span class="n">max_tokens</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
+            <span class="n">formatter</span><span class="o">=</span><span class="n">formatter</span><span class="p">,</span>
+            <span class="n">repetition_penalty</span><span class="o">=</span><span class="n">repetition_penalty</span><span class="p">,</span>
+            <span class="n">repetition_context_size</span><span class="o">=</span><span class="n">repetition_context_size</span><span class="p">,</span>
+            <span class="n">top_p</span><span class="o">=</span><span class="n">top_p</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -384,26 +417,32 @@
         <span class="n">repetition_context_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
             <span class="s2">&quot;repetition_context_size&quot;</span><span class="p">,</span> <span class="kc">None</span>
         <span class="p">)</span>
+        <span class="n">top_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">pipeline_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;top_p&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
 
         <span class="n">prompt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;np&quot;</span><span class="p">)</span>
 
         <span class="n">prompt_tokens</span> <span class="o">=</span> <span class="n">mx</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">prompt</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
         <span class="n">eos_token_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token_id</span>
+        <span class="n">detokenizer</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">detokenizer</span>
+        <span class="n">detokenizer</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="p">(</span><span class="n">token</span><span class="p">,</span> <span class="n">prob</span><span class="p">),</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
             <span class="n">generate_step</span><span class="p">(</span>
-                <span class="n">prompt_tokens</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
-                <span class="n">temp</span><span class="p">,</span>
-                <span class="n">repetition_penalty</span><span class="p">,</span>
-                <span class="n">repetition_context_size</span><span class="p">,</span>
+                <span class="n">prompt</span><span class="o">=</span><span class="n">prompt_tokens</span><span class="p">,</span>
+                <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+                <span class="n">temp</span><span class="o">=</span><span class="n">temp</span><span class="p">,</span>
+                <span class="n">repetition_penalty</span><span class="o">=</span><span class="n">repetition_penalty</span><span class="p">,</span>
+                <span class="n">repetition_context_size</span><span class="o">=</span><span class="n">repetition_context_size</span><span class="p">,</span>
+                <span class="n">top_p</span><span class="o">=</span><span class="n">top_p</span><span class="p">,</span>
             <span class="p">),</span>
             <span class="nb">range</span><span class="p">(</span><span class="n">max_new_tokens</span><span class="p">),</span>
         <span class="p">):</span>
             <span class="c1"># identify text to yield</span>
             <span class="n">text</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">token</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="n">detokenizer</span><span class="o">.</span><span class="n">add_token</span><span class="p">(</span><span class="n">token</span><span class="p">)</span>
+            <span class="n">detokenizer</span><span class="o">.</span><span class="n">finalize</span><span class="p">()</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">detokenizer</span><span class="o">.</span><span class="n">last_segment</span>
 
             <span class="c1"># yield text, if any</span>
             <span class="k">if</span> <span class="n">text</span><span class="p">:</span>
@@ -421,7 +460,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 20, 2024.
+          Last updated on May 21, 2024.
       </footer>
     </div>
   </div>
