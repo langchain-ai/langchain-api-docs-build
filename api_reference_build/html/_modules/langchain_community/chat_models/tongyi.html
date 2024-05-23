@@ -455,8 +455,14 @@
 
     <span class="n">client</span><span class="p">:</span> <span class="n">Any</span>  <span class="c1">#: :meta private:</span>
     <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">&quot;qwen-turbo&quot;</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;model&quot;</span><span class="p">)</span>
-
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Model name to use.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Model name to use.</span>
+<span class="sd">    callable multimodal model:</span>
+<span class="sd">    - qwen-vl-v1</span>
+<span class="sd">    - qwen-vl-chat-v1</span>
+<span class="sd">    - qwen-audio-turbo</span>
+<span class="sd">    - qwen-vl-plus</span>
+<span class="sd">    - qwen-vl-max</span>
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">model_kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
 
     <span class="n">top_p</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.8</span>
@@ -494,18 +500,34 @@
                 <span class="s2">&quot;Could not import dashscope python package. &quot;</span>
                 <span class="s2">&quot;Please install it with `pip install dashscope --upgrade`.&quot;</span>
             <span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="s2">&quot;vl&quot;</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model_name&quot;</span><span class="p">]:</span>
+        <span class="n">dashscope_multimodal_models</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;qwen-vl-v1&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;qwen-vl-chat-v1&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;qwen-audio-turbo&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;qwen-vl-plus&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;qwen-vl-max&quot;</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model_name&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">dashscope_multimodal_models</span>
+            <span class="ow">or</span> <span class="s2">&quot;vl&quot;</span> <span class="ow">in</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model_name&quot;</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
                 <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dashscope</span><span class="o">.</span><span class="n">MultiModalConversation</span>
-            <span class="k">else</span><span class="p">:</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;`dashscope` has no `MultiModalConversation` attribute, this is &quot;</span>
+                    <span class="s2">&quot;likely due to an old version of the dashscope package. Try &quot;</span>
+                    <span class="s2">&quot;upgrading it with `pip install --upgrade dashscope`.&quot;</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
                 <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dashscope</span><span class="o">.</span><span class="n">Generation</span>
-        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;`dashscope` has no `Generation` attribute, this is likely &quot;</span>
-                <span class="s2">&quot;due to an old version of the dashscope package. Try upgrading it &quot;</span>
-                <span class="s2">&quot;with `pip install --upgrade dashscope`.&quot;</span>
-            <span class="p">)</span>
-
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;`dashscope` has no `Generation` attribute, this is likely &quot;</span>
+                    <span class="s2">&quot;due to an old version of the dashscope package. Try upgrading it &quot;</span>
+                    <span class="s2">&quot;with `pip install --upgrade dashscope`.&quot;</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
     <span class="nd">@property</span>
@@ -831,7 +853,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 22, 2024.
+          Last updated on May 23, 2024.
       </footer>
     </div>
   </div>

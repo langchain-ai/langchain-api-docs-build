@@ -289,6 +289,11 @@
     <span class="n">url_database</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List of processed URLs&quot;</span>
     <span class="p">)</span>
+    <span class="n">trust_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="kc">False</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether to use the http_proxy/https_proxy env variables or &quot;</span>
+        <span class="s2">&quot;check .netrc for proxy configuration&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
 
 <div class="viewcode-block" id="WebResearchRetriever.from_llm"><a class="viewcode-back" href="../../../retrievers/langchain_community.retrievers.web_research.WebResearchRetriever.html#langchain_community.retrievers.web_research.WebResearchRetriever.from_llm">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_llm</span><span class="p">(</span>
@@ -301,6 +306,7 @@
         <span class="n">text_splitter</span><span class="p">:</span> <span class="n">RecursiveCharacterTextSplitter</span> <span class="o">=</span> <span class="n">RecursiveCharacterTextSplitter</span><span class="p">(</span>
             <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1500</span><span class="p">,</span> <span class="n">chunk_overlap</span><span class="o">=</span><span class="mi">150</span>
         <span class="p">),</span>
+        <span class="n">trust_env</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;WebResearchRetriever&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize from llm using default template.</span>
 
@@ -311,6 +317,8 @@
 <span class="sd">            prompt: prompt to generating search questions</span>
 <span class="sd">            num_search_results: Number of pages per Google search</span>
 <span class="sd">            text_splitter: Text splitter for splitting web pages into chunks</span>
+<span class="sd">            trust_env: Whether to use the http_proxy/https_proxy env variables</span>
+<span class="sd">                or check .netrc for proxy configuration</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            WebResearchRetriever</span>
@@ -338,6 +346,7 @@
             <span class="n">search</span><span class="o">=</span><span class="n">search</span><span class="p">,</span>
             <span class="n">num_search_results</span><span class="o">=</span><span class="n">num_search_results</span><span class="p">,</span>
             <span class="n">text_splitter</span><span class="o">=</span><span class="n">text_splitter</span><span class="p">,</span>
+            <span class="n">trust_env</span><span class="o">=</span><span class="n">trust_env</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="WebResearchRetriever.clean_search_query"><a class="viewcode-back" href="../../../retrievers/langchain_community.retrievers.web_research.WebResearchRetriever.html#langchain_community.retrievers.web_research.WebResearchRetriever.clean_search_query">[docs]</a>    <span class="k">def</span> <span class="nf">clean_search_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -405,7 +414,9 @@
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;New URLs to load: </span><span class="si">{</span><span class="n">new_urls</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="c1"># Load, split, and add new urls to vectorstore</span>
         <span class="k">if</span> <span class="n">new_urls</span><span class="p">:</span>
-            <span class="n">loader</span> <span class="o">=</span> <span class="n">AsyncHtmlLoader</span><span class="p">(</span><span class="n">new_urls</span><span class="p">,</span> <span class="n">ignore_load_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">loader</span> <span class="o">=</span> <span class="n">AsyncHtmlLoader</span><span class="p">(</span>
+                <span class="n">new_urls</span><span class="p">,</span> <span class="n">ignore_load_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">trust_env</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">trust_env</span>
+            <span class="p">)</span>
             <span class="n">html2text</span> <span class="o">=</span> <span class="n">Html2TextTransformer</span><span class="p">()</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Indexing new urls...&quot;</span><span class="p">)</span>
             <span class="n">docs</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
@@ -441,7 +452,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 22, 2024.
+          Last updated on May 23, 2024.
       </footer>
     </div>
   </div>

@@ -388,9 +388,16 @@
         <span class="p">)</span>
         <span class="c1"># TODO: check if `_client.predict_stream` is available.</span>
         <span class="n">chunk_iter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">predict_stream</span><span class="p">(</span><span class="n">endpoint</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">endpoint</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">first_chunk_role</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunk_iter</span><span class="p">:</span>
             <span class="n">choice</span> <span class="o">=</span> <span class="n">chunk</span><span class="p">[</span><span class="s2">&quot;choices&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatMlflow</span><span class="o">.</span><span class="n">_convert_delta_to_message_chunk</span><span class="p">(</span><span class="n">choice</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">])</span>
+
+            <span class="n">chunk_delta</span> <span class="o">=</span> <span class="n">choice</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">first_chunk_role</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">first_chunk_role</span> <span class="o">=</span> <span class="n">chunk_delta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">)</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatMlflow</span><span class="o">.</span><span class="n">_convert_delta_to_message_chunk</span><span class="p">(</span>
+                <span class="n">chunk_delta</span><span class="p">,</span> <span class="n">first_chunk_role</span>
+            <span class="p">)</span>
 
             <span class="n">generation_info</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">if</span> <span class="n">finish_reason</span> <span class="o">:=</span> <span class="n">choice</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;finish_reason&quot;</span><span class="p">):</span>
@@ -439,8 +446,10 @@
             <span class="k">return</span> <span class="n">ChatMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_convert_delta_to_message_chunk</span><span class="p">(</span><span class="n">_dict</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">BaseMessageChunk</span><span class="p">:</span>
-        <span class="n">role</span> <span class="o">=</span> <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;role&quot;</span><span class="p">]</span>
+    <span class="k">def</span> <span class="nf">_convert_delta_to_message_chunk</span><span class="p">(</span>
+        <span class="n">_dict</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">default_role</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseMessageChunk</span><span class="p">:</span>
+        <span class="n">role</span> <span class="o">=</span> <span class="n">_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">,</span> <span class="n">default_role</span><span class="p">)</span>
         <span class="n">content</span> <span class="o">=</span> <span class="n">_dict</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;user&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">HumanMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
@@ -506,7 +515,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 22, 2024.
+          Last updated on May 23, 2024.
       </footer>
     </div>
   </div>

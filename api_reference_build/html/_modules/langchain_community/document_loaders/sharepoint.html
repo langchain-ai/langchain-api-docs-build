@@ -215,8 +215,12 @@
 <span></span><span class="sd">&quot;&quot;&quot;Loader that loads data from Sharepoint Document Library&quot;&quot;&quot;</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
 
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">from</span> <span class="nn">langchain_core.document_loaders</span> <span class="kn">import</span> <span class="n">BaseLoader</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span>
 
@@ -227,7 +231,7 @@
 <span class="kn">from</span> <span class="nn">langchain_community.document_loaders.parsers.registry</span> <span class="kn">import</span> <span class="n">get_parser</span>
 
 
-<div class="viewcode-block" id="SharePointLoader"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.sharepoint.SharePointLoader.html#langchain_community.document_loaders.sharepoint.SharePointLoader">[docs]</a><span class="k">class</span> <span class="nc">SharePointLoader</span><span class="p">(</span><span class="n">O365BaseLoader</span><span class="p">):</span>
+<div class="viewcode-block" id="SharePointLoader"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.sharepoint.SharePointLoader.html#langchain_community.document_loaders.sharepoint.SharePointLoader">[docs]</a><span class="k">class</span> <span class="nc">SharePointLoader</span><span class="p">(</span><span class="n">O365BaseLoader</span><span class="p">,</span> <span class="n">BaseLoader</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Load  from `SharePoint`.&quot;&quot;&quot;</span>
 
     <span class="n">document_library_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
@@ -238,6 +242,14 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; The IDs of the objects to load data from.&quot;&quot;&quot;</span>
     <span class="n">folder_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; The ID of the folder to load data from.&quot;&quot;&quot;</span>
+    <span class="n">load_auth</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; Whether to load authorization identities.&quot;&quot;&quot;</span>
+    <span class="n">token_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">&quot;.credentials&quot;</span> <span class="o">/</span> <span class="s2">&quot;o365_token.txt&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; The path to the token to make api calls&quot;&quot;&quot;</span>
+    <span class="n">file_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; The ID of the file for which we need auth identities&quot;&quot;&quot;</span>
+    <span class="n">site_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot; The ID of the Sharepoint site of the user where the file is present &quot;&quot;&quot;</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_file_types</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">_FileType</span><span class="p">]:</span>
@@ -266,7 +278,10 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_folder</span><span class="p">,</span> <span class="n">Folder</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;There isn&#39;t a folder with path </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">folder_path</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">blob</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_folder</span><span class="p">(</span><span class="n">target_folder</span><span class="p">):</span>
-                <span class="k">yield from</span> <span class="n">blob_parser</span><span class="o">.</span><span class="n">lazy_parse</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">parsed_blob</span> <span class="ow">in</span> <span class="n">blob_parser</span><span class="o">.</span><span class="n">lazy_parse</span><span class="p">(</span><span class="n">blob</span><span class="p">):</span>
+                    <span class="n">auth_identities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">authorized_identities</span><span class="p">()</span>
+                    <span class="n">parsed_blob</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;authorized_identities&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_identities</span>
+                    <span class="k">yield</span> <span class="n">parsed_blob</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">folder_id</span><span class="p">:</span>
             <span class="n">target_folder</span> <span class="o">=</span> <span class="n">drive</span><span class="o">.</span><span class="n">get_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">folder_id</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_folder</span><span class="p">,</span> <span class="n">Folder</span><span class="p">):</span>
@@ -281,14 +296,50 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_folder</span><span class="p">,</span> <span class="n">Folder</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unable to fetch root folder&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">blob</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_folder</span><span class="p">(</span><span class="n">target_folder</span><span class="p">):</span>
-                <span class="k">yield from</span> <span class="n">blob_parser</span><span class="o">.</span><span class="n">lazy_parse</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span></div></div>
+                <span class="k">yield from</span> <span class="n">blob_parser</span><span class="o">.</span><span class="n">lazy_parse</span><span class="p">(</span><span class="n">blob</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SharePointLoader.authorized_identities"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.sharepoint.SharePointLoader.html#langchain_community.document_loaders.sharepoint.SharePointLoader.authorized_identities">[docs]</a>    <span class="k">def</span> <span class="nf">authorized_identities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_access_token</span><span class="p">()</span>
+        <span class="n">access_token</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;access_token&quot;</span><span class="p">)</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;https://graph.microsoft.com/v1.0/sites/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">site_id</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;drives/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">document_library_id</span><span class="si">}</span><span class="s2">/items/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">file_id</span><span class="si">}</span><span class="s2">/permissions&quot;</span>
+        <span class="p">)</span>
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Authorization&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Bearer </span><span class="si">{</span><span class="n">access_token</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">}</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="p">{})</span>
+        <span class="n">groups_list</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+        <span class="n">group_names</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">group_data</span> <span class="ow">in</span> <span class="n">groups_list</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;siteGroup&quot;</span><span class="p">):</span>
+                    <span class="n">site_data</span> <span class="o">=</span> <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;siteGroup&quot;</span><span class="p">)</span>
+                    <span class="c1"># print(group_data)</span>
+                    <span class="n">group_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">site_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;displayName&quot;</span><span class="p">))</span>
+                <span class="k">elif</span> <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;group&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+                    <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user&quot;</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="n">site_data</span> <span class="o">=</span> <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;group&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+                        <span class="n">group_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;grantedToV2&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;user&quot;</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="c1"># print(group_data)</span>
+                    <span class="n">group_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">site_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;displayName&quot;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">group_names</span></div>
+
+    <span class="k">def</span> <span class="nf">_fetch_access_token</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 22, 2024.
+          Last updated on May 23, 2024.
       </footer>
     </div>
   </div>
