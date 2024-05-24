@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_groq.chat_models &mdash; 🦜🔗 LangChain 0.2.0</title>
+  <title>langchain_groq.chat_models &mdash; 🦜🔗 LangChain 0.2.1</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_groq/chat_models.html" />
 
@@ -216,6 +216,7 @@
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
@@ -258,8 +259,10 @@
     <span class="n">FunctionMessageChunk</span><span class="p">,</span>
     <span class="n">HumanMessage</span><span class="p">,</span>
     <span class="n">HumanMessageChunk</span><span class="p">,</span>
+    <span class="n">InvalidToolCall</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
     <span class="n">SystemMessageChunk</span><span class="p">,</span>
+    <span class="n">ToolCall</span><span class="p">,</span>
     <span class="n">ToolMessage</span><span class="p">,</span>
     <span class="n">ToolMessageChunk</span><span class="p">,</span>
 <span class="p">)</span>
@@ -1051,7 +1054,14 @@
             <span class="c1"># If function call only, content is None not empty string</span>
             <span class="k">if</span> <span class="n">message_dict</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
                 <span class="n">message_dict</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="s2">&quot;tool_calls&quot;</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span> <span class="ow">or</span> <span class="n">message</span><span class="o">.</span><span class="n">invalid_tool_calls</span><span class="p">:</span>
+            <span class="n">message_dict</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">_lc_tool_call_to_groq_tool_call</span><span class="p">(</span><span class="n">tc</span><span class="p">)</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span>
+            <span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
+                <span class="n">_lc_invalid_tool_call_to_groq_tool_call</span><span class="p">(</span><span class="n">tc</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">invalid_tool_calls</span>
+            <span class="p">]</span>
+        <span class="k">elif</span> <span class="s2">&quot;tool_calls&quot;</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">:</span>
             <span class="n">message_dict</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span>
             <span class="c1"># If tool calls only, content is None not empty string</span>
             <span class="k">if</span> <span class="n">message_dict</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
@@ -1158,13 +1168,37 @@
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">ChatMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_lc_tool_call_to_groq_tool_call</span><span class="p">(</span><span class="n">tool_call</span><span class="p">:</span> <span class="n">ToolCall</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">]),</span>
+        <span class="p">},</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">_lc_invalid_tool_call_to_groq_tool_call</span><span class="p">(</span>
+    <span class="n">invalid_tool_call</span><span class="p">:</span> <span class="n">InvalidToolCall</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">invalid_tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+        <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">invalid_tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">invalid_tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">],</span>
+        <span class="p">},</span>
+    <span class="p">}</span>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 23, 2024.
+          Last updated on May 24, 2024.
       </footer>
     </div>
   </div>
