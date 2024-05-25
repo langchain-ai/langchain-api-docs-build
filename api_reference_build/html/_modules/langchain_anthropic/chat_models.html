@@ -386,50 +386,45 @@
             <span class="n">content</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                    <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="p">{</span>
-                            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">,</span>
-                        <span class="p">}</span>
-                    <span class="p">)</span>
+                    <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">})</span>
                 <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                     <span class="k">if</span> <span class="s2">&quot;type&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">item</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Dict content item must have a type key&quot;</span><span class="p">)</span>
                     <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;image_url&quot;</span><span class="p">:</span>
                         <span class="c1"># convert format</span>
                         <span class="n">source</span> <span class="o">=</span> <span class="n">_format_image</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">][</span><span class="s2">&quot;url&quot;</span><span class="p">])</span>
-                        <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                            <span class="p">{</span>
-                                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;image&quot;</span><span class="p">,</span>
-                                <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
-                            <span class="p">}</span>
-                        <span class="p">)</span>
+                        <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;image&quot;</span><span class="p">,</span> <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">source</span><span class="p">})</span>
                     <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span><span class="p">:</span>
-                        <span class="n">item</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                        <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                        <span class="c1"># If a tool_call with the same id as a tool_use content block</span>
+                        <span class="c1"># exists, the tool_call is preferred.</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">and</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span>
+                            <span class="n">tc</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span>
+                        <span class="p">]:</span>
+                            <span class="n">overlapping</span> <span class="o">=</span> <span class="p">[</span>
+                                <span class="n">tc</span>
+                                <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span>
+                                <span class="k">if</span> <span class="n">tc</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+                            <span class="p">]</span>
+                            <span class="n">content</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                                <span class="n">_lc_tool_calls_to_anthropic_tool_use_blocks</span><span class="p">(</span><span class="n">overlapping</span><span class="p">)</span>
+                            <span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">item</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                            <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
                     <span class="k">elif</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
                         <span class="n">text</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
                         <span class="c1"># Only add non-empty strings for now as empty ones are not</span>
                         <span class="c1"># accepted.</span>
                         <span class="c1"># https://github.com/anthropics/anthropic-sdk-python/issues/461</span>
                         <span class="k">if</span> <span class="n">text</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
-                            <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                                <span class="p">{</span>
-                                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
-                                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">text</span><span class="p">,</span>
-                                <span class="p">}</span>
-                            <span class="p">)</span>
+                            <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">text</span><span class="p">})</span>
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">content</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;Content items must be str or dict, instead was: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">item</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-        <span class="k">elif</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span>
-        <span class="p">):</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">and</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">:</span>
             <span class="n">content</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="p">[]</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span>
@@ -442,12 +437,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">content</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span>
 
-        <span class="n">formatted_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
-                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
-            <span class="p">}</span>
-        <span class="p">)</span>
+        <span class="n">formatted_messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">})</span>
     <span class="k">return</span> <span class="n">system</span><span class="p">,</span> <span class="n">formatted_messages</span>
 
 
@@ -1077,7 +1067,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 24, 2024.
+          Last updated on May 25, 2024.
       </footer>
     </div>
   </div>

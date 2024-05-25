@@ -212,7 +212,9 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_google_genai.embeddings</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span></span><span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">string</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="c1"># TODO: remove ignore once the google package is published with types</span>
 <span class="kn">from</span> <span class="nn">google.ai.generativelanguage_v1beta.types</span> <span class="kn">import</span> <span class="p">(</span>
@@ -228,6 +230,9 @@
     <span class="n">get_client_info</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_google_genai._genai_extension</span> <span class="kn">import</span> <span class="n">build_generative_service</span>
+
+<span class="n">_MAX_TOKENS_PER_BATCH</span> <span class="o">=</span> <span class="mi">20000</span>
+<span class="n">_DEFAULT_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">100</span>
 
 
 <div class="viewcode-block" id="GoogleGenerativeAIEmbeddings"><a class="viewcode-back" href="../../embeddings/langchain_google_genai.embeddings.GoogleGenerativeAIEmbeddings.html#langchain_google_genai.embeddings.GoogleGenerativeAIEmbeddings">[docs]</a><span class="k">class</span> <span class="nc">GoogleGenerativeAIEmbeddings</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">Embeddings</span><span class="p">):</span>
@@ -305,6 +310,67 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_split_by_punctuation</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Splits a string by punctuation and whitespace characters.&quot;&quot;&quot;</span>
+        <span class="n">split_by</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">punctuation</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\t\n</span><span class="s2"> &quot;</span>
+        <span class="n">pattern</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;([</span><span class="si">{</span><span class="n">split_by</span><span class="si">}</span><span class="s2">])&quot;</span>
+        <span class="c1"># Using re.split to split the text based on the pattern</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">segment</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="n">re</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">pattern</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span> <span class="k">if</span> <span class="n">segment</span><span class="p">]</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_prepare_batches</span><span class="p">(</span><span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Splits texts in batches based on current maximum batch size</span>
+<span class="sd">        and maximum tokens per request.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">text_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">texts_len</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
+        <span class="n">batch_token_len</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">batches</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">current_batch</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">texts_len</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">while</span> <span class="n">text_index</span> <span class="o">&lt;</span> <span class="n">texts_len</span><span class="p">:</span>
+            <span class="n">current_text</span> <span class="o">=</span> <span class="n">texts</span><span class="p">[</span><span class="n">text_index</span><span class="p">]</span>
+            <span class="c1"># Number of tokens per a text is conservatively estimated</span>
+            <span class="c1"># as 2 times number of words, punctuation and whitespace characters.</span>
+            <span class="c1"># Using `count_tokens` API will make batching too expensive.</span>
+            <span class="c1"># Utilizing a tokenizer, would add a dependency that would not</span>
+            <span class="c1"># necessarily be reused by the application using this class.</span>
+            <span class="n">current_text_token_cnt</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">GoogleGenerativeAIEmbeddings</span><span class="o">.</span><span class="n">_split_by_punctuation</span><span class="p">(</span><span class="n">current_text</span><span class="p">))</span>
+                <span class="o">*</span> <span class="mi">2</span>
+            <span class="p">)</span>
+            <span class="n">end_of_batch</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="n">current_text_token_cnt</span> <span class="o">&gt;</span> <span class="n">_MAX_TOKENS_PER_BATCH</span><span class="p">:</span>
+                <span class="c1"># Current text is too big even for a single batch.</span>
+                <span class="c1"># Such request will fail, but we still make a batch</span>
+                <span class="c1"># so that the app can get the error from the API.</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_batch</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># Adding current batch if not empty.</span>
+                    <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_batch</span><span class="p">)</span>
+                <span class="n">current_batch</span> <span class="o">=</span> <span class="p">[</span><span class="n">current_text</span><span class="p">]</span>
+                <span class="n">text_index</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">end_of_batch</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">elif</span> <span class="p">(</span>
+                <span class="n">batch_token_len</span> <span class="o">+</span> <span class="n">current_text_token_cnt</span> <span class="o">&gt;</span> <span class="n">_MAX_TOKENS_PER_BATCH</span>
+                <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">current_batch</span><span class="p">)</span> <span class="o">==</span> <span class="n">batch_size</span>
+            <span class="p">):</span>
+                <span class="n">end_of_batch</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">text_index</span> <span class="o">==</span> <span class="n">texts_len</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># Last element - even though the batch may be not big,</span>
+                    <span class="c1"># we still need to make it.</span>
+                    <span class="n">end_of_batch</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">batch_token_len</span> <span class="o">+=</span> <span class="n">current_text_token_cnt</span>
+                <span class="n">current_batch</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_text</span><span class="p">)</span>
+                <span class="n">text_index</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">end_of_batch</span><span class="p">:</span>
+                <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_batch</span><span class="p">)</span>
+                <span class="n">current_batch</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">batch_token_len</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">batches</span>
+
     <span class="k">def</span> <span class="nf">_prepare_request</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -326,12 +392,14 @@
 <div class="viewcode-block" id="GoogleGenerativeAIEmbeddings.embed_documents"><a class="viewcode-back" href="../../embeddings/langchain_google_genai.embeddings.GoogleGenerativeAIEmbeddings.html#langchain_google_genai.embeddings.GoogleGenerativeAIEmbeddings.embed_documents">[docs]</a>    <span class="k">def</span> <span class="nf">embed_documents</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">_DEFAULT_BATCH_SIZE</span><span class="p">,</span>
         <span class="n">task_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">titles</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">output_dimensionality</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Embed a list of strings. Vertex AI currently</span>
-<span class="sd">        sets a max batch size of 5 strings.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Embed a list of strings. Google Generative AI currently</span>
+<span class="sd">        sets a max batch size of 100 strings.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            texts: List[str] The list of strings to embed.</span>
@@ -341,28 +409,38 @@
 <span class="sd">            Only applicable when TaskType is RETRIEVAL_DOCUMENT.</span>
 <span class="sd">            output_dimensionality: Optional reduced dimension for the output embedding.</span>
 <span class="sd">            https://ai.google.dev/api/rest/v1/models/batchEmbedContents#EmbedContentRequest</span>
-
 <span class="sd">        Returns:</span>
 <span class="sd">            List of embeddings, one for each text.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">titles</span> <span class="o">=</span> <span class="n">titles</span> <span class="k">if</span> <span class="n">titles</span> <span class="k">else</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>  <span class="c1"># type: ignore[list-item]</span>
-        <span class="n">requests</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_request</span><span class="p">(</span>
-                <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
-                <span class="n">task_type</span><span class="o">=</span><span class="n">task_type</span><span class="p">,</span>
-                <span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span>
-                <span class="n">output_dimensionality</span><span class="o">=</span><span class="n">output_dimensionality</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">title</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">titles</span><span class="p">)</span>
-        <span class="p">]</span>
+        <span class="n">embeddings</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">batch_start_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">GoogleGenerativeAIEmbeddings</span><span class="o">.</span><span class="n">_prepare_batches</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">titles</span><span class="p">:</span>
+                <span class="n">titles_batch</span> <span class="o">=</span> <span class="n">titles</span><span class="p">[</span>
+                    <span class="n">batch_start_index</span> <span class="p">:</span> <span class="n">batch_start_index</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+                <span class="p">]</span>
+                <span class="n">batch_start_index</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">titles_batch</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>  <span class="c1"># type: ignore[list-item]</span>
 
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">batch_embed_contents</span><span class="p">(</span>
-                <span class="n">BatchEmbedContentsRequest</span><span class="p">(</span><span class="n">requests</span><span class="o">=</span><span class="n">requests</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">GoogleGenerativeAIError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error embedding content: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-        <span class="k">return</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">embeddings</span><span class="p">]</span></div>
+            <span class="n">requests</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_request</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
+                    <span class="n">task_type</span><span class="o">=</span><span class="n">task_type</span><span class="p">,</span>
+                    <span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span>
+                    <span class="n">output_dimensionality</span><span class="o">=</span><span class="n">output_dimensionality</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">title</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">titles_batch</span><span class="p">)</span>
+            <span class="p">]</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">batch_embed_contents</span><span class="p">(</span>
+                    <span class="n">BatchEmbedContentsRequest</span><span class="p">(</span><span class="n">requests</span><span class="o">=</span><span class="n">requests</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">GoogleGenerativeAIError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error embedding content: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
+            <span class="n">embeddings</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="nb">list</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">embeddings</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">embeddings</span></div>
 
 <div class="viewcode-block" id="GoogleGenerativeAIEmbeddings.embed_query"><a class="viewcode-back" href="../../embeddings/langchain_google_genai.embeddings.GoogleGenerativeAIEmbeddings.html#langchain_google_genai.embeddings.GoogleGenerativeAIEmbeddings.embed_query">[docs]</a>    <span class="k">def</span> <span class="nf">embed_query</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -397,7 +475,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 24, 2024.
+          Last updated on May 25, 2024.
       </footer>
     </div>
   </div>

@@ -216,12 +216,22 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VST</span><span class="p">,</span> <span class="n">VectorStore</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">DEFAULT_VECTOR_KEY</span> <span class="o">=</span> <span class="s2">&quot;embedding&quot;</span>
+<span class="n">DEFAULT_ID_KEY</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span>
+<span class="n">DEFAULT_TEXT_KEY</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span>
+<span class="n">DEFAULT_TABLE_NAME</span> <span class="o">=</span> <span class="s2">&quot;embeddings&quot;</span>
+<span class="n">SIMILARITY_ALIAS</span> <span class="o">=</span> <span class="s2">&quot;similarity_score&quot;</span>
 
 
 <div class="viewcode-block" id="DuckDB"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.duckdb.DuckDB.html#langchain_community.vectorstores.duckdb.DuckDB">[docs]</a><span class="k">class</span> <span class="nc">DuckDB</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
@@ -290,10 +300,10 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">connection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
-        <span class="n">vector_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;embedding&quot;</span><span class="p">,</span>
-        <span class="n">id_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span>
-        <span class="n">text_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
-        <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;vectorstore&quot;</span><span class="p">,</span>
+        <span class="n">vector_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_VECTOR_KEY</span><span class="p">,</span>
+        <span class="n">id_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_ID_KEY</span><span class="p">,</span>
+        <span class="n">text_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_TEXT_KEY</span><span class="p">,</span>
+        <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_TABLE_NAME</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize with DuckDB connection and setup for vector storage.&quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
@@ -314,8 +324,6 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;An embedding function or model must be provided.&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">connection</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">warnings</span>
-
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="s2">&quot;No DuckDB connection provided. A new connection will be created.&quot;</span>
                 <span class="s2">&quot;This connection is running in memory and no data will be persisted.&quot;</span>
@@ -352,6 +360,17 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of ids of the added texts.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">have_pandas</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+
+            <span class="n">have_pandas</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;Unable to import pandas. &quot;</span>
+                <span class="s2">&quot;Install it with `pip install -U pandas` &quot;</span>
+                <span class="s2">&quot;to improve performance of add_texts().&quot;</span>
+            <span class="p">)</span>
 
         <span class="c1"># Extract ids from kwargs or generate new ones if not provided</span>
         <span class="n">ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;ids&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">])</span>
@@ -359,6 +378,7 @@
         <span class="c1"># Embed texts and create documents</span>
         <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span> <span class="ow">or</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">]</span>
         <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">texts</span><span class="p">))</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">texts</span><span class="p">):</span>
             <span class="n">embedding</span> <span class="o">=</span> <span class="n">embeddings</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
             <span class="c1"># Serialize metadata if present, else default to None</span>
@@ -367,9 +387,26 @@
                 <span class="k">if</span> <span class="n">metadatas</span> <span class="ow">and</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span>
                 <span class="k">else</span> <span class="kc">None</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">have_pandas</span><span class="p">:</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_id_key</span><span class="p">:</span> <span class="n">ids</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span><span class="p">:</span> <span class="n">text</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">:</span> <span class="n">embedding</span><span class="p">,</span>
+                        <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;INSERT INTO </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="si">}</span><span class="s2"> VALUES (?,?,?,?)&quot;</span><span class="p">,</span>
+                    <span class="p">[</span><span class="n">ids</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">text</span><span class="p">,</span> <span class="n">embedding</span><span class="p">,</span> <span class="n">metadata</span><span class="p">],</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">have_pandas</span><span class="p">:</span>
+            <span class="c1"># noinspection PyUnusedLocal</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># noqa: F841</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_connection</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;INSERT INTO </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="si">}</span><span class="s2"> VALUES (?,?,?,?)&quot;</span><span class="p">,</span>
-                <span class="p">[</span><span class="n">ids</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">text</span><span class="p">,</span> <span class="n">embedding</span><span class="p">,</span> <span class="n">metadata</span><span class="p">],</span>
+                <span class="sa">f</span><span class="s2">&quot;INSERT INTO </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_table_name</span><span class="si">}</span><span class="s2"> SELECT * FROM df&quot;</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">ids</span></div>
 
@@ -395,20 +432,21 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
                 <span class="o">*</span><span class="p">[</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">duckdb</span><span class="o">.</span><span class="n">StarExpression</span><span class="p">(</span><span class="n">exclude</span><span class="o">=</span><span class="p">[]),</span>
-                    <span class="n">list_cosine_similarity</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="s2">&quot;similarity&quot;</span><span class="p">),</span>
+                    <span class="n">list_cosine_similarity</span><span class="o">.</span><span class="n">alias</span><span class="p">(</span><span class="n">SIMILARITY_ALIAS</span><span class="p">),</span>
                 <span class="p">]</span>
             <span class="p">)</span>
-            <span class="o">.</span><span class="n">order</span><span class="p">(</span><span class="s2">&quot;similarity desc&quot;</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">order</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">SIMILARITY_ALIAS</span><span class="si">}</span><span class="s2"> desc&quot;</span><span class="p">)</span>
             <span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">duckdb</span><span class="o">.</span><span class="n">StarExpression</span><span class="p">(</span><span class="n">exclude</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;similarity&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">])</span>
-            <span class="p">)</span>
             <span class="o">.</span><span class="n">fetchdf</span><span class="p">()</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span>
             <span class="n">Document</span><span class="p">(</span>
                 <span class="n">page_content</span><span class="o">=</span><span class="n">docs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span><span class="p">][</span><span class="n">idx</span><span class="p">],</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">docs</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">][</span><span class="n">idx</span><span class="p">])</span>
+                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                    <span class="o">**</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">docs</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">][</span><span class="n">idx</span><span class="p">]),</span>
+                    <span class="c1"># using underscore prefix to avoid conflicts with user metadata keys</span>
+                    <span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">SIMILARITY_ALIAS</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">docs</span><span class="p">[</span><span class="n">SIMILARITY_ALIAS</span><span class="p">][</span><span class="n">idx</span><span class="p">],</span>
+                <span class="p">}</span>
                 <span class="k">if</span> <span class="n">docs</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">][</span><span class="n">idx</span><span class="p">]</span>
                 <span class="k">else</span> <span class="p">{},</span>
             <span class="p">)</span>
@@ -445,10 +483,10 @@
 
         <span class="c1"># Extract kwargs for DuckDB instance creation</span>
         <span class="n">connection</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;connection&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">vector_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vector_key&quot;</span><span class="p">,</span> <span class="s2">&quot;vector&quot;</span><span class="p">)</span>
-        <span class="n">id_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id_key&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">)</span>
-        <span class="n">text_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text_key&quot;</span><span class="p">,</span> <span class="s2">&quot;text&quot;</span><span class="p">)</span>
-        <span class="n">table_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;table_name&quot;</span><span class="p">,</span> <span class="s2">&quot;embeddings&quot;</span><span class="p">)</span>
+        <span class="n">vector_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vector_key&quot;</span><span class="p">,</span> <span class="n">DEFAULT_VECTOR_KEY</span><span class="p">)</span>
+        <span class="n">id_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id_key&quot;</span><span class="p">,</span> <span class="n">DEFAULT_ID_KEY</span><span class="p">)</span>
+        <span class="n">text_key</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;text_key&quot;</span><span class="p">,</span> <span class="n">DEFAULT_TEXT_KEY</span><span class="p">)</span>
+        <span class="n">table_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;table_name&quot;</span><span class="p">,</span> <span class="n">DEFAULT_TABLE_NAME</span><span class="p">)</span>
 
         <span class="c1"># Create an instance of DuckDB</span>
         <span class="n">instance</span> <span class="o">=</span> <span class="n">DuckDB</span><span class="p">(</span>
@@ -481,7 +519,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 24, 2024.
+          Last updated on May 25, 2024.
       </footer>
     </div>
   </div>

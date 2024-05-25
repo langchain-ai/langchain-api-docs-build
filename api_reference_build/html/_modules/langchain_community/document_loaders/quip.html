@@ -214,11 +214,10 @@
   <h1>Source code for langchain_community.document_loaders.quip</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">import</span> <span class="nn">xml.etree.cElementTree</span>
-<span class="kn">import</span> <span class="nn">xml.sax.saxutils</span>
+<span class="kn">import</span> <span class="nn">xml.etree.cElementTree</span>  <span class="c1"># OK: user-must-opt-in</span>
 <span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
-<span class="kn">from</span> <span class="nn">xml.etree.ElementTree</span> <span class="kn">import</span> <span class="n">ElementTree</span>
+<span class="kn">from</span> <span class="nn">xml.etree.ElementTree</span> <span class="kn">import</span> <span class="n">ElementTree</span>  <span class="c1"># OK: user-must-opt-in</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 
@@ -236,14 +235,20 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="QuipLoader.__init__"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.quip.QuipLoader.html#langchain_community.document_loaders.quip.QuipLoader.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">api_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">access_token</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">request_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">60</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">api_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">access_token</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">request_timeout</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">60</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">allow_dangerous_xml_parsing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Args:</span>
 <span class="sd">            api_url: https://platform.quip.com</span>
 <span class="sd">            access_token: token of access quip API. Please refer:</span>
-<span class="sd">            https://quip.com/dev/automation/documentation/current#section/Authentication/Get-Access-to-Quip&#39;s-APIs</span>
+<span class="sd">                https://quip.com/dev/automation/documentation/current#section/Authentication/Get-Access-to-Quip&#39;s-APIs</span>
 <span class="sd">            request_timeout: timeout of request, default 60s.</span>
+<span class="sd">            allow_dangerous_xml_parsing: Allow dangerous XML parsing, defaults to False</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">quip_api.quip</span> <span class="kn">import</span> <span class="n">QuipClient</span>
@@ -254,7 +259,18 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">quip_client</span> <span class="o">=</span> <span class="n">QuipClient</span><span class="p">(</span>
             <span class="n">access_token</span><span class="o">=</span><span class="n">access_token</span><span class="p">,</span> <span class="n">base_url</span><span class="o">=</span><span class="n">api_url</span><span class="p">,</span> <span class="n">request_timeout</span><span class="o">=</span><span class="n">request_timeout</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">allow_dangerous_xml_parsing</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The quip client uses the built-in XML parser which may cause&quot;</span>
+                <span class="s2">&quot;security issues when parsing XML data in some cases. &quot;</span>
+                <span class="s2">&quot;Please see &quot;</span>
+                <span class="s2">&quot;https://docs.python.org/3/library/xml.html#xml-vulnerabilities &quot;</span>
+                <span class="s2">&quot;For more information, set `allow_dangerous_xml_parsing` as True &quot;</span>
+                <span class="s2">&quot;if you are sure that your distribution of the standard library &quot;</span>
+                <span class="s2">&quot;is not vulnerable to XML vulnerabilities.&quot;</span>
+            <span class="p">)</span></div>
 
 <div class="viewcode-block" id="QuipLoader.load"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.quip.QuipLoader.html#langchain_community.document_loaders.quip.QuipLoader.load">[docs]</a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -451,7 +467,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 24, 2024.
+          Last updated on May 25, 2024.
       </footer>
     </div>
   </div>
