@@ -75,6 +75,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../astradb_api_reference.html">astradb</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../aws_api_reference.html">aws</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
         </li>
         <li class="nav-item">
@@ -156,6 +159,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../airbyte_api_reference.html">airbyte</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../anthropic_api_reference.html">anthropic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../astradb_api_reference.html">astradb</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../aws_api_reference.html">aws</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../cohere_api_reference.html">cohere</a>
@@ -1335,21 +1339,274 @@
 
 
 <div class="viewcode-block" id="ChatOpenAI"><a class="viewcode-back" href="../../../chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_together.chat_models.ChatOpenAI">[docs]</a><span class="k">class</span> <span class="nc">ChatOpenAI</span><span class="p">(</span><span class="n">BaseChatOpenAI</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;`OpenAI` Chat large language models API.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;OpenAI chat model integration.</span>
 
-<span class="sd">    To use, you should have the environment variable ``OPENAI_API_KEY``</span>
-<span class="sd">    set with your API key, or pass it as a named parameter to the constructor.</span>
+<span class="sd">    Setup:</span>
+<span class="sd">        Install ``langchain-openai`` and set environment variable ``OPENAI_API_KEY``.</span>
 
-<span class="sd">    Any parameters that are valid to be passed to the openai.create call can be passed</span>
-<span class="sd">    in, even if not explicitly saved on this class.</span>
+<span class="sd">        .. code-block:: bash</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">            pip install -U langchain-openai</span>
+<span class="sd">            export OPENAI_API_KEY=&quot;your-api-key&quot;</span>
+
+<span class="sd">    Key init args — completion params:</span>
+<span class="sd">        model: str</span>
+<span class="sd">            Name of OpenAI model to use.</span>
+<span class="sd">        temperature: float</span>
+<span class="sd">            Sampling temperature.</span>
+<span class="sd">        max_tokens: Optional[int]</span>
+<span class="sd">            Max number of tokens to generate.</span>
+<span class="sd">        logprobs: Optional[bool]</span>
+<span class="sd">            Whether to return logprobs.</span>
+<span class="sd">        stream_options: Dict</span>
+<span class="sd">            Configure streaming outputs, like whether to return token usage when</span>
+<span class="sd">            streaming (``{&quot;include_usage&quot;: True}``).</span>
+
+<span class="sd">    Key init args — client params:</span>
+<span class="sd">        timeout:</span>
+<span class="sd">            Timeout for requests.</span>
+<span class="sd">        max_retries:</span>
+<span class="sd">            Max number of retries.</span>
+<span class="sd">        api_key:</span>
+<span class="sd">            OpenAI API key. If not passed in will be read from env var OPENAI_API_KEY.</span>
+<span class="sd">        base_url:</span>
+<span class="sd">            Base URL for PAI requests. Only specify if using a proxy or service</span>
+<span class="sd">            emulator.</span>
+<span class="sd">        organization:</span>
+<span class="sd">            OpenAI organization ID. If not passed in will be read from env</span>
+<span class="sd">            var OPENAI_ORG_ID.</span>
+
+<span class="sd">    See full list of supported init args and their descriptions in the params section.</span>
+
+<span class="sd">    Instantiate:</span>
 <span class="sd">        .. code-block:: python</span>
 
 <span class="sd">            from langchain_openai import ChatOpenAI</span>
 
-<span class="sd">            model = ChatOpenAI(model=&quot;gpt-3.5-turbo&quot;)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">            llm = ChatOpenAI(</span>
+<span class="sd">                model=&quot;gpt-4o&quot;,</span>
+<span class="sd">                temperature=0,</span>
+<span class="sd">                max_tokens=None,</span>
+<span class="sd">                timeout=None,</span>
+<span class="sd">                max_retries=2,</span>
+<span class="sd">                # api_key=&quot;...&quot;,</span>
+<span class="sd">                # base_url=&quot;...&quot;,</span>
+<span class="sd">                # organization=&quot;...&quot;,</span>
+<span class="sd">                # other params...</span>
+<span class="sd">            )</span>
+
+<span class="sd">    **NOTE**: Any param which is not explicitly supported will be passed directly to the</span>
+<span class="sd">    ``openai.OpenAI.chat.completions.create(...)`` API every time to the model is</span>
+<span class="sd">    invoked. For example:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_openai import ChatOpenAI</span>
+<span class="sd">            import openai</span>
+
+<span class="sd">            ChatOpenAI(..., frequency_penalty=0.2).invoke(...)</span>
+
+<span class="sd">            # results in underlying API call of:</span>
+
+<span class="sd">            openai.OpenAI(..).chat.completions.create(..., frequency_penalty=0.2)</span>
+
+<span class="sd">            # which is also equivalent to:</span>
+
+<span class="sd">            ChatOpenAI(...).invoke(..., frequency_penalty=0.2)</span>
+
+<span class="sd">    Invoke:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            messages = [</span>
+<span class="sd">                (&quot;system&quot;, &quot;You are a helpful translator. Translate the user sentence to French.&quot;),</span>
+<span class="sd">                (&quot;human&quot;, &quot;I love programming.&quot;),</span>
+<span class="sd">            ]</span>
+<span class="sd">            llm.invoke(messages)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessage(content=&quot;J&#39;adore la programmation.&quot;, response_metadata={&#39;token_usage&#39;: {&#39;completion_tokens&#39;: 5, &#39;prompt_tokens&#39;: 31, &#39;total_tokens&#39;: 36}, &#39;model_name&#39;: &#39;gpt-4o&#39;, &#39;system_fingerprint&#39;: &#39;fp_43dfabdef1&#39;, &#39;finish_reason&#39;: &#39;stop&#39;, &#39;logprobs&#39;: None}, id=&#39;run-012cffe2-5d3d-424d-83b5-51c6d4a593d1-0&#39;, usage_metadata={&#39;input_tokens&#39;: 31, &#39;output_tokens&#39;: 5, &#39;total_tokens&#39;: 36})</span>
+
+<span class="sd">    Stream:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            for chunk in llm.stream(messages):</span>
+<span class="sd">                print(chunk)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessageChunk(content=&#39;&#39;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&#39;J&#39;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;&#39;adore&quot;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&#39; la&#39;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&#39; programmation&#39;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&#39;.&#39;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&#39;&#39;, response_metadata={&#39;finish_reason&#39;: &#39;stop&#39;}, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;)</span>
+<span class="sd">            AIMessageChunk(content=&#39;&#39;, id=&#39;run-9e1517e3-12bf-48f2-bb1b-2e824f7cd7b0&#39;, usage_metadata={&#39;input_tokens&#39;: 31, &#39;output_tokens&#39;: 5, &#39;total_tokens&#39;: 36})</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            stream = llm.stream(messages)</span>
+<span class="sd">            full = next(stream)</span>
+<span class="sd">            for chunk in stream:</span>
+<span class="sd">                full += chunk</span>
+<span class="sd">            full</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessageChunk(content=&quot;J&#39;adore la programmation.&quot;, response_metadata={&#39;finish_reason&#39;: &#39;stop&#39;}, id=&#39;run-bf917526-7f58-4683-84f7-36a6b671d140&#39;, usage_metadata={&#39;input_tokens&#39;: 31, &#39;output_tokens&#39;: 5, &#39;total_tokens&#39;: 36})</span>
+
+<span class="sd">    Async:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            await llm.ainvoke(messages)</span>
+
+<span class="sd">            # stream:</span>
+<span class="sd">            # async for chunk in (await llm.astream(messages))</span>
+
+<span class="sd">            # batch:</span>
+<span class="sd">            # await llm.abatch([messages])</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessage(content=&quot;J&#39;adore la programmation.&quot;, response_metadata={&#39;token_usage&#39;: {&#39;completion_tokens&#39;: 5, &#39;prompt_tokens&#39;: 31, &#39;total_tokens&#39;: 36}, &#39;model_name&#39;: &#39;gpt-4o&#39;, &#39;system_fingerprint&#39;: &#39;fp_43dfabdef1&#39;, &#39;finish_reason&#39;: &#39;stop&#39;, &#39;logprobs&#39;: None}, id=&#39;run-012cffe2-5d3d-424d-83b5-51c6d4a593d1-0&#39;, usage_metadata={&#39;input_tokens&#39;: 31, &#39;output_tokens&#39;: 5, &#39;total_tokens&#39;: 36})</span>
+
+<span class="sd">    Tool calling:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+<span class="sd">            class GetWeather(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Get the current weather in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                location: str = Field(..., description=&quot;The city and state, e.g. San Francisco, CA&quot;)</span>
+
+<span class="sd">            class GetPopulation(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Get the current population in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                location: str = Field(..., description=&quot;The city and state, e.g. San Francisco, CA&quot;)</span>
+
+<span class="sd">            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])</span>
+<span class="sd">            ai_msg = llm_with_tools.invoke(&quot;Which city is hotter today and which is bigger: LA or NY?&quot;)</span>
+<span class="sd">            ai_msg.tool_calls</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [{&#39;name&#39;: &#39;GetWeather&#39;,</span>
+<span class="sd">              &#39;args&#39;: {&#39;location&#39;: &#39;Los Angeles, CA&#39;},</span>
+<span class="sd">              &#39;id&#39;: &#39;call_6XswGD5Pqk8Tt5atYr7tfenU&#39;},</span>
+<span class="sd">             {&#39;name&#39;: &#39;GetWeather&#39;,</span>
+<span class="sd">              &#39;args&#39;: {&#39;location&#39;: &#39;New York, NY&#39;},</span>
+<span class="sd">              &#39;id&#39;: &#39;call_ZVL15vA8Y7kXqOy3dtmQgeCi&#39;},</span>
+<span class="sd">             {&#39;name&#39;: &#39;GetPopulation&#39;,</span>
+<span class="sd">              &#39;args&#39;: {&#39;location&#39;: &#39;Los Angeles, CA&#39;},</span>
+<span class="sd">              &#39;id&#39;: &#39;call_49CFW8zqC9W7mh7hbMLSIrXw&#39;},</span>
+<span class="sd">             {&#39;name&#39;: &#39;GetPopulation&#39;,</span>
+<span class="sd">              &#39;args&#39;: {&#39;location&#39;: &#39;New York, NY&#39;},</span>
+<span class="sd">              &#39;id&#39;: &#39;call_6ghfKxV264jEfe1mRIkS3PE7&#39;}]</span>
+
+<span class="sd">        See ``ChatOpenAI.bind_tools()`` method for more.</span>
+
+<span class="sd">    Structured output:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from typing import Optional</span>
+
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+<span class="sd">            class Joke(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Joke to tell user.&#39;&#39;&#39;</span>
+
+<span class="sd">                setup: str = Field(description=&quot;The setup of the joke&quot;)</span>
+<span class="sd">                punchline: str = Field(description=&quot;The punchline to the joke&quot;)</span>
+<span class="sd">                rating: Optional[int] = Field(description=&quot;How funny the joke is, from 1 to 10&quot;)</span>
+
+<span class="sd">            structured_llm = llm.with_structured_output(Joke)</span>
+<span class="sd">            structured_llm.invoke(&quot;Tell me a joke about cats&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            Joke(setup=&#39;Why was the cat sitting on the computer?&#39;, punchline=&#39;To keep an eye on the mouse!&#39;, rating=None)</span>
+
+<span class="sd">        See ``ChatOpenAI.with_structured_output()`` for more.</span>
+
+<span class="sd">    JSON mode:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            json_llm = llm.bind(response_format={&quot;type&quot;: &quot;json_object&quot;})</span>
+<span class="sd">            ai_msg = json_llm.invoke(&quot;Return a JSON object with key &#39;random_ints&#39; and a value of 10 random ints in [0-99]&quot;)</span>
+<span class="sd">            ai_msg.content</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            &#39;\\n{\\n  &quot;random_ints&quot;: [23, 87, 45, 12, 78, 34, 56, 90, 11, 67]\\n}&#39;</span>
+
+<span class="sd">    Image input:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            import base64</span>
+<span class="sd">            import httpx</span>
+<span class="sd">            from langchain_core.messages import HumanMessage</span>
+
+<span class="sd">            image_url = &quot;https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg&quot;</span>
+<span class="sd">            image_data = base64.b64encode(httpx.get(image_url).content).decode(&quot;utf-8&quot;)</span>
+<span class="sd">            message = HumanMessage(</span>
+<span class="sd">                content=[</span>
+<span class="sd">                    {&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;describe the weather in this image&quot;},</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;type&quot;: &quot;image_url&quot;,</span>
+<span class="sd">                        &quot;image_url&quot;: {&quot;url&quot;: f&quot;data:image/jpeg;base64,{image_data}&quot;},</span>
+<span class="sd">                    },</span>
+<span class="sd">                ],</span>
+<span class="sd">            )</span>
+<span class="sd">            ai_msg = llm.invoke([message])</span>
+<span class="sd">            ai_msg.content</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            &quot;The weather in the image appears to be clear and pleasant. The sky is mostly blue with scattered, light clouds, suggesting a sunny day with minimal cloud cover. There is no indication of rain or strong winds, and the overall scene looks bright and calm. The lush green grass and clear visibility further indicate good weather conditions.&quot;</span>
+
+<span class="sd">    Token usage:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            ai_msg = llm.invoke(messages)</span>
+<span class="sd">            ai_msg.usage_metadata</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {&#39;input_tokens&#39;: 28, &#39;output_tokens&#39;: 5, &#39;total_tokens&#39;: 33}</span>
+
+<span class="sd">    Logprobs:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            logprobs_llm = llm.bind(logprobs=True)</span>
+<span class="sd">            ai_msg = logprobs_llm.invoke(messages)</span>
+<span class="sd">            ai_msg.response_metadata[&quot;logprobs&quot;]</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {&#39;content&#39;: [{&#39;token&#39;: &#39;J&#39;, &#39;bytes&#39;: [74], &#39;logprob&#39;: -4.9617593e-06, &#39;top_logprobs&#39;: []},</span>
+<span class="sd">              {&#39;token&#39;: &quot;&#39;adore&quot;, &#39;bytes&#39;: [39, 97, 100, 111, 114, 101], &#39;logprob&#39;: -0.25202933, &#39;top_logprobs&#39;: []},</span>
+<span class="sd">              {&#39;token&#39;: &#39; la&#39;, &#39;bytes&#39;: [32, 108, 97], &#39;logprob&#39;: -0.20141791, &#39;top_logprobs&#39;: []},</span>
+<span class="sd">              {&#39;token&#39;: &#39; programmation&#39;, &#39;bytes&#39;: [32, 112, 114, 111, 103, 114, 97, 109, 109, 97, 116, 105, 111, 110], &#39;logprob&#39;: -1.9361265e-07, &#39;top_logprobs&#39;: []},</span>
+<span class="sd">              {&#39;token&#39;: &#39;.&#39;, &#39;bytes&#39;: [46], &#39;logprob&#39;: -1.2233183e-05, &#39;top_logprobs&#39;: []}]}</span>
+
+<span class="sd">    Response metadata</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            ai_msg = llm.invoke(messages)</span>
+<span class="sd">            ai_msg.response_metadata</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {&#39;token_usage&#39;: {&#39;completion_tokens&#39;: 5,</span>
+<span class="sd">              &#39;prompt_tokens&#39;: 28,</span>
+<span class="sd">              &#39;total_tokens&#39;: 33},</span>
+<span class="sd">             &#39;model_name&#39;: &#39;gpt-4o&#39;,</span>
+<span class="sd">             &#39;system_fingerprint&#39;: &#39;fp_319be4768e&#39;,</span>
+<span class="sd">             &#39;finish_reason&#39;: &#39;stop&#39;,</span>
+<span class="sd">             &#39;logprobs&#39;: None}</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">lc_secrets</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
@@ -1378,30 +1635,7 @@
 <div class="viewcode-block" id="ChatOpenAI.is_lc_serializable"><a class="viewcode-back" href="../../../chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_together.chat_models.ChatOpenAI.is_lc_serializable">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">is_lc_serializable</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether this model can be serialized by Langchain.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="kc">True</span></div>
-
-    <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set default stream_options.&quot;&quot;&quot;</span>
-        <span class="n">default_stream_options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;include_usage&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-        <span class="n">stream_options</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stream_options&quot;</span><span class="p">,</span> <span class="p">{})</span>
-        <span class="n">merged_stream_options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">default_stream_options</span><span class="p">,</span> <span class="o">**</span><span class="n">stream_options</span><span class="p">}</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream_options&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merged_stream_options</span>
-
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_astream</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set default stream_options.&quot;&quot;&quot;</span>
-        <span class="n">default_stream_options</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;include_usage&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-        <span class="n">stream_options</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stream_options&quot;</span><span class="p">,</span> <span class="p">{})</span>
-        <span class="n">merged_stream_options</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">default_stream_options</span><span class="p">,</span> <span class="o">**</span><span class="n">stream_options</span><span class="p">}</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream_options&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merged_stream_options</span>
-
-        <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_astream</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="n">chunk</span></div>
+        <span class="k">return</span> <span class="kc">True</span></div></div>
 
 
 <span class="k">def</span> <span class="nf">_is_pydantic_class</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
