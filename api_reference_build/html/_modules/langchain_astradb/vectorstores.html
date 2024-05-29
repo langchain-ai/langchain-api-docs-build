@@ -108,6 +108,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../ibm_api_reference.html">ibm</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../milvus_api_reference.html">milvus</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../mistralai_api_reference.html">mistralai</a>
         </li>
         <li class="nav-item">
@@ -164,6 +167,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../groq_api_reference.html">groq</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../huggingface_api_reference.html">huggingface</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../ibm_api_reference.html">ibm</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../milvus_api_reference.html">milvus</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../mistralai_api_reference.html">mistralai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../mongodb_api_reference.html">mongodb</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../nomic_api_reference.html">nomic</a>
@@ -370,6 +374,7 @@
         <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
             <span class="n">CollectionVectorServiceOptions</span>
         <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collection_embedding_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrapper around DataStax Astra DB for vector-store workloads.</span>
 
@@ -395,8 +400,9 @@
 <span class="sd">        Args:</span>
 <span class="sd">            embedding: the embeddings function or service to use.</span>
 <span class="sd">                This enables client-side embedding functions or calls to external</span>
-<span class="sd">                embedding providers. Only one of `embedding` or</span>
-<span class="sd">                `collection_vector_service_options` can be provided.</span>
+<span class="sd">                embedding providers. If `embedding` is provided, arguments</span>
+<span class="sd">                `collection_vector_service_options` and</span>
+<span class="sd">                `collection_embedding_api_key` cannot be provided.</span>
 <span class="sd">            collection_name: name of the Astra DB collection to create/use.</span>
 <span class="sd">            token: API token for Astra DB usage. If not provided, the environment</span>
 <span class="sd">                variable ASTRA_DB_APPLICATION_TOKEN is inspected.</span>
@@ -434,10 +440,16 @@
 <span class="sd">                (see docs.datastax.com/en/astra/astra-db-vector/api-reference/</span>
 <span class="sd">                data-api-commands.html#advanced-feature-indexing-clause-on-createcollection)</span>
 <span class="sd">            collection_vector_service_options: specifies the use of server-side</span>
-<span class="sd">                embeddings within Astra DB. Only one of `embedding` or</span>
-<span class="sd">                `collection_vector_service_options` can be provided.</span>
-<span class="sd">                NOTE: This feature is under current development.</span>
-
+<span class="sd">                embeddings within Astra DB. If passing this parameter, `embedding`</span>
+<span class="sd">                cannot be provided.</span>
+<span class="sd">            collection_embedding_api_key: for usage of server-side embeddings</span>
+<span class="sd">                within Astra DB, with this parameter one can supply an API Key</span>
+<span class="sd">                that will be passed to Astra DB with each data request.</span>
+<span class="sd">                This is useful when the service is configured for the collection,</span>
+<span class="sd">                but no corresponding secret is stored within</span>
+<span class="sd">                Astra&#39;s key management system.</span>
+<span class="sd">                This parameter cannot be provided without</span>
+<span class="sd">                specifying `collection_vector_service_options`.</span>
 
 <span class="sd">        Note:</span>
 <span class="sd">            For concurrency in synchronous :meth:`~add_texts`:, as a rule of thumb, on a</span>
@@ -456,7 +468,7 @@
 <span class="sd">            Remember you can pass concurrency settings to individual calls to</span>
 <span class="sd">            :meth:`~add_texts` and :meth:`~add_documents` as well.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Embedding and collection_vector_service_options are mutually exclusive,</span>
+        <span class="c1"># Embedding and the server-side embeddings are mutually exclusive,</span>
         <span class="c1"># as both specify how to produce embeddings</span>
         <span class="k">if</span> <span class="n">embedding</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">collection_vector_service_options</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -470,6 +482,15 @@
 <span class="s2">                    can be provided.&quot;</span>
             <span class="p">)</span>
 
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">collection_vector_service_options</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">collection_embedding_api_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;`collection_embedding_api_key` cannot be provided unless&quot;</span>
+                <span class="s2">&quot; `collection_vector_service_options` is also passed.&quot;</span>
+            <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding_dimension</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection_name</span> <span class="o">=</span> <span class="n">collection_name</span>
@@ -477,6 +498,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">api_endpoint</span> <span class="o">=</span> <span class="n">api_endpoint</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">namespace</span> <span class="o">=</span> <span class="n">namespace</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection_vector_service_options</span> <span class="o">=</span> <span class="n">collection_vector_service_options</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">collection_embedding_api_key</span> <span class="o">=</span> <span class="n">collection_embedding_api_key</span>
         <span class="c1"># Concurrency settings</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="n">DEFAULT_BATCH_SIZE</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_batch_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="p">(</span>
@@ -519,6 +541,7 @@
             <span class="n">requested_indexing_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">indexing_policy</span><span class="p">,</span>
             <span class="n">default_indexing_policy</span><span class="o">=</span><span class="n">DEFAULT_INDEXING_OPTIONS</span><span class="p">,</span>
             <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
+            <span class="n">collection_embedding_api_key</span><span class="o">=</span><span class="n">collection_embedding_api_key</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">astra_db</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">astra_db</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">async_astra_db</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_astra_db</span>
@@ -1889,7 +1912,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 28, 2024.
+          Last updated on May 29, 2024.
       </footer>
     </div>
   </div>
