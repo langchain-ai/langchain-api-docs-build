@@ -226,7 +226,8 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">BaseCallbackHandler</span>
-<span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">LLMResult</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span>
+<span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">LLMResult</span>
 
 <span class="n">MODEL_COST_PER_1K_TOKENS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="c1"># GPT-4o input</span>
@@ -432,19 +433,51 @@
 
 <div class="viewcode-block" id="OpenAICallbackHandler.on_llm_end"><a class="viewcode-back" href="../../../callbacks/langchain_community.callbacks.openai_info.OpenAICallbackHandler.html#langchain_community.callbacks.openai_info.OpenAICallbackHandler.on_llm_end">[docs]</a>    <span class="k">def</span> <span class="nf">on_llm_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">LLMResult</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Collect token usage.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
+        <span class="c1"># Check for usage_metadata (langchain-core &gt;= 0.2.2)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">generation</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+            <span class="n">generation</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">generation</span><span class="p">,</span> <span class="n">ChatGeneration</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="n">generation</span><span class="o">.</span><span class="n">message</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
+                    <span class="n">usage_metadata</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">usage_metadata</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">usage_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+                <span class="n">usage_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">usage_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">usage_metadata</span><span class="p">:</span>
+            <span class="n">token_usage</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">:</span> <span class="n">usage_metadata</span><span class="p">[</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">]}</span>
+            <span class="n">completion_tokens</span> <span class="o">=</span> <span class="n">usage_metadata</span><span class="p">[</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">]</span>
+            <span class="n">prompt_tokens</span> <span class="o">=</span> <span class="n">usage_metadata</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># model name (and therefore cost) is unavailable in</span>
+                <span class="c1"># streaming responses</span>
+                <span class="n">model_name</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">model_name</span> <span class="o">=</span> <span class="n">standardize_model_name</span><span class="p">(</span>
+                    <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                <span class="p">)</span>
 
-        <span class="k">if</span> <span class="s2">&quot;token_usage&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="p">:</span>
-            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">successful_requests</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
 
-        <span class="c1"># compute tokens and cost for this request</span>
-        <span class="n">token_usage</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="p">[</span><span class="s2">&quot;token_usage&quot;</span><span class="p">]</span>
-        <span class="n">completion_tokens</span> <span class="o">=</span> <span class="n">token_usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;completion_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">prompt_tokens</span> <span class="o">=</span> <span class="n">token_usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">model_name</span> <span class="o">=</span> <span class="n">standardize_model_name</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="k">if</span> <span class="s2">&quot;token_usage&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="p">:</span>
+                <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">successful_requests</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">return</span> <span class="kc">None</span>
+
+            <span class="c1"># compute tokens and cost for this request</span>
+            <span class="n">token_usage</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="p">[</span><span class="s2">&quot;token_usage&quot;</span><span class="p">]</span>
+            <span class="n">completion_tokens</span> <span class="o">=</span> <span class="n">token_usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;completion_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">prompt_tokens</span> <span class="o">=</span> <span class="n">token_usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">model_name</span> <span class="o">=</span> <span class="n">standardize_model_name</span><span class="p">(</span>
+                <span class="n">response</span><span class="o">.</span><span class="n">llm_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">model_name</span> <span class="ow">in</span> <span class="n">MODEL_COST_PER_1K_TOKENS</span><span class="p">:</span>
             <span class="n">completion_cost</span> <span class="o">=</span> <span class="n">get_openai_token_cost_for_model</span><span class="p">(</span>
                 <span class="n">model_name</span><span class="p">,</span> <span class="n">completion_tokens</span><span class="p">,</span> <span class="n">is_completion</span><span class="o">=</span><span class="kc">True</span>
@@ -475,7 +508,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 29, 2024.
+          Last updated on May 30, 2024.
       </footer>
     </div>
   </div>
