@@ -96,6 +96,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -152,6 +155,9 @@
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../voyageai_api_reference.html">voyageai</a>
         </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../weaviate_api_reference.html">weaviate</a>
+        </li>
         <li class="nav-item dropdown nav-more-item-dropdown">
           <a class="sk-nav-link nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Partner libs</a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdown">
@@ -166,6 +172,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../groq_api_reference.html">groq</a>
@@ -185,6 +192,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../upstage_api_reference.html">upstage</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../weaviate_api_reference.html">weaviate</a>
           </div>
         </li>
         <li class="nav-item">
@@ -220,16 +228,32 @@
       <div class="sk-page-content container-fluid body px-md-3" role="main">
         
   <h1>Source code for langchain_elasticsearch.cache</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">hashlib</span>
+<span></span><span class="kn">import</span> <span class="nn">base64</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">cached_property</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterable</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">Tuple</span><span class="p">,</span>
+<span class="p">)</span>
 
-<span class="kn">import</span> <span class="nn">elasticsearch</span>
-<span class="kn">from</span> <span class="nn">elasticsearch</span> <span class="kn">import</span> <span class="n">NotFoundError</span>
+<span class="kn">from</span> <span class="nn">elasticsearch</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Elasticsearch</span><span class="p">,</span>
+    <span class="n">exceptions</span><span class="p">,</span>
+    <span class="n">helpers</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">elasticsearch.helpers</span> <span class="kn">import</span> <span class="n">BulkIndexError</span>
 <span class="kn">from</span> <span class="nn">langchain_core.caches</span> <span class="kn">import</span> <span class="n">RETURN_VAL_TYPE</span><span class="p">,</span> <span class="n">BaseCache</span>
 <span class="kn">from</span> <span class="nn">langchain_core.load</span> <span class="kn">import</span> <span class="n">dumps</span><span class="p">,</span> <span class="n">loads</span>
+<span class="kn">from</span> <span class="nn">langchain_core.stores</span> <span class="kn">import</span> <span class="n">ByteStore</span>
 
 <span class="kn">from</span> <span class="nn">langchain_elasticsearch.client</span> <span class="kn">import</span> <span class="n">create_elasticsearch_client</span>
 
@@ -237,6 +261,22 @@
     <span class="kn">from</span> <span class="nn">elasticsearch</span> <span class="kn">import</span> <span class="n">Elasticsearch</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_manage_cache_index</span><span class="p">(</span>
+    <span class="n">es_client</span><span class="p">:</span> <span class="n">Elasticsearch</span><span class="p">,</span> <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mapping</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Write or update an index or alias according to the default mapping&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists_alias</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">index_name</span><span class="p">):</span>
+        <span class="n">es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">put_mapping</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;mappings&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index_name</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating new Elasticsearch index: </span><span class="si">{</span><span class="n">index_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="n">mapping</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">return</span> <span class="kc">False</span>
 
 
 <div class="viewcode-block" id="ElasticsearchCache"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchCache.html#langchain_elasticsearch.cache.ElasticsearchCache">[docs]</a><span class="k">class</span> <span class="nc">ElasticsearchCache</span><span class="p">(</span><span class="n">BaseCache</span><span class="p">):</span>
@@ -249,7 +289,6 @@
         <span class="n">store_input_params</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">es_connection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;Elasticsearch&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_cloud_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">es_user</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -259,8 +298,8 @@
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Initialize the Elasticsearch cache store by specifying the index/alias</span>
-<span class="sd">        to use and determining which additional information (like input, timestamp,</span>
-<span class="sd">        input parameters, and any other metadata) should be stored in the cache.</span>
+<span class="sd">        to use and determining which additional information (like input, input</span>
+<span class="sd">        parameters, and any other metadata) should be stored in the cache.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            index_name (str): The name of the index or the alias to use for the cache.</span>
@@ -274,7 +313,6 @@
 <span class="sd">            metadata (Optional[dict]): Additional metadata to store in the cache,</span>
 <span class="sd">                for filtering purposes. This must be JSON serializable in an</span>
 <span class="sd">                Elasticsearch document. Default to None.</span>
-<span class="sd">            es_connection: Optional pre-existing Elasticsearch connection.</span>
 <span class="sd">            es_url: URL of the Elasticsearch instance to connect to.</span>
 <span class="sd">            es_cloud_id: Cloud ID of the Elasticsearch instance to connect to.</span>
 <span class="sd">            es_user: Username to use when connecting to Elasticsearch.</span>
@@ -282,49 +320,24 @@
 <span class="sd">            es_api_key: API key to use when connecting to Elasticsearch.</span>
 <span class="sd">            es_params: Other parameters for the Elasticsearch client.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">es_connection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span> <span class="o">=</span> <span class="n">es_connection</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">ping</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="n">elasticsearch</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ConnectionError</span><span class="p">(</span>
-                    <span class="s2">&quot;Elasticsearch cluster is not available,&quot;</span>
-                    <span class="s2">&quot; not able to set up the cache&quot;</span>
-                <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">es_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">es_cloud_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span> <span class="o">=</span> <span class="n">create_elasticsearch_client</span><span class="p">(</span>
-                    <span class="n">url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
-                    <span class="n">cloud_id</span><span class="o">=</span><span class="n">es_cloud_id</span><span class="p">,</span>
-                    <span class="n">api_key</span><span class="o">=</span><span class="n">es_api_key</span><span class="p">,</span>
-                    <span class="n">username</span><span class="o">=</span><span class="n">es_user</span><span class="p">,</span>
-                    <span class="n">password</span><span class="o">=</span><span class="n">es_password</span><span class="p">,</span>
-                    <span class="n">params</span><span class="o">=</span><span class="n">es_params</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error connecting to Elasticsearch: </span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">raise</span> <span class="n">err</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;Either provide a pre-existing Elasticsearch connection, \</span>
-<span class="sd">                or valid credentials for creating a new connection.&quot;&quot;&quot;</span>
-            <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span> <span class="o">=</span> <span class="n">index_name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_store_input</span> <span class="o">=</span> <span class="n">store_input</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_store_input_params</span> <span class="o">=</span> <span class="n">store_input_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_manage_index</span><span class="p">()</span></div>
-
-    <span class="k">def</span> <span class="nf">_manage_index</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write or update an index or alias according to the default mapping&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_is_alias</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists_alias</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_is_alias</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">):</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating new Elasticsearch index: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping</span><span class="p">)</span>
-            <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">put_mapping</span><span class="p">(</span>
-            <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mapping</span><span class="p">[</span><span class="s2">&quot;mappings&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span> <span class="o">=</span> <span class="n">create_elasticsearch_client</span><span class="p">(</span>
+            <span class="n">url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
+            <span class="n">cloud_id</span><span class="o">=</span><span class="n">es_cloud_id</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">es_api_key</span><span class="p">,</span>
+            <span class="n">username</span><span class="o">=</span><span class="n">es_user</span><span class="p">,</span>
+            <span class="n">password</span><span class="o">=</span><span class="n">es_password</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">es_params</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_alias</span> <span class="o">=</span> <span class="n">_manage_cache_index</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mapping</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
     <span class="nd">@cached_property</span>
     <span class="k">def</span> <span class="nf">mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -369,7 +382,7 @@
                 <span class="n">record</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
                     <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="n">cache_key</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;llm_output&quot;</span><span class="p">]</span>
                 <span class="p">)</span>
-            <span class="k">except</span> <span class="n">NotFoundError</span><span class="p">:</span>
+            <span class="k">except</span> <span class="n">exceptions</span><span class="o">.</span><span class="n">NotFoundError</span><span class="p">:</span>
                 <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">loads</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;llm_output&quot;</span><span class="p">]]</span></div>
 
@@ -408,13 +421,231 @@
             <span class="n">refresh</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">wait_for_completion</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache">[docs]</a><span class="k">class</span> <span class="nc">ElasticsearchEmbeddingsCache</span><span class="p">(</span><span class="n">ByteStore</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;An Elasticsearch store for caching embeddings.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.__init__"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">store_input</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">namespace</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">maximum_duplicates_allowed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">es_url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">es_cloud_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">es_user</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">es_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">es_password</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">es_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the Elasticsearch cache store by specifying the index/alias</span>
+<span class="sd">        to use and determining which additional information (like input, input</span>
+<span class="sd">        parameters, and any other metadata) should be stored in the cache.</span>
+<span class="sd">        Provide a namespace to organize the cache.</span>
+
+
+<span class="sd">        Args:</span>
+<span class="sd">            index_name (str): The name of the index or the alias to use for the cache.</span>
+<span class="sd">                If they do not exist an index is created,</span>
+<span class="sd">                according to the default mapping defined by the `mapping` property.</span>
+<span class="sd">            store_input (bool): Whether to store the input in the cache.</span>
+<span class="sd">                Default to True.</span>
+<span class="sd">            metadata (Optional[dict]): Additional metadata to store in the cache,</span>
+<span class="sd">                for filtering purposes. This must be JSON serializable in an</span>
+<span class="sd">                Elasticsearch document. Default to None.</span>
+<span class="sd">            namespace (Optional[str]): A namespace to use for the cache.</span>
+<span class="sd">            maximum_duplicates_allowed (int): Defines the maximum number of duplicate</span>
+<span class="sd">                keys permitted. Must be used in scenarios where the same key appears</span>
+<span class="sd">                across multiple indices that share the same alias. Default to 1.</span>
+<span class="sd">            es_url: URL of the Elasticsearch instance to connect to.</span>
+<span class="sd">            es_cloud_id: Cloud ID of the Elasticsearch instance to connect to.</span>
+<span class="sd">            es_user: Username to use when connecting to Elasticsearch.</span>
+<span class="sd">            es_password: Password to use when connecting to Elasticsearch.</span>
+<span class="sd">            es_api_key: API key to use when connecting to Elasticsearch.</span>
+<span class="sd">            es_params: Other parameters for the Elasticsearch client.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_namespace</span> <span class="o">=</span> <span class="n">namespace</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maximum_duplicates_allowed</span> <span class="o">=</span> <span class="n">maximum_duplicates_allowed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span> <span class="o">=</span> <span class="n">index_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store_input</span> <span class="o">=</span> <span class="n">store_input</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="o">=</span> <span class="n">metadata</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span> <span class="o">=</span> <span class="n">create_elasticsearch_client</span><span class="p">(</span>
+            <span class="n">url</span><span class="o">=</span><span class="n">es_url</span><span class="p">,</span>
+            <span class="n">cloud_id</span><span class="o">=</span><span class="n">es_cloud_id</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">es_api_key</span><span class="p">,</span>
+            <span class="n">username</span><span class="o">=</span><span class="n">es_user</span><span class="p">,</span>
+            <span class="n">password</span><span class="o">=</span><span class="n">es_password</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">es_params</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_is_alias</span> <span class="o">=</span> <span class="n">_manage_cache_index</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mapping</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.encode_vector"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.encode_vector">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">encode_vector</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Encode the vector data as bytes to as a base64 string.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.decode_vector"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.decode_vector">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">decode_vector</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decode the base64 string to vector data as bytes.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the default mapping for the index.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;mappings&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;text_input&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span> <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
+                    <span class="s2">&quot;vector_dump&quot;</span><span class="p">:</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;binary&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;doc_values&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">},</span>
+                    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">},</span>
+                    <span class="s2">&quot;namespace&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;keyword&quot;</span><span class="p">},</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a key for the store.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">md5</span><span class="p">(((</span><span class="bp">self</span><span class="o">.</span><span class="n">_namespace</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="o">+</span> <span class="n">input_text</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_deduplicate_hits</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">hits</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Collapse the results from a search query with multiple indices</span>
+<span class="sd">        returning only the latest version of the documents</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">map_ids</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="n">hits</span><span class="p">,</span>
+            <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">fromisoformat</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;timestamp&quot;</span><span class="p">]),</span>
+            <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">vector_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">vector_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">map_ids</span><span class="p">:</span>
+                <span class="n">map_ids</span><span class="p">[</span><span class="n">vector_id</span><span class="p">]</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">decode_vector</span><span class="p">(</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;vector_dump&quot;</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">map_ids</span>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.mget"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.mget">[docs]</a>    <span class="k">def</span> <span class="nf">mget</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the values associated with the given keys.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="n">cache_keys</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_key</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_alias</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                    <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span>
+                    <span class="n">body</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;ids&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;values&quot;</span><span class="p">:</span> <span class="n">cache_keys</span><span class="p">}},</span>
+                        <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">cache_keys</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maximum_duplicates_allowed</span><span class="p">,</span>
+                    <span class="p">},</span>
+                    <span class="n">source_includes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;vector_dump&quot;</span><span class="p">,</span> <span class="s2">&quot;timestamp&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+
+            <span class="k">except</span> <span class="n">exceptions</span><span class="o">.</span><span class="n">BadRequestError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="s2">&quot;window too large&quot;</span> <span class="ow">in</span> <span class="p">(</span>
+                    <span class="n">e</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;root_cause&quot;</span><span class="p">,</span> <span class="p">[{}])[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reason&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;Exceeded the maximum window size, &quot;</span>
+                        <span class="s2">&quot;Reduce the duplicates manually or lower &quot;</span>
+                        <span class="s2">&quot;`maximum_duplicate_allowed.`&quot;</span>
+                    <span class="p">)</span>
+                    <span class="k">raise</span> <span class="n">e</span>
+
+            <span class="n">total_hits</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="s2">&quot;hits&quot;</span><span class="p">][</span><span class="s2">&quot;total&quot;</span><span class="p">][</span><span class="s2">&quot;value&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maximum_duplicates_allowed</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">total_hits</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">cache_keys</span><span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Deduplicating, found </span><span class="si">{</span><span class="n">total_hits</span><span class="si">}</span><span class="s2"> hits for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">cache_keys</span><span class="p">)</span><span class="si">}</span><span class="s2"> keys&quot;</span>
+                <span class="p">)</span>
+                <span class="n">map_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_deduplicate_hits</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="s2">&quot;hits&quot;</span><span class="p">][</span><span class="s2">&quot;hits&quot;</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">map_ids</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">r</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]:</span> <span class="bp">self</span><span class="o">.</span><span class="n">decode_vector</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;vector_dump&quot;</span><span class="p">])</span>
+                    <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="s2">&quot;hits&quot;</span><span class="p">][</span><span class="s2">&quot;hits&quot;</span><span class="p">]</span>
+                <span class="p">}</span>
+
+            <span class="k">return</span> <span class="p">[</span><span class="n">map_ids</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">cache_keys</span><span class="p">]</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">records</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="o">.</span><span class="n">mget</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span> <span class="n">ids</span><span class="o">=</span><span class="n">cache_keys</span><span class="p">,</span> <span class="n">source_includes</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;vector_dump&quot;</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">decode_vector</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="s2">&quot;_source&quot;</span><span class="p">][</span><span class="s2">&quot;vector_dump&quot;</span><span class="p">])</span> <span class="k">if</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;found&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span>
+                <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">records</span><span class="p">[</span><span class="s2">&quot;docs&quot;</span><span class="p">]</span>
+            <span class="p">]</span></div>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.build_document"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.build_document">[docs]</a>    <span class="k">def</span> <span class="nf">build_document</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text_input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">vector</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the Elasticsearch document for storing a single embedding&quot;&quot;&quot;</span>
+        <span class="n">body</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;vector_dump&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">encode_vector</span><span class="p">(</span><span class="n">vector</span><span class="p">),</span>
+            <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">body</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metadata</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_store_input</span><span class="p">:</span>
+            <span class="n">body</span><span class="p">[</span><span class="s2">&quot;text_input&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">text_input</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_namespace</span><span class="p">:</span>
+            <span class="n">body</span><span class="p">[</span><span class="s2">&quot;namespace&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_namespace</span>
+        <span class="k">return</span> <span class="n">body</span></div>
+
+    <span class="k">def</span> <span class="nf">_bulk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">helpers</span><span class="o">.</span><span class="n">bulk</span><span class="p">(</span>
+                <span class="n">client</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_es_client</span><span class="p">,</span>
+                <span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">,</span>
+                <span class="n">index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span>
+                <span class="n">require_alias</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_is_alias</span><span class="p">,</span>
+                <span class="n">refresh</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">BulkIndexError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">first_error</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">errors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;First bulk error reason: </span><span class="si">{</span><span class="n">first_error</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;reason&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">e</span>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.mset"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.mset">[docs]</a>    <span class="k">def</span> <span class="nf">mset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key_value_pairs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the values for the given keys.&quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;_op_type&quot;</span><span class="p">:</span> <span class="s2">&quot;index&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key</span><span class="p">(</span><span class="n">key</span><span class="p">),</span>
+                <span class="s2">&quot;_source&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">build_document</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">vector</span><span class="p">),</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">vector</span> <span class="ow">in</span> <span class="n">key_value_pairs</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bulk</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.mdelete"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.mdelete">[docs]</a>    <span class="k">def</span> <span class="nf">mdelete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Delete the given keys and their associated values.&quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">({</span><span class="s2">&quot;_op_type&quot;</span><span class="p">:</span> <span class="s2">&quot;delete&quot;</span><span class="p">,</span> <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_key</span><span class="p">(</span><span class="n">key</span><span class="p">)}</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bulk</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ElasticsearchEmbeddingsCache.yield_keys"><a class="viewcode-back" href="../../cache/langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.html#langchain_elasticsearch.cache.ElasticsearchEmbeddingsCache.yield_keys">[docs]</a>    <span class="k">def</span> <span class="nf">yield_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get an iterator over keys that match the given prefix.&quot;&quot;&quot;</span>
+        <span class="c1"># TODO This method is not currently used by CacheBackedEmbeddings,</span>
+        <span class="c1">#  we can leave it blank. It could be implemented with ES &quot;index_prefixes&quot;,</span>
+        <span class="c1">#  but they are limited and expensive.</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on May 30, 2024.
+          Last updated on May 31, 2024.
       </footer>
     </div>
   </div>
