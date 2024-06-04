@@ -348,23 +348,29 @@
                     <span class="s2">&quot;begin utl_http.set_proxy(:proxy); end;&quot;</span><span class="p">,</span> <span class="n">proxy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">proxy</span>
                 <span class="p">)</span>
 
-            <span class="k">for</span> <span class="n">text</span> <span class="ow">in</span> <span class="n">texts</span><span class="p">:</span>
-                <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
-                    <span class="s2">&quot;select t.* &quot;</span>
-                    <span class="o">+</span> <span class="s2">&quot;from dbms_vector_chain.utl_to_embeddings(:content, &quot;</span>
-                    <span class="o">+</span> <span class="s2">&quot;json(:params)) t&quot;</span><span class="p">,</span>
-                    <span class="n">content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span>
-                    <span class="n">params</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">),</span>
-                <span class="p">)</span>
+            <span class="n">chunks</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+                <span class="n">chunk</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;chunk_id&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span> <span class="s2">&quot;chunk_data&quot;</span><span class="p">:</span> <span class="n">text</span><span class="p">}</span>
+                <span class="n">chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">chunk</span><span class="p">))</span>
 
-                <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">cursor</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">row</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">rdata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                        <span class="c1"># dereference string as array</span>
-                        <span class="n">vec</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">rdata</span><span class="p">[</span><span class="s2">&quot;embed_vector&quot;</span><span class="p">])</span>
-                        <span class="n">embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
+            <span class="n">vector_array_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">gettype</span><span class="p">(</span><span class="s2">&quot;SYS.VECTOR_ARRAY_T&quot;</span><span class="p">)</span>
+            <span class="n">inputs</span> <span class="o">=</span> <span class="n">vector_array_type</span><span class="o">.</span><span class="n">newobject</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+                <span class="s2">&quot;select t.* &quot;</span>
+                <span class="o">+</span> <span class="s2">&quot;from dbms_vector_chain.utl_to_embeddings(:content, &quot;</span>
+                <span class="o">+</span> <span class="s2">&quot;json(:params)) t&quot;</span><span class="p">,</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">),</span>
+            <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">cursor</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">row</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">rdata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                    <span class="c1"># dereference string as array</span>
+                    <span class="n">vec</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">rdata</span><span class="p">[</span><span class="s2">&quot;embed_vector&quot;</span><span class="p">])</span>
+                    <span class="n">embeddings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
 
             <span class="n">cursor</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">embeddings</span>
@@ -389,19 +395,26 @@
 <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd"># A sample unit test.</span>
 
-<span class="sd">&#39;&#39;&#39; get the Oracle connection &#39;&#39;&#39;</span>
+<span class="sd">import oracledb</span>
+<span class="sd"># get the Oracle connection </span>
 <span class="sd">conn = oracledb.connect(</span>
-<span class="sd">    user=&quot;&quot;,</span>
-<span class="sd">    password=&quot;&quot;,</span>
-<span class="sd">    dsn=&quot;&quot;)</span>
+<span class="sd">    user=&quot;&lt;user&gt;&quot;,</span>
+<span class="sd">    password=&quot;&lt;password&gt;&quot;,</span>
+<span class="sd">    dsn=&quot;&lt;hostname&gt;/&lt;service_name&gt;&quot;,</span>
+<span class="sd">)</span>
 <span class="sd">print(&quot;Oracle connection is established...&quot;)</span>
 
-<span class="sd">&#39;&#39;&#39; params &#39;&#39;&#39;</span>
-<span class="sd">embedder_params = {&quot;provider&quot;:&quot;database&quot;, &quot;model&quot;:&quot;demo_model&quot;}</span>
+<span class="sd"># params </span>
+<span class="sd">embedder_params = {&quot;provider&quot;: &quot;database&quot;, &quot;model&quot;: &quot;demo_model&quot;}</span>
 <span class="sd">proxy = &quot;&quot;</span>
 
-<span class="sd">&#39;&#39;&#39; instance &#39;&#39;&#39;</span>
+<span class="sd"># instance</span>
 <span class="sd">embedder = OracleEmbeddings(conn=conn, params=embedder_params, proxy=proxy)</span>
+
+<span class="sd">docs = [&quot;hello world!&quot;, &quot;hi everyone!&quot;, &quot;greetings!&quot;]</span>
+<span class="sd">embeds = embedder.embed_documents(docs)</span>
+<span class="sd">print(f&quot;Total Embeddings: {len(embeds)}&quot;)</span>
+<span class="sd">print(f&quot;Embedding generated by OracleEmbeddings: {embeds[0]}\n&quot;)</span>
 
 <span class="sd">embed = embedder.embed_query(&quot;Hello World!&quot;)</span>
 <span class="sd">print(f&quot;Embedding generated by OracleEmbeddings: {embed}&quot;)</span>
@@ -416,7 +429,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 03, 2024.
+          Last updated on Jun 04, 2024.
       </footer>
     </div>
   </div>

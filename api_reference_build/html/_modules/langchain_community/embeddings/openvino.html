@@ -440,9 +440,20 @@
             <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">sentences</span><span class="p">),</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Batches&quot;</span><span class="p">,</span> <span class="n">disable</span><span class="o">=</span><span class="ow">not</span> <span class="n">show_progress_bar</span>
         <span class="p">):</span>
             <span class="n">sentences_batch</span> <span class="o">=</span> <span class="n">sentences_sorted</span><span class="p">[</span><span class="n">start_index</span> <span class="p">:</span> <span class="n">start_index</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span>
-            <span class="n">features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span>
-                <span class="n">sentences_batch</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span>
-            <span class="p">)</span>
+
+            <span class="n">length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ov_model</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">inputs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get_partial_shape</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">length</span><span class="o">.</span><span class="n">is_dynamic</span><span class="p">:</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span>
+                    <span class="n">sentences_batch</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tokenizer</span><span class="p">(</span>
+                    <span class="n">sentences_batch</span><span class="p">,</span>
+                    <span class="n">padding</span><span class="o">=</span><span class="s2">&quot;max_length&quot;</span><span class="p">,</span>
+                    <span class="n">max_length</span><span class="o">=</span><span class="n">length</span><span class="o">.</span><span class="n">get_length</span><span class="p">(),</span>
+                    <span class="n">truncation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="n">return_tensors</span><span class="o">=</span><span class="s2">&quot;pt&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
 
             <span class="n">out_features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ov_model</span><span class="p">(</span><span class="o">**</span><span class="n">features</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">mean_pooling</span><span class="p">:</span>
@@ -577,7 +588,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 03, 2024.
+          Last updated on Jun 04, 2024.
       </footer>
     </div>
   </div>

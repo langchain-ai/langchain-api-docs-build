@@ -279,7 +279,7 @@
 <span class="n">RetrieverOutputLike</span> <span class="o">=</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">RetrieverOutput</span><span class="p">]</span>
 
 
-<div class="viewcode-block" id="BaseRetriever"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.redis.base.BaseRetriever">[docs]</a><span class="k">class</span> <span class="nc">BaseRetriever</span><span class="p">(</span><span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">RetrieverInput</span><span class="p">,</span> <span class="n">RetrieverOutput</span><span class="p">],</span> <span class="n">ABC</span><span class="p">):</span>
+<div class="viewcode-block" id="BaseRetriever"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.llm_rails.BaseRetriever">[docs]</a><span class="k">class</span> <span class="nc">BaseRetriever</span><span class="p">(</span><span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">RetrieverInput</span><span class="p">,</span> <span class="n">RetrieverOutput</span><span class="p">],</span> <span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for a Document retrieval system.</span>
 
 
@@ -399,7 +399,7 @@
             <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">parameters</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="s2">&quot;query&quot;</span><span class="p">,</span> <span class="s2">&quot;run_manager&quot;</span><span class="p">})</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="BaseRetriever.invoke"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.redis.base.BaseRetriever.invoke">[docs]</a>    <span class="k">def</span> <span class="nf">invoke</span><span class="p">(</span>
+<div class="viewcode-block" id="BaseRetriever.invoke"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.llm_rails.BaseRetriever.invoke">[docs]</a>    <span class="k">def</span> <span class="nf">invoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Invoke the retriever to get relevant documents.</span>
@@ -420,17 +420,42 @@
 
 <span class="sd">            retriever.invoke(&quot;query&quot;)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_relevant_documents</span><span class="p">(</span>
-            <span class="nb">input</span><span class="p">,</span>
-            <span class="n">callbacks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
-            <span class="n">tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
-            <span class="n">run_name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="n">CallbackManager</span>
 
-<div class="viewcode-block" id="BaseRetriever.ainvoke"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.redis.base.BaseRetriever.ainvoke">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke</span><span class="p">(</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">CallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
+            <span class="kc">None</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verbose&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="n">inheritable_tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
+            <span class="n">local_tags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
+            <span class="n">inheritable_metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
+            <span class="n">local_metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">run_manager</span> <span class="o">=</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_retriever_start</span><span class="p">(</span>
+            <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+            <span class="nb">input</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expects_other_args</span> <span class="k">else</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_new_arg_supported</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_relevant_documents</span><span class="p">(</span>
+                    <span class="nb">input</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_relevant_documents</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">e</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_end</span><span class="p">(</span>
+                <span class="n">result</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span></div>
+
+<div class="viewcode-block" id="BaseRetriever.ainvoke"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.llm_rails.BaseRetriever.ainvoke">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -454,15 +479,40 @@
 
 <span class="sd">            await retriever.ainvoke(&quot;query&quot;)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="n">AsyncCallbackManager</span>
+
         <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aget_relevant_documents</span><span class="p">(</span>
+        <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">AsyncCallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+            <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
+            <span class="kc">None</span><span class="p">,</span>
+            <span class="n">verbose</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verbose&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="n">inheritable_tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
+            <span class="n">local_tags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
+            <span class="n">inheritable_metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
+            <span class="n">local_metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">run_manager</span> <span class="o">=</span> <span class="k">await</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_retriever_start</span><span class="p">(</span>
+            <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
             <span class="nb">input</span><span class="p">,</span>
-            <span class="n">callbacks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
-            <span class="n">tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
-            <span class="n">run_name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+            <span class="n">name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expects_other_args</span> <span class="k">else</span> <span class="p">{}</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_new_arg_supported</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_relevant_documents</span><span class="p">(</span>
+                    <span class="nb">input</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_relevant_documents</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">e</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_end</span><span class="p">(</span>
+                <span class="n">result</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">result</span></div>
 
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">_get_relevant_documents</span><span class="p">(</span>
@@ -493,7 +543,7 @@
             <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_sync</span><span class="p">(),</span>
         <span class="p">)</span>
 
-<div class="viewcode-block" id="BaseRetriever.get_relevant_documents"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.redis.base.BaseRetriever.get_relevant_documents">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.46&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;invoke&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">)</span>
+<div class="viewcode-block" id="BaseRetriever.get_relevant_documents"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.llm_rails.BaseRetriever.get_relevant_documents">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.46&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;invoke&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">get_relevant_documents</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -523,41 +573,18 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of relevant documents</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="n">CallbackManager</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">callbacks</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">callbacks</span>
+        <span class="k">if</span> <span class="n">tags</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tags</span>
+        <span class="k">if</span> <span class="n">metadata</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span>
+        <span class="k">if</span> <span class="n">run_name</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;run_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_name</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
-        <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">CallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
-            <span class="n">callbacks</span><span class="p">,</span>
-            <span class="kc">None</span><span class="p">,</span>
-            <span class="n">verbose</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verbose&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-            <span class="n">inheritable_tags</span><span class="o">=</span><span class="n">tags</span><span class="p">,</span>
-            <span class="n">local_tags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
-            <span class="n">inheritable_metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
-            <span class="n">local_metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">run_manager</span> <span class="o">=</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_retriever_start</span><span class="p">(</span>
-            <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
-            <span class="n">query</span><span class="p">,</span>
-            <span class="n">name</span><span class="o">=</span><span class="n">run_name</span><span class="p">,</span>
-            <span class="n">run_id</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expects_other_args</span> <span class="k">else</span> <span class="p">{}</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_new_arg_supported</span><span class="p">:</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_relevant_documents</span><span class="p">(</span>
-                    <span class="n">query</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_relevant_documents</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">e</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_end</span><span class="p">(</span>
-                <span class="n">result</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">result</span></div>
-
-<div class="viewcode-block" id="BaseRetriever.aget_relevant_documents"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.redis.base.BaseRetriever.aget_relevant_documents">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.46&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;ainvoke&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">)</span>
+<div class="viewcode-block" id="BaseRetriever.aget_relevant_documents"><a class="viewcode-back" href="../../retrievers/langchain_core.retrievers.BaseRetriever.html#langchain_community.vectorstores.llm_rails.BaseRetriever.aget_relevant_documents">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.46&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;ainvoke&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">)</span>
     <span class="k">async</span> <span class="k">def</span> <span class="nf">aget_relevant_documents</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -587,46 +614,23 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            List of relevant documents</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="n">AsyncCallbackManager</span>
-
-        <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">AsyncCallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
-            <span class="n">callbacks</span><span class="p">,</span>
-            <span class="kc">None</span><span class="p">,</span>
-            <span class="n">verbose</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;verbose&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-            <span class="n">inheritable_tags</span><span class="o">=</span><span class="n">tags</span><span class="p">,</span>
-            <span class="n">local_tags</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
-            <span class="n">inheritable_metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
-            <span class="n">local_metadata</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">run_manager</span> <span class="o">=</span> <span class="k">await</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_retriever_start</span><span class="p">(</span>
-            <span class="n">dumpd</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
-            <span class="n">query</span><span class="p">,</span>
-            <span class="n">name</span><span class="o">=</span><span class="n">run_name</span><span class="p">,</span>
-            <span class="n">run_id</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">_kwargs</span> <span class="o">=</span> <span class="n">kwargs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_expects_other_args</span> <span class="k">else</span> <span class="p">{}</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_new_arg_supported</span><span class="p">:</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_relevant_documents</span><span class="p">(</span>
-                    <span class="n">query</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_relevant_documents</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">e</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_retriever_end</span><span class="p">(</span>
-                <span class="n">result</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">result</span></div></div>
+        <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">callbacks</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">callbacks</span>
+        <span class="k">if</span> <span class="n">tags</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tags</span>
+        <span class="k">if</span> <span class="n">metadata</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span>
+        <span class="k">if</span> <span class="n">run_name</span><span class="p">:</span>
+            <span class="n">config</span><span class="p">[</span><span class="s2">&quot;run_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_name</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
 </pre></div>
 
       </div>
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 03, 2024.
+          Last updated on Jun 04, 2024.
       </footer>
     </div>
   </div>
