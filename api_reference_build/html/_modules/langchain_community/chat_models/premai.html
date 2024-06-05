@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_community.chat_models.premai &mdash; 🦜🔗 LangChain 0.2.1</title>
+  <title>langchain_community.chat_models.premai &mdash; 🦜🔗 LangChain 0.2.2</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_community/chat_models/premai.html" />
 
@@ -233,6 +233,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -334,7 +335,18 @@
                     <span class="n">text</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">ChatMessage</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="n">role</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">)</span>
                 <span class="p">)</span>
             <span class="p">)</span>
-    <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">document_chunks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span>
+            <span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">,</span>
+            <span class="n">llm_output</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;document_chunks&quot;</span><span class="p">:</span> <span class="p">[</span>
+                    <span class="n">chunk</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">document_chunks</span>
+                <span class="p">]</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="n">generations</span><span class="p">,</span> <span class="n">llm_output</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;document_chunks&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
 
 
 <span class="k">def</span> <span class="nf">_convert_delta_response_to_message_chunk</span><span class="p">(</span>
@@ -348,10 +360,6 @@
     <span class="n">role</span> <span class="o">=</span> <span class="n">_delta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
     <span class="n">content</span> <span class="o">=</span> <span class="n">_delta</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
     <span class="n">additional_kwargs</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
-
-    <span class="k">if</span> <span class="n">role</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">ChatPremAPIError</span><span class="p">(</span><span class="s2">&quot;Role can not be None. Please check the response&quot;</span><span class="p">)</span>
-
     <span class="n">finish_reasons</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">finish_reason</span>
 
     <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;user&quot;</span> <span class="ow">or</span> <span class="n">default_class</span> <span class="o">==</span> <span class="n">HumanMessageChunk</span><span class="p">:</span>
@@ -415,16 +423,8 @@
 <span class="sd">    If model name is other than default model then it will override the calls </span>
 <span class="sd">    from the model deployed from launchpad.&quot;&quot;&quot;</span>
 
-    <span class="n">session_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;The ID of the session to use. It helps to track the chat history.&quot;&quot;&quot;</span>
-
     <span class="n">temperature</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Model temperature. Value should be &gt;= 0 and &lt;= 1.0&quot;&quot;&quot;</span>
-
-    <span class="n">top_p</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;top_p adjusts the number of choices for each predicted tokens based on</span>
-<span class="sd">        cumulative probabilities. Value should be ranging between 0.0 and 1.0. </span>
-<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">max_tokens</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The maximum number of tokens to generate&quot;&quot;&quot;</span>
@@ -439,29 +439,13 @@
 <span class="sd">    Changing the system prompt would override the default system prompt.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">repositories</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add valid repository ids. This will be overriding existing connected </span>
+<span class="sd">    repositories (if any) and will use RAG with the connected repos. </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="n">streaming</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to stream the responses or not.&quot;&quot;&quot;</span>
-
-    <span class="n">tools</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;A list of tools the model may call. Currently, only functions are </span>
-<span class="sd">    supported as a tool&quot;&quot;&quot;</span>
-
-    <span class="n">frequency_penalty</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Number between -2.0 and 2.0. Positive values penalize new tokens based&quot;&quot;&quot;</span>
-
-    <span class="n">presence_penalty</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Number between -2.0 and 2.0. Positive values penalize new tokens based </span>
-<span class="sd">    on whether they appear in the text so far.&quot;&quot;&quot;</span>
-
-    <span class="n">logit_bias</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;JSON object that maps tokens to an associated bias value from -100 to 100.&quot;&quot;&quot;</span>
-
-    <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Up to 4 sequences where the API will stop generating further tokens.&quot;&quot;&quot;</span>
-
-    <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This feature is in Beta. If specified, our system will make a best effort </span>
-<span class="sd">    to sample deterministically.&quot;&quot;&quot;</span>
 
     <span class="n">client</span><span class="p">:</span> <span class="n">Any</span>
 
@@ -498,21 +482,34 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_default_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="c1"># FIXME: n and stop is not supported, so hardcoding to current default value</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
             <span class="s2">&quot;system_prompt&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">system_prompt</span><span class="p">,</span>
-            <span class="s2">&quot;top_p&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">top_p</span><span class="p">,</span>
             <span class="s2">&quot;temperature&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">,</span>
-            <span class="s2">&quot;logit_bias&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">logit_bias</span><span class="p">,</span>
             <span class="s2">&quot;max_tokens&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_tokens</span><span class="p">,</span>
-            <span class="s2">&quot;presence_penalty&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">presence_penalty</span><span class="p">,</span>
-            <span class="s2">&quot;frequency_penalty&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">frequency_penalty</span><span class="p">,</span>
-            <span class="s2">&quot;seed&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
-            <span class="s2">&quot;stop&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;repositories&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">repositories</span><span class="p">,</span>
         <span class="p">}</span>
 
     <span class="k">def</span> <span class="nf">_get_all_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">kwargs_to_ignore</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;top_p&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;tools&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;frequency_penalty&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;presence_penalty&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;logit_bias&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;stop&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;seed&quot;</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="n">keys_to_remove</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">kwargs_to_ignore</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;WARNING: Parameter </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> is not supported in kwargs.&quot;</span><span class="p">)</span>
+                <span class="n">keys_to_remove</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys_to_remove</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
         <span class="n">all_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
             <span class="k">if</span> <span class="n">all_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">all_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
@@ -528,7 +525,6 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
         <span class="n">system_prompt</span><span class="p">,</span> <span class="n">messages_to_pass</span> <span class="o">=</span> <span class="n">_messages_to_prompt_dict</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
 
-        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop</span>
         <span class="k">if</span> <span class="n">system_prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">system_prompt</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;system_prompt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">system_prompt</span>
 
@@ -552,7 +548,9 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">system_prompt</span><span class="p">,</span> <span class="n">messages_to_pass</span> <span class="o">=</span> <span class="n">_messages_to_prompt_dict</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stop</span>
+
+        <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;stop is not supported in langchain streaming&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="s2">&quot;system_prompt&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">system_prompt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">system_prompt</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
@@ -659,7 +657,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 04, 2024.
+          Last updated on Jun 05, 2024.
       </footer>
     </div>
   </div>
