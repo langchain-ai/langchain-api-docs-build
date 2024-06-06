@@ -343,7 +343,7 @@
 <span class="sd">        Args:</span>
 <span class="sd">            texts: Iterable of strings to add to the vectorstore.</span>
 <span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
-<span class="sd">            ids: Optional list of ids to associate w    ith the texts.</span>
+<span class="sd">            ids: Optional list of ids to associate with the texts.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List of ids of the added texts.</span>
@@ -448,14 +448,42 @@
 <span class="sd">        Args:</span>
 <span class="sd">            query: String to query the vectorstore with.</span>
 <span class="sd">            k: Number of documents to return.</span>
+<span class="sd">            filter (Optional[Dict]): Optional filter arguments</span>
+<span class="sd">                sql_filter(Optional[string]): SQL filter to apply to the query.</span>
+<span class="sd">                prefilter(Optional[bool]): Whether to apply the filter prior</span>
+<span class="sd">                                             to the vector search.</span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the specified table is not found in the database.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List of documents most similar to the query.</span>
+
+<span class="sd">        Examples:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            # Retrieve documents with filtering based on a metadata file_type</span>
+<span class="sd">            vector_store.as_retriever(search_kwargs={&quot;k&quot;: 4, &quot;filter&quot;:{</span>
+<span class="sd">                                                        &#39;sql_filter&#39;:&quot;file_type=&#39;notice&#39;&quot;,</span>
+<span class="sd">                                                         &#39;prefilter&#39;: True</span>
+<span class="sd">                                                         }</span>
+<span class="sd">                                                     })</span>
+
+<span class="sd">            # Retrieve documents with filtering on a specific file name</span>
+<span class="sd">            vector_store.as_retriever(search_kwargs={&quot;k&quot;: 4, &quot;filter&quot;:{</span>
+<span class="sd">                                                         &#39;sql_filter&#39;:&quot;source=&#39;my-file.txt&#39;&quot;,</span>
+<span class="sd">                                                         &#39;prefilter&#39;: True</span>
+<span class="sd">                                                         }</span>
+<span class="sd">                                                    })</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
         <span class="n">tbl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_table</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">filters</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;filter&quot;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">sql_filter</span> <span class="o">=</span> <span class="n">filters</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;sql_filter&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">prefilter</span> <span class="o">=</span> <span class="n">filters</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;prefilter&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="n">docs</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">tbl</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">vector_column_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_vector_key</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">sql_filter</span><span class="p">,</span> <span class="n">prefilter</span><span class="o">=</span><span class="n">prefilter</span><span class="p">)</span>
             <span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
             <span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
         <span class="p">)</span>
@@ -537,7 +565,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 05, 2024.
+          Last updated on Jun 06, 2024.
       </footer>
     </div>
   </div>

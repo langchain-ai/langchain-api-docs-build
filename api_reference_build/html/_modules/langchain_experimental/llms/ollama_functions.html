@@ -247,7 +247,10 @@
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.chat_models.ollama</span> <span class="kn">import</span> <span class="n">ChatOllama</span>
-<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
+<span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
+    <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessage</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">ToolCall</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
@@ -599,6 +602,86 @@
             <span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">response_message_with_functions</span><span class="p">)]</span>
         <span class="p">)</span>
 
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_agenerate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
+        <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="n">functions</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;functions&quot;</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">if</span> <span class="s2">&quot;functions&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;functions&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s2">&quot;function_call&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">fn</span> <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">functions</span> <span class="k">if</span> <span class="n">fn</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;function_call&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">functions</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;If `function_call` is specified, you must also pass a &quot;</span>
+                    <span class="s2">&quot;matching function in `functions`.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">del</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;function_call&quot;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">functions</span><span class="p">:</span>
+            <span class="n">functions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">DEFAULT_RESPONSE_FUNCTION</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_is_pydantic_class</span><span class="p">(</span><span class="n">functions</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_ollama_tool</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">functions</span><span class="p">]</span>
+        <span class="n">system_message_prompt_template</span> <span class="o">=</span> <span class="n">SystemMessagePromptTemplate</span><span class="o">.</span><span class="n">from_template</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tool_system_prompt_template</span>
+        <span class="p">)</span>
+        <span class="n">system_message</span> <span class="o">=</span> <span class="n">system_message_prompt_template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">tools</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">functions</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">response_message</span> <span class="o">=</span> <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_agenerate</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">system_message</span><span class="p">]</span> <span class="o">+</span> <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
+        <span class="n">chat_generation_content</span> <span class="o">=</span> <span class="n">response_message</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chat_generation_content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;OllamaFunctions does not support non-string output.&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">parsed_chat_result</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">chat_generation_content</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;&quot;&quot;&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&#39; did not respond with valid JSON. </span>
+<span class="s2">                Please try again. </span>
+<span class="s2">                Response: </span><span class="si">{</span><span class="n">chat_generation_content</span><span class="si">}</span><span class="s2">&quot;&quot;&quot;</span>
+            <span class="p">)</span>
+        <span class="n">called_tool_name</span> <span class="o">=</span> <span class="n">parsed_chat_result</span><span class="p">[</span><span class="s2">&quot;tool&quot;</span><span class="p">]</span>
+        <span class="n">called_tool_arguments</span> <span class="o">=</span> <span class="n">parsed_chat_result</span><span class="p">[</span><span class="s2">&quot;tool_input&quot;</span><span class="p">]</span>
+        <span class="n">called_tool</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">fn</span> <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">functions</span> <span class="k">if</span> <span class="n">fn</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">called_tool_name</span><span class="p">),</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">called_tool</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Failed to parse a function call from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2"> output: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">chat_generation_content</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">called_tool</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">DEFAULT_RESPONSE_FUNCTION</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span>
+                <span class="n">generations</span><span class="o">=</span><span class="p">[</span>
+                    <span class="n">ChatGeneration</span><span class="p">(</span>
+                        <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span>
+                            <span class="n">content</span><span class="o">=</span><span class="n">called_tool_arguments</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">],</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+
+        <span class="n">response_message_with_functions</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span>
+            <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">additional_kwargs</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;function_call&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">called_tool_name</span><span class="p">,</span>
+                    <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">called_tool_arguments</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">called_tool_arguments</span>
+                    <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span>
+            <span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">response_message_with_functions</span><span class="p">)]</span>
+        <span class="p">)</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="s2">&quot;ollama_functions&quot;</span></div>
@@ -608,7 +691,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 05, 2024.
+          Last updated on Jun 06, 2024.
       </footer>
     </div>
   </div>

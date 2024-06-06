@@ -230,11 +230,12 @@
   <h1>Source code for langchain_community.document_loaders.chromium</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">asyncio</span>
 <span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.document_loaders.base</span> <span class="kn">import</span> <span class="n">BaseLoader</span>
+<span class="kn">from</span> <span class="nn">langchain_community.utils.user_agent</span> <span class="kn">import</span> <span class="n">get_user_agent</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -243,18 +244,26 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Scrape HTML pages from URLs using a</span>
 <span class="sd">    headless instance of the Chromium.&quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="AsyncChromiumLoader.__init__"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.chromium.AsyncChromiumLoader.html#langchain_community.document_loaders.chromium.AsyncChromiumLoader.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">urls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">headless</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<div class="viewcode-block" id="AsyncChromiumLoader.__init__"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.chromium.AsyncChromiumLoader.html#langchain_community.document_loaders.chromium.AsyncChromiumLoader.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">urls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">headless</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">user_agent</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the loader with a list of URL paths.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            urls: A list of URLs to scrape content from.</span>
 <span class="sd">            headless: Whether to run browser in headless mode.</span>
+<span class="sd">            user_agent: The user agent to use for the browser</span>
 
 <span class="sd">        Raises:</span>
 <span class="sd">            ImportError: If the required &#39;playwright&#39; package is not installed.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">urls</span> <span class="o">=</span> <span class="n">urls</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">headless</span> <span class="o">=</span> <span class="n">headless</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">user_agent</span> <span class="o">=</span> <span class="n">user_agent</span> <span class="ow">or</span> <span class="n">get_user_agent</span><span class="p">()</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">playwright</span>  <span class="c1"># noqa: F401</span>
@@ -282,7 +291,7 @@
         <span class="k">async</span> <span class="k">with</span> <span class="n">async_playwright</span><span class="p">()</span> <span class="k">as</span> <span class="n">p</span><span class="p">:</span>
             <span class="n">browser</span> <span class="o">=</span> <span class="k">await</span> <span class="n">p</span><span class="o">.</span><span class="n">chromium</span><span class="o">.</span><span class="n">launch</span><span class="p">(</span><span class="n">headless</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headless</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">page</span> <span class="o">=</span> <span class="k">await</span> <span class="n">browser</span><span class="o">.</span><span class="n">new_page</span><span class="p">()</span>
+                <span class="n">page</span> <span class="o">=</span> <span class="k">await</span> <span class="n">browser</span><span class="o">.</span><span class="n">new_page</span><span class="p">(</span><span class="n">user_agent</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">user_agent</span><span class="p">)</span>
                 <span class="k">await</span> <span class="n">page</span><span class="o">.</span><span class="n">goto</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
                 <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">page</span><span class="o">.</span><span class="n">content</span><span class="p">()</span>  <span class="c1"># Simply get the HTML content</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Content scraped&quot;</span><span class="p">)</span>
@@ -331,7 +340,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 05, 2024.
+          Last updated on Jun 06, 2024.
       </footer>
     </div>
   </div>
