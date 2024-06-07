@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   
-  <title>langchain_cohere.chat_models &mdash; 🦜🔗 LangChain 0.2.2</title>
+  <title>langchain_cohere.chat_models &mdash; 🦜🔗 LangChain 0.2.3</title>
   
   <link rel="canonical" href="https://api.python.langchain.com/en/latest/_modules/langchain_cohere/chat_models.html" />
 
@@ -253,6 +253,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseChatModel</span><span class="p">,</span>
+    <span class="n">LangSmithParams</span><span class="p">,</span>
     <span class="n">agenerate_from_stream</span><span class="p">,</span>
     <span class="n">generate_from_stream</span><span class="p">,</span>
 <span class="p">)</span>
@@ -523,6 +524,23 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the identifying parameters.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span>
 
+    <span class="k">def</span> <span class="nf">_get_ls_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LangSmithParams</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get standard params for tracing.&quot;&quot;&quot;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_invocation_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">ls_params</span> <span class="o">=</span> <span class="n">LangSmithParams</span><span class="p">(</span>
+            <span class="n">ls_provider</span><span class="o">=</span><span class="s2">&quot;cohere&quot;</span><span class="p">,</span>
+            <span class="n">ls_model_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="n">ls_model_type</span><span class="o">=</span><span class="s2">&quot;chat&quot;</span><span class="p">,</span>
+            <span class="n">ls_temperature</span><span class="o">=</span><span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;temperature&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">ls_max_tokens</span> <span class="o">:=</span> <span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">):</span>
+            <span class="n">ls_params</span><span class="p">[</span><span class="s2">&quot;ls_max_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ls_max_tokens</span>
+        <span class="k">if</span> <span class="n">ls_stop</span> <span class="o">:=</span> <span class="n">stop</span> <span class="ow">or</span> <span class="n">params</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">:</span>
+            <span class="n">ls_params</span><span class="p">[</span><span class="s2">&quot;ls_stop&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ls_stop</span>
+        <span class="k">return</span> <span class="n">ls_params</span>
+
     <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
@@ -727,17 +745,17 @@
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;invalid cohere list models response&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">models</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">model_name</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_model</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span>
+
 <div class="viewcode-block" id="ChatCohere.get_num_tokens"><a class="viewcode-back" href="../../chat_models/langchain_cohere.chat_models.ChatCohere.html#langchain_cohere.chat_models.ChatCohere.get_num_tokens">[docs]</a>    <span class="k">def</span> <span class="nf">get_num_tokens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate number of tokens.&quot;&quot;&quot;</span>
-        <span class="n">model</span><span class="p">:</span> <span class="nb">str</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_default_model</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_default_model_name</span> <span class="o">=</span> <span class="n">model</span>
-
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span>
         <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">tokenize</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="n">tokens</span><span class="p">)</span></div></div>
 
 
@@ -775,7 +793,7 @@
     <div class="container">
       <footer class="sk-content-footer">
             &copy; 2023, LangChain, Inc..
-          Last updated on Jun 06, 2024.
+          Last updated on Jun 07, 2024.
       </footer>
     </div>
   </div>
