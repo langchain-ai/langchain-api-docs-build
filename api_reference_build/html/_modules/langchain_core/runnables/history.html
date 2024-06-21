@@ -244,6 +244,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.chat_history</span> <span class="kn">import</span> <span class="n">BaseChatMessageHistory</span>
 <span class="kn">from</span> <span class="nn">langchain_core.load.load</span> <span class="kn">import</span> <span class="n">load</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableBranch</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.base</span> <span class="kn">import</span> <span class="n">Runnable</span><span class="p">,</span> <span class="n">RunnableBindingBase</span><span class="p">,</span> <span class="n">RunnableLambda</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.passthrough</span> <span class="kn">import</span> <span class="n">RunnablePassthrough</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.utils</span> <span class="kn">import</span> <span class="p">(</span>
@@ -534,8 +535,17 @@
             <span class="n">history_chain</span> <span class="o">=</span> <span class="n">RunnablePassthrough</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span>
                 <span class="o">**</span><span class="p">{</span><span class="n">messages_key</span><span class="p">:</span> <span class="n">history_chain</span><span class="p">}</span>
             <span class="p">)</span><span class="o">.</span><span class="n">with_config</span><span class="p">(</span><span class="n">run_name</span><span class="o">=</span><span class="s2">&quot;insert_history&quot;</span><span class="p">)</span>
-        <span class="n">bound</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">history_chain</span> <span class="o">|</span> <span class="n">runnable</span><span class="o">.</span><span class="n">with_listeners</span><span class="p">(</span><span class="n">on_end</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exit_history</span><span class="p">)</span>
+        <span class="n">bound</span><span class="p">:</span> <span class="n">Runnable</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">history_chain</span>
+            <span class="o">|</span> <span class="n">RunnableBranch</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="n">RunnableLambda</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_is_not_async</span><span class="p">,</span> <span class="n">afunc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_is_async</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">with_config</span><span class="p">(</span><span class="n">run_name</span><span class="o">=</span><span class="s2">&quot;RunnableWithMessageHistoryInAsyncMode&quot;</span><span class="p">),</span>
+                    <span class="n">runnable</span><span class="o">.</span><span class="n">with_alisteners</span><span class="p">(</span><span class="n">on_end</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_aexit_history</span><span class="p">),</span>
+                <span class="p">),</span>
+                <span class="n">runnable</span><span class="o">.</span><span class="n">with_listeners</span><span class="p">(</span><span class="n">on_end</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exit_history</span><span class="p">),</span>
+            <span class="p">)</span>
         <span class="p">)</span><span class="o">.</span><span class="n">with_config</span><span class="p">(</span><span class="n">run_name</span><span class="o">=</span><span class="s2">&quot;RunnableWithMessageHistory&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">history_factory_config</span><span class="p">:</span>
@@ -594,6 +604,12 @@
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">super_schema</span>
+
+    <span class="k">def</span> <span class="nf">_is_not_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_is_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
 
     <span class="k">def</span> <span class="nf">_get_input_messages</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">input_val</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="nb">dict</span><span class="p">]</span>
@@ -710,6 +726,23 @@
         <span class="n">output_val</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span>
         <span class="n">output_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_output_messages</span><span class="p">(</span><span class="n">output_val</span><span class="p">)</span>
         <span class="n">hist</span><span class="o">.</span><span class="n">add_messages</span><span class="p">(</span><span class="n">input_messages</span> <span class="o">+</span> <span class="n">output_messages</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_aexit_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run</span><span class="p">:</span> <span class="n">Run</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">hist</span><span class="p">:</span> <span class="n">BaseChatMessageHistory</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;configurable&quot;</span><span class="p">][</span><span class="s2">&quot;message_history&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Get the input messages</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">inputs</span><span class="p">)</span>
+        <span class="n">input_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_messages</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+        <span class="c1"># If historic messages were prepended to the input messages, remove them to</span>
+        <span class="c1"># avoid adding duplicate messages to history.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">history_messages_key</span><span class="p">:</span>
+            <span class="n">historic_messages</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s2">&quot;configurable&quot;</span><span class="p">][</span><span class="s2">&quot;message_history&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">messages</span>
+            <span class="n">input_messages</span> <span class="o">=</span> <span class="n">input_messages</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">historic_messages</span><span class="p">)</span> <span class="p">:]</span>
+
+        <span class="c1"># Get the output messages</span>
+        <span class="n">output_val</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">outputs</span><span class="p">)</span>
+        <span class="n">output_messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_output_messages</span><span class="p">(</span><span class="n">output_val</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">hist</span><span class="o">.</span><span class="n">aadd_messages</span><span class="p">(</span><span class="n">input_messages</span> <span class="o">+</span> <span class="n">output_messages</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_merge_configs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">configs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">RunnableConfig</span><span class="p">:</span>
         <span class="n">config</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_merge_configs</span><span class="p">(</span><span class="o">*</span><span class="n">configs</span><span class="p">)</span>
