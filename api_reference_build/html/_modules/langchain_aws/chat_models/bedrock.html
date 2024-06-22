@@ -265,6 +265,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span><span class="p">,</span> <span class="n">RunnableMap</span><span class="p">,</span> <span class="n">RunnablePassthrough</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 
+<span class="kn">from</span> <span class="nn">langchain_aws.chat_models.bedrock_converse</span> <span class="kn">import</span> <span class="n">ChatBedrockConverse</span>
 <span class="kn">from</span> <span class="nn">langchain_aws.function_calling</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ToolsOutputParser</span><span class="p">,</span>
     <span class="n">_lc_tool_calls_to_anthropic_tool_use_blocks</span><span class="p">,</span>
@@ -615,6 +616,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A chat model that uses the Bedrock API.&quot;&quot;&quot;</span>
 
     <span class="n">system_prompt_with_tools</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">beta_use_converse_api</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Use the new Bedrock ``converse`` API which provides a standardized interface to </span>
+<span class="sd">    all Bedrock models. Support still in beta. See ChatBedrockConverse docs for more.&quot;&quot;&quot;</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_llm_type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -652,6 +656,11 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta_use_converse_api</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">_as_converse</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span>
+                <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
         <span class="n">provider</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_provider</span><span class="p">()</span>
         <span class="n">prompt</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">formatted_messages</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
 
@@ -718,6 +727,10 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta_use_converse_api</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_as_converse</span><span class="o">.</span><span class="n">_generate</span><span class="p">(</span>
+                <span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
         <span class="n">completion</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="n">llm_output</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">tool_calls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -836,6 +849,12 @@
 <span class="sd">            **kwargs: Any additional parameters to pass to the</span>
 <span class="sd">                :class:`~langchain.runnable.Runnable` constructor.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta_use_converse_api</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                <span class="n">tool_choice</span> <span class="o">=</span> <span class="s2">&quot;any&quot;</span> <span class="k">if</span> <span class="n">tool_choice</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_as_converse</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">(</span>
+                <span class="n">tools</span><span class="p">,</span> <span class="n">tool_choice</span><span class="o">=</span><span class="n">tool_choice</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_provider</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;anthropic&quot;</span><span class="p">:</span>
             <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_anthropic_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
 
@@ -973,6 +992,10 @@
 <span class="sd">                # }</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta_use_converse_api</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_as_converse</span><span class="o">.</span><span class="n">with_structured_output</span><span class="p">(</span>
+                <span class="n">schema</span><span class="p">,</span> <span class="n">include_raw</span><span class="o">=</span><span class="n">include_raw</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="s2">&quot;claude-3&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model</span><span class="p">():</span>
             <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;Structured output is not supported for model </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_model</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -995,7 +1018,24 @@
             <span class="p">)</span>
             <span class="k">return</span> <span class="n">RunnableMap</span><span class="p">(</span><span class="n">raw</span><span class="o">=</span><span class="n">llm</span><span class="p">)</span> <span class="o">|</span> <span class="n">parser_with_fallback</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">output_parser</span></div></div>
+            <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">output_parser</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_as_converse</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatBedrockConverse</span><span class="p">:</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="s2">&quot;stop_sequences&quot;</span><span class="p">,</span> <span class="s2">&quot;max_tokens&quot;</span><span class="p">,</span> <span class="s2">&quot;temperature&quot;</span><span class="p">,</span> <span class="s2">&quot;top_p&quot;</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">ChatBedrockConverse</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">model_id</span><span class="p">,</span>
+            <span class="n">region_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">region_name</span><span class="p">,</span>
+            <span class="n">credentials_profile_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">credentials_profile_name</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">provider</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">provider</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="n">base_url</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">endpoint_url</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="BedrockChat"><a class="viewcode-back" href="../../../chat_models/langchain_aws.chat_models.bedrock.BedrockChat.html#langchain_aws.chat_models.bedrock.BedrockChat">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span><span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.0&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.2.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;ChatBedrock&quot;</span><span class="p">)</span>
@@ -1009,7 +1049,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 21, 2024.
+                                on Jun 22, 2024.
                 </footer>
             </div>
         </div>
