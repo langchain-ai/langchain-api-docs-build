@@ -233,6 +233,7 @@
 
 <span class="kn">import</span> <span class="nn">datetime</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">http</span> <span class="kn">import</span> <span class="n">HTTPStatus</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
@@ -300,7 +301,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Pebblo cloud API key for app.&quot;&quot;&quot;</span>
     <span class="n">classifier_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CLASSIFIER_URL</span>  <span class="c1">#: :meta private:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Classifier endpoint.&quot;&quot;&quot;</span>
-    <span class="n">_discover_sent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1">#: :meta private:</span>
+    <span class="n">classifier_location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;local&quot;</span>  <span class="c1">#: :meta private:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Classifier location. It could be either of &#39;local&#39; or &#39;pebblo-cloud&#39;.&quot;&quot;&quot;</span>
+    <span class="n">_discover_sent</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1">#: :meta private:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Flag to check if discover payload has been sent.&quot;&quot;&quot;</span>
     <span class="n">_prompt_sent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1">#: :meta private:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Flag to check if prompt payload has been sent.&quot;&quot;&quot;</span>
@@ -322,6 +325,7 @@
 <span class="sd">        answer, docs = res[&#39;result&#39;], res[&#39;source_documents&#39;]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">prompt_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>
+        <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">set_prompt_sent</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="n">_run_manager</span> <span class="o">=</span> <span class="n">run_manager</span> <span class="ow">or</span> <span class="n">CallbackManagerForChainRun</span><span class="o">.</span><span class="n">get_noop_manager</span><span class="p">()</span>
         <span class="n">question</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="p">]</span>
         <span class="n">auth_context</span> <span class="o">=</span> <span class="n">inputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">auth_context_key</span><span class="p">,</span> <span class="p">{})</span>
@@ -343,7 +347,9 @@
             <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">app_name</span><span class="p">,</span>
             <span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="p">[</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;retrieved_from&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">),</span>
+                    <span class="s2">&quot;retrieved_from&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                        <span class="s2">&quot;full_path&quot;</span><span class="p">,</span> <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">)</span>
+                    <span class="p">),</span>
                     <span class="s2">&quot;doc&quot;</span><span class="p">:</span> <span class="n">doc</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span>
                     <span class="s2">&quot;vector_db&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">retriever</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
                 <span class="p">}</span>
@@ -359,6 +365,7 @@
             <span class="s2">&quot;user_identities&quot;</span><span class="p">:</span> <span class="n">auth_context</span><span class="o">.</span><span class="n">user_auth</span>
             <span class="k">if</span> <span class="n">auth_context</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">auth_context</span><span class="p">,</span> <span class="s2">&quot;user_auth&quot;</span><span class="p">)</span>
             <span class="k">else</span> <span class="p">[],</span>
+            <span class="s2">&quot;classifier_location&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier_location</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">qa_payload</span> <span class="o">=</span> <span class="n">Qa</span><span class="p">(</span><span class="o">**</span><span class="n">qa</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_send_prompt</span><span class="p">(</span><span class="n">qa_payload</span><span class="p">)</span>
@@ -448,6 +455,7 @@
         <span class="n">chain_type_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">classifier_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CLASSIFIER_URL</span><span class="p">,</span>
+        <span class="n">classifier_location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;local&quot;</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;PebbloRetrievalQA&quot;</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Load chain from chain type.&quot;&quot;&quot;</span>
@@ -459,7 +467,7 @@
         <span class="p">)</span>
 
         <span class="c1"># generate app</span>
-        <span class="n">app</span> <span class="o">=</span> <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">_get_app_details</span><span class="p">(</span>
+        <span class="n">app</span><span class="p">:</span> <span class="n">App</span> <span class="o">=</span> <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">_get_app_details</span><span class="p">(</span>
             <span class="n">app_name</span><span class="o">=</span><span class="n">app_name</span><span class="p">,</span>
             <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
             <span class="n">owner</span><span class="o">=</span><span class="n">owner</span><span class="p">,</span>
@@ -468,7 +476,10 @@
         <span class="p">)</span>
 
         <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">_send_discover</span><span class="p">(</span>
-            <span class="n">app</span><span class="p">,</span> <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span> <span class="n">classifier_url</span><span class="o">=</span><span class="n">classifier_url</span>
+            <span class="n">app</span><span class="p">,</span>
+            <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
+            <span class="n">classifier_url</span><span class="o">=</span><span class="n">classifier_url</span><span class="p">,</span>
+            <span class="n">classifier_location</span><span class="o">=</span><span class="n">classifier_location</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
@@ -478,6 +489,7 @@
             <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
             <span class="n">api_key</span><span class="o">=</span><span class="n">api_key</span><span class="p">,</span>
             <span class="n">classifier_url</span><span class="o">=</span><span class="n">classifier_url</span><span class="p">,</span>
+            <span class="n">classifier_location</span><span class="o">=</span><span class="n">classifier_location</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
@@ -528,7 +540,9 @@
         <span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_get_app_details</span><span class="p">(</span><span class="n">app_name</span><span class="p">,</span> <span class="n">owner</span><span class="p">,</span> <span class="n">description</span><span class="p">,</span> <span class="n">llm</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">App</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+    <span class="k">def</span> <span class="nf">_get_app_details</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
+        <span class="n">app_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">llm</span><span class="p">:</span> <span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">App</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Fetch app details. Internal method.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            App: App details.</span>
@@ -547,38 +561,49 @@
         <span class="k">return</span> <span class="n">app</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_send_discover</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">api_key</span><span class="p">,</span> <span class="n">classifier_url</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
+    <span class="k">def</span> <span class="nf">_send_discover</span><span class="p">(</span>
+        <span class="n">app</span><span class="p">:</span> <span class="n">App</span><span class="p">,</span>
+        <span class="n">api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">classifier_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">classifier_location</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Send app discovery payload to pebblo-server. Internal method.&quot;&quot;&quot;</span>
         <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
             <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">payload</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="n">exclude_unset</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">app_discover_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">classifier_url</span><span class="si">}{</span><span class="n">APP_DISCOVER_URL</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="n">app_discover_url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span>
-            <span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;discover-payload: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;send_discover[local]: request url </span><span class="si">%s</span><span class="s2">, body </span><span class="si">%s</span><span class="s2"> len </span><span class="si">%s</span><span class="se">\</span>
-<span class="s2">                    response status </span><span class="si">%s</span><span class="s2"> body </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
-                <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="p">),</span>
-                <span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">else</span> <span class="p">[])),</span>
-                <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="p">),</span>
-                <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">in</span> <span class="p">[</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">OK</span><span class="p">,</span> <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">BAD_GATEWAY</span><span class="p">]:</span>
-                <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">set_discover_sent</span><span class="p">()</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Received unexpected HTTP response code: </span><span class="si">{</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="n">classifier_location</span> <span class="o">==</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+            <span class="n">app_discover_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">classifier_url</span><span class="si">}{</span><span class="n">APP_DISCOVER_URL</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">app_discover_url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span>
                 <span class="p">)</span>
-        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to reach pebblo server.&quot;</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;An Exception caught in _send_discover: local </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;discover-payload: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s2">&quot;send_discover[local]: request url </span><span class="si">%s</span><span class="s2">, body </span><span class="si">%s</span><span class="s2"> len </span><span class="si">%s</span><span class="se">\</span>
+<span class="s2">                        response status </span><span class="si">%s</span><span class="s2"> body </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span>
+                        <span class="nb">len</span><span class="p">(</span>
+                            <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">else</span> <span class="p">[]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="p">),</span>
+                    <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">in</span> <span class="p">[</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">OK</span><span class="p">,</span> <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">BAD_GATEWAY</span><span class="p">]:</span>
+                    <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">set_discover_sent</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;Received unexpected HTTP response code:&quot;</span>
+                        <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to reach pebblo server.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;An Exception caught in _send_discover: local </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">api_key</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
@@ -613,8 +638,8 @@
         <span class="bp">cls</span><span class="o">.</span><span class="n">_discover_sent</span> <span class="o">=</span> <span class="kc">True</span></div>
 
 <div class="viewcode-block" id="PebbloRetrievalQA.set_prompt_sent"><a class="viewcode-back" href="../../../../chains/langchain_community.chains.pebblo_retrieval.base.PebbloRetrievalQA.html#langchain_community.chains.pebblo_retrieval.base.PebbloRetrievalQA.set_prompt_sent">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">set_prompt_sent</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">cls</span><span class="o">.</span><span class="n">_prompt_sent</span> <span class="o">=</span> <span class="kc">True</span></div>
+    <span class="k">def</span> <span class="nf">set_prompt_sent</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">_prompt_sent</span> <span class="o">=</span> <span class="n">value</span></div>
 
     <span class="k">def</span> <span class="nf">_send_prompt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qa_payload</span><span class="p">:</span> <span class="n">Qa</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
@@ -622,39 +647,73 @@
             <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">app_discover_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">classifier_url</span><span class="si">}{</span><span class="n">PROMPT_URL</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-                <span class="n">app_discover_url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">qa_payload</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span>
-            <span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;prompt-payload: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">qa_payload</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-                <span class="s2">&quot;send_prompt[local]: request url </span><span class="si">%s</span><span class="s2">, body </span><span class="si">%s</span><span class="s2"> len </span><span class="si">%s</span><span class="se">\</span>
-<span class="s2">                    response status </span><span class="si">%s</span><span class="s2"> body </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
-                <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
-                <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="p">),</span>
-                <span class="nb">str</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">else</span> <span class="p">[])),</span>
-                <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="p">),</span>
-                <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">in</span> <span class="p">[</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">OK</span><span class="p">,</span> <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">BAD_GATEWAY</span><span class="p">]:</span>
-                <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">set_prompt_sent</span><span class="p">()</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Received unexpected HTTP response code: </span><span class="si">{</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to reach pebblo server.&quot;</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;An Exception caught in _send_discover: local </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
+        <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">qa_payload</span><span class="o">.</span><span class="n">dict</span><span class="p">(</span><span class="n">exclude_unset</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier_location</span> <span class="o">==</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">headers</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;x-api-key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">})</span>
-                <span class="n">pebblo_cloud_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PEBBLO_CLOUD_URL</span><span class="si">}{</span><span class="n">PROMPT_URL</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">app_discover_url</span><span class="p">,</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+                    <span class="n">json</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span>
+                    <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;prompt-payload: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s2">&quot;send_prompt[local]: request url </span><span class="si">%s</span><span class="s2">, body </span><span class="si">%s</span><span class="s2"> len </span><span class="si">%s</span><span class="se">\</span>
+<span class="s2">                        response status </span><span class="si">%s</span><span class="s2"> body </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span>
+                        <span class="nb">len</span><span class="p">(</span>
+                            <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">else</span> <span class="p">[]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="p">),</span>
+                    <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">in</span> <span class="p">[</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">OK</span><span class="p">,</span> <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">BAD_GATEWAY</span><span class="p">]:</span>
+                    <span class="n">PebbloRetrievalQA</span><span class="o">.</span><span class="n">set_prompt_sent</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;Received unexpected HTTP response code:&quot;</span>
+                        <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to reach pebblo server.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;An Exception caught in _send_discover: local </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+
+        <span class="c1"># If classifier location is local, then response, context and prompt</span>
+        <span class="c1"># should be fetched from pebblo_resp and replaced in payload.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier_location</span> <span class="o">==</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">pebblo_resp</span><span class="p">:</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+                        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;retrieval_data&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                    <span class="p">)</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+                        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;retrieval_data&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;context&quot;</span><span class="p">,</span> <span class="p">[])</span>
+                    <span class="p">)</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+                        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;retrieval_data&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                        <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;response&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">headers</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;x-api-key&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_key</span><span class="p">})</span>
+            <span class="n">pebblo_cloud_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">PEBBLO_CLOUD_URL</span><span class="si">}{</span><span class="n">PROMPT_URL</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">try</span><span class="p">:</span>
                 <span class="n">pebblo_cloud_response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
                     <span class="n">pebblo_cloud_url</span><span class="p">,</span>
                     <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
-                    <span class="n">json</span><span class="o">=</span><span class="n">qa_payload</span><span class="o">.</span><span class="n">dict</span><span class="p">(),</span>
+                    <span class="n">json</span><span class="o">=</span><span class="n">payload</span><span class="p">,</span>
                     <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
                 <span class="p">)</span>
 
@@ -677,9 +736,12 @@
                 <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to reach Pebblo cloud server.&quot;</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;An Exception caught in _send_prompt: cloud </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier_location</span> <span class="o">==</span> <span class="s2">&quot;pebblo-cloud&quot;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;API key is missing for sending prompt to Pebblo cloud.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s2">&quot;API key is missing for sending prompt to Pebblo cloud.&quot;</span><span class="p">)</span>
 
 <div class="viewcode-block" id="PebbloRetrievalQA.get_chain_details"><a class="viewcode-back" href="../../../../chains/langchain_community.chains.pebblo_retrieval.base.PebbloRetrievalQA.html#langchain_community.chains.pebblo_retrieval.base.PebbloRetrievalQA.get_chain_details">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">get_chain_details</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">llm</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
+    <span class="k">def</span> <span class="nf">get_chain_details</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">llm</span><span class="p">:</span> <span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
         <span class="n">llm_dict</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="vm">__dict__</span>
         <span class="n">chain</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">{</span>
@@ -702,7 +764,7 @@
                         <span class="p">),</span>
                     <span class="p">}</span>
                 <span class="p">],</span>
-            <span class="p">}</span>
+            <span class="p">},</span>
         <span class="p">]</span>
         <span class="k">return</span> <span class="n">chain</span></div></div>
 </pre></div>
@@ -713,7 +775,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 24, 2024.
+                                on Jun 25, 2024.
                 </footer>
             </div>
         </div>

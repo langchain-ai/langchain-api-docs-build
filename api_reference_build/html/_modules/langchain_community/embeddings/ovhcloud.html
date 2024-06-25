@@ -228,7 +228,7 @@
   <h1>Source code for langchain_community.embeddings.ovhcloud</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
@@ -239,14 +239,11 @@
 
 <div class="viewcode-block" id="OVHCloudEmbeddings"><a class="viewcode-back" href="../../../embeddings/langchain_community.embeddings.ovhcloud.OVHCloudEmbeddings.html#langchain_community.embeddings.ovhcloud.OVHCloudEmbeddings">[docs]</a><span class="k">class</span> <span class="nc">OVHCloudEmbeddings</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">Embeddings</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Usage:</span>
-<span class="sd">        OVH_AI_ENDPOINTS_ACCESS_TOKEN=&quot;your-token&quot; python3 langchain_embedding.py</span>
-<span class="sd">    NB: Make sure you are using a valid token.</span>
-<span class="sd">    In the contrary, document indexing will be long due to rate-limiting.</span>
+<span class="sd">    OVHcloud AI Endpoints Embeddings.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; OVHcloud AI Endpoints Access Token&quot;&quot;&quot;</span>
-    <span class="n">access_token</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">access_token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
 
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; OVHcloud AI Endpoints model name for embeddings generation&quot;&quot;&quot;</span>
     <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
@@ -261,10 +258,8 @@
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">access_token</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;No access token provided indexing will be slow due to rate limiting.&quot;</span>
-            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">access_token</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Access token is required for OVHCloud embeddings.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Model name is required for OVHCloud embeddings.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">region</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
@@ -300,7 +295,9 @@
                     <span class="k">else</span><span class="p">:</span>
 <span class="w">                        </span><span class="sd">&quot;&quot;&quot;Rate limit reset time has passed, retry immediately&quot;&quot;&quot;</span>
                         <span class="k">continue</span>
-
+                <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">401</span><span class="p">:</span>
+<span class="w">                    </span><span class="sd">&quot;&quot;&quot; Unauthorized, retry with new token &quot;&quot;&quot;</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unauthorized, retry with new token&quot;</span><span class="p">)</span>
 <span class="w">                </span><span class="sd">&quot;&quot;&quot; Handle other non-200 status codes &quot;&quot;&quot;</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Request failed with status code: </span><span class="si">{status_code}</span><span class="s2">, </span><span class="si">{text}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
@@ -335,7 +332,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 24, 2024.
+                                on Jun 25, 2024.
                 </footer>
             </div>
         </div>
