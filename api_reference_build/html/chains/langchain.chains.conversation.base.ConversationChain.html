@@ -279,13 +279,87 @@
 <dt class="sig sig-object py" id="langchain.chains.conversation.base.ConversationChain">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain.chains.conversation.base.</span></span><span class="sig-name descname"><span class="pre">ConversationChain</span></span><a class="reference internal" href="../_modules/langchain/chains/conversation/base.html#ConversationChain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain.chains.conversation.base.ConversationChain" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain.chains.llm.LLMChain.html#langchain.chains.llm.LLMChain" title="langchain.chains.llm.LLMChain"><code class="xref py py-class docutils literal notranslate"><span class="pre">LLMChain</span></code></a></p>
-<p>Chain to have a conversation and load context from memory.</p>
+<p>[<em>Deprecated</em>] Chain to have a conversation and load context from memory.</p>
+<p>This class is deprecated in favor of <code class="docutils literal notranslate"><span class="pre">RunnableWithMessageHistory</span></code>. Please refer
+to this tutorial for more detail: <a class="reference external" href="https://python.langchain.com/v0.2/docs/tutorials/chatbot/">https://python.langchain.com/v0.2/docs/tutorials/chatbot/</a></p>
+<p><code class="docutils literal notranslate"><span class="pre">RunnableWithMessageHistory</span></code> offers several benefits, including:</p>
+<ul class="simple">
+<li><p>Stream, batch, and async support;</p></li>
+<li><p>More flexible memory handling, including the ability to manage memory
+outside the chain;</p></li>
+<li><p>Support for multiple threads.</p></li>
+</ul>
+<p>Below is a minimal implementation, analogous to using <code class="docutils literal notranslate"><span class="pre">ConversationChain</span></code> with
+the default <code class="docutils literal notranslate"><span class="pre">ConversationBufferMemory</span></code>:</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_core.chat_history</span> <span class="kn">import</span> <span class="n">InMemoryChatMessageHistory</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables.history</span> <span class="kn">import</span> <span class="n">RunnableWithMessageHistory</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+
+
+<span class="n">store</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># memory is maintained outside the chain</span>
+
+<span class="k">def</span> <span class="nf">get_session_history</span><span class="p">(</span><span class="n">session_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">InMemoryChatMessageHistory</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">session_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">store</span><span class="p">:</span>
+        <span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">InMemoryChatMessageHistory</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-3.5-turbo-0125&quot;</span><span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="n">RunnableWithMessageHistory</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">get_session_history</span><span class="p">)</span>
+<span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+    <span class="s2">&quot;Hi I&#39;m Bob.&quot;</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;configurable&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;session_id&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">}},</span>
+<span class="p">)</span>  <span class="c1"># session_id determines thread</span>
+</pre></div>
+</div>
+</div></blockquote>
+<p>Memory objects can also be incorporated into the <code class="docutils literal notranslate"><span class="pre">get_session_history</span></code> callable:</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.memory</span> <span class="kn">import</span> <span class="n">ConversationBufferWindowMemory</span>
+<span class="kn">from</span> <span class="nn">langchain_core.chat_history</span> <span class="kn">import</span> <span class="n">InMemoryChatMessageHistory</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables.history</span> <span class="kn">import</span> <span class="n">RunnableWithMessageHistory</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+
+
+<span class="n">store</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># memory is maintained outside the chain</span>
+
+<span class="k">def</span> <span class="nf">get_session_history</span><span class="p">(</span><span class="n">session_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">InMemoryChatMessageHistory</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">session_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">store</span><span class="p">:</span>
+        <span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">InMemoryChatMessageHistory</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span>
+
+    <span class="n">memory</span> <span class="o">=</span> <span class="n">ConversationBufferWindowMemory</span><span class="p">(</span>
+        <span class="n">chat_memory</span><span class="o">=</span><span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">],</span>
+        <span class="n">k</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">return_messages</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">memory</span><span class="o">.</span><span class="n">memory_variables</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">memory_variables</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">messages</span> <span class="o">=</span> <span class="n">memory</span><span class="o">.</span><span class="n">load_memory_variables</span><span class="p">({})[</span><span class="n">key</span><span class="p">]</span>
+    <span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">InMemoryChatMessageHistory</span><span class="p">(</span><span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">store</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-3.5-turbo-0125&quot;</span><span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="n">RunnableWithMessageHistory</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">get_session_history</span><span class="p">)</span>
+<span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+    <span class="s2">&quot;Hi I&#39;m Bob.&quot;</span><span class="p">,</span>
+    <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;configurable&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;session_id&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">}},</span>
+<span class="p">)</span>  <span class="c1"># session_id determines thread</span>
+</pre></div>
+</div>
+</div></blockquote>
 <p class="rubric">Example</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chains</span> <span class="kn">import</span> <span class="n">ConversationChain</span>
 <span class="kn">from</span> <span class="nn">langchain_community.llms</span> <span class="kn">import</span> <span class="n">OpenAI</span>
 
 <span class="n">conversation</span> <span class="o">=</span> <span class="n">ConversationChain</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">OpenAI</span><span class="p">())</span>
 </pre></div>
+</div>
+<p class="rubric">Notes</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.2.7: </span>Use RunnableWithMessageHistory: <a class="reference external" href="https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.history.RunnableWithMessageHistory.html">https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.history.RunnableWithMessageHistory.html</a> instead.</p>
 </div>
 <p>Create a new model by parsing and validating input data from keyword arguments.</p>
 <p>Raises ValidationError if the input data cannot be parsed to form a valid model.</p>
@@ -938,7 +1012,7 @@ directly as keyword arguments.</p></li>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 27, 2024.
+                                on Jun 28, 2024.
                 </footer>
             </div>
         </div>

@@ -227,6 +227,7 @@
                 
   <h1>Source code for langchain.agents.openai_functions_agent.base</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Module implements an agent that uses OpenAI&#39;s APIs function enabled API.&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
@@ -269,6 +270,9 @@
 <span class="sd">        prompt: The prompt for this agent, should support agent_scratchpad as one</span>
 <span class="sd">            of the variables. For an easy way to construct this prompt, use</span>
 <span class="sd">            `OpenAIFunctionsAgent.create_prompt(...)`</span>
+<span class="sd">        output_parser: The output parser for this agent. Should be an instance of</span>
+<span class="sd">            OpenAIFunctionsAgentOutputParser.</span>
+<span class="sd">            Defaults to OpenAIFunctionsAgentOutputParser.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">llm</span><span class="p">:</span> <span class="n">BaseLanguageModel</span>
@@ -284,6 +288,17 @@
 
     <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">validate_prompt</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate prompt.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            values: Values to validate.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Validated values.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If `agent_scratchpad` is not in the prompt.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">prompt</span><span class="p">:</span> <span class="n">BasePromptTemplate</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;prompt&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="s2">&quot;agent_scratchpad&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">prompt</span><span class="o">.</span><span class="n">input_variables</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -299,6 +314,8 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">functions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get functions.&quot;&quot;&quot;</span>
+
         <span class="k">return</span> <span class="p">[</span><span class="nb">dict</span><span class="p">(</span><span class="n">convert_to_openai_function</span><span class="p">(</span><span class="n">t</span><span class="p">))</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">tools</span><span class="p">]</span>
 
 <div class="viewcode-block" id="OpenAIFunctionsAgent.plan"><a class="viewcode-back" href="../../../../agents/langchain.agents.openai_functions_agent.base.OpenAIFunctionsAgent.html#langchain.agents.openai_functions_agent.base.OpenAIFunctionsAgent.plan">[docs]</a>    <span class="k">def</span> <span class="nf">plan</span><span class="p">(</span>
@@ -311,11 +328,16 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Given input, decided what to do.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            intermediate_steps: Steps the LLM has taken to date, along with observations</span>
+<span class="sd">            intermediate_steps: Steps the LLM has taken to date,</span>
+<span class="sd">                along with observations.</span>
+<span class="sd">            callbacks: Callbacks to use. Defaults to None.</span>
+<span class="sd">            with_functions: Whether to use functions. Defaults to True.</span>
 <span class="sd">            **kwargs: User inputs.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            Action specifying what tool to use.</span>
+<span class="sd">            If the agent is finished, returns an AgentFinish.</span>
+<span class="sd">            If the agent is not finished, returns an AgentAction.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">agent_scratchpad</span> <span class="o">=</span> <span class="n">format_to_openai_function_messages</span><span class="p">(</span><span class="n">intermediate_steps</span><span class="p">)</span>
         <span class="n">selected_inputs</span> <span class="o">=</span> <span class="p">{</span>
@@ -344,15 +366,18 @@
         <span class="n">callbacks</span><span class="p">:</span> <span class="n">Callbacks</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">AgentAction</span><span class="p">,</span> <span class="n">AgentFinish</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Given input, decided what to do.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Async given input, decided what to do.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            intermediate_steps: Steps the LLM has taken to date,</span>
-<span class="sd">                along with observations</span>
+<span class="sd">                along with observations.</span>
+<span class="sd">            callbacks: Callbacks to use. Defaults to None.</span>
 <span class="sd">            **kwargs: User inputs.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            Action specifying what tool to use.</span>
+<span class="sd">            If the agent is finished, returns an AgentFinish.</span>
+<span class="sd">            If the agent is not finished, returns an AgentAction.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">agent_scratchpad</span> <span class="o">=</span> <span class="n">format_to_openai_function_messages</span><span class="p">(</span><span class="n">intermediate_steps</span><span class="p">)</span>
         <span class="n">selected_inputs</span> <span class="o">=</span> <span class="p">{</span>
@@ -373,7 +398,20 @@
         <span class="n">intermediate_steps</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">AgentAction</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AgentFinish</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return response when agent has been stopped due to max iterations.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return response when agent has been stopped due to max iterations.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            early_stopping_method: The early stopping method to use.</span>
+<span class="sd">            intermediate_steps: Intermediate steps.</span>
+<span class="sd">            **kwargs: User inputs.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            AgentFinish.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If `early_stopping_method` is not `force` or `generate`.</span>
+<span class="sd">            ValueError: If `agent_decision` is not an AgentAction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">early_stopping_method</span> <span class="o">==</span> <span class="s2">&quot;force&quot;</span><span class="p">:</span>
             <span class="c1"># `force` just returns a constant string</span>
             <span class="k">return</span> <span class="n">AgentFinish</span><span class="p">(</span>
@@ -443,7 +481,17 @@
         <span class="p">),</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseSingleActionAgent</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct an agent from an LLM and tools.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct an agent from an LLM and tools.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            llm: The LLM to use as the agent.</span>
+<span class="sd">            tools: The tools to use.</span>
+<span class="sd">            callback_manager: The callback manager to use. Defaults to None.</span>
+<span class="sd">            extra_prompt_messages: Extra prompt messages to use. Defaults to None.</span>
+<span class="sd">            system_message: The system message to use.</span>
+<span class="sd">                Defaults to a default system message.</span>
+<span class="sd">            **kwargs: Additional parameters to pass to the agent.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">prompt</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">create_prompt</span><span class="p">(</span>
             <span class="n">extra_prompt_messages</span><span class="o">=</span><span class="n">extra_prompt_messages</span><span class="p">,</span>
             <span class="n">system_message</span><span class="o">=</span><span class="n">system_message</span><span class="p">,</span>
@@ -471,8 +519,11 @@
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A Runnable sequence representing an agent. It takes as input all the same input</span>
-<span class="sd">        variables as the prompt passed in does. It returns as output either an</span>
-<span class="sd">        AgentAction or AgentFinish.</span>
+<span class="sd">            variables as the prompt passed in does. It returns as output either an</span>
+<span class="sd">            AgentAction or AgentFinish.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If `agent_scratchpad` is not in the prompt.</span>
 
 <span class="sd">    Example:</span>
 
@@ -553,7 +604,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 27, 2024.
+                                on Jun 28, 2024.
                 </footer>
             </div>
         </div>
