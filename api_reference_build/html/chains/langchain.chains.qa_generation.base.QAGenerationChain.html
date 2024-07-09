@@ -11,7 +11,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain.chains.qa_generation.base.QAGenerationChain &mdash; 🦜🔗 LangChain 0.2.6</title>
+        <title>langchain.chains.qa_generation.base.QAGenerationChain &mdash; 🦜🔗 LangChain 0.2.7</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/chains/langchain.chains.qa_generation.base.QAGenerationChain.html"/>
@@ -105,6 +105,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -176,6 +179,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../groq_api_reference.html">groq</a>
@@ -281,7 +285,48 @@
 <dt class="sig sig-object py" id="langchain.chains.qa_generation.base.QAGenerationChain">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain.chains.qa_generation.base.</span></span><span class="sig-name descname"><span class="pre">QAGenerationChain</span></span><a class="reference internal" href="../_modules/langchain/chains/qa_generation/base.html#QAGenerationChain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain.chains.qa_generation.base.QAGenerationChain" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain.chains.base.Chain.html#langchain.chains.base.Chain" title="langchain.chains.base.Chain"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chain</span></code></a></p>
-<p>Base class for question-answer generation chains.</p>
+<p>[<em>Deprecated</em>] Base class for question-answer generation chains.</p>
+<p>This class is deprecated. See below for an alternative implementation.</p>
+<p>Advantages of this implementation include:</p>
+<ul>
+<li><p>Supports async and streaming;</p></li>
+<li><p>Surfaces prompt and text splitter for easier customization;</p></li>
+<li><p>Use of JsonOutputParser supports JSONPatch operations in streaming mode,
+as well as robustness to markdown.</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chains.qa_generation.prompt</span> <span class="kn">import</span> <span class="n">CHAT_PROMPT</span> <span class="k">as</span> <span class="n">prompt</span>
+<span class="c1"># Note: import PROMPT if using a legacy non-chat model.</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">JsonOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">RunnableLambda</span><span class="p">,</span>
+    <span class="n">RunnableParallel</span><span class="p">,</span>
+    <span class="n">RunnablePassthrough</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables.base</span> <span class="kn">import</span> <span class="n">RunnableEach</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain_text_splitters</span> <span class="kn">import</span> <span class="n">RecursiveCharacterTextSplitter</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">()</span>
+<span class="n">text_splitter</span> <span class="o">=</span> <span class="n">RecursiveCharacterTextSplitter</span><span class="p">(</span><span class="n">chunk_overlap</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
+<span class="n">split_text</span> <span class="o">=</span> <span class="n">RunnableLambda</span><span class="p">(</span>
+    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">text_splitter</span><span class="o">.</span><span class="n">create_documents</span><span class="p">([</span><span class="n">x</span><span class="p">])</span>
+<span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="n">RunnableParallel</span><span class="p">(</span>
+    <span class="n">text</span><span class="o">=</span><span class="n">RunnablePassthrough</span><span class="p">(),</span>
+    <span class="n">questions</span><span class="o">=</span><span class="p">(</span>
+        <span class="n">split_text</span> <span class="o">|</span> <span class="n">RunnableEach</span><span class="p">(</span><span class="n">bound</span><span class="o">=</span><span class="n">prompt</span> <span class="o">|</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">JsonOutputParser</span><span class="p">())</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div></blockquote>
+</li>
+</ul>
+<p class="rubric">Notes</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.2.7: </span>Use example in API reference with more detail: <a class="reference external" href="https://api.python.langchain.com/en/latest/chains/langchain.chains.qa_generation.base.QAGenerationChain.html">https://api.python.langchain.com/en/latest/chains/langchain.chains.qa_generation.base.QAGenerationChain.html</a> instead.</p>
+</div>
 <p>Create a new model by parsing and validating input data from keyword arguments.</p>
 <p>Raises ValidationError if the input data cannot be parsed to form a valid model.</p>
 <dl class="py attribute pydantic_field">
@@ -1238,7 +1283,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 28, 2024.
+                                on Jul 09, 2024.
                 </footer>
             </div>
         </div>

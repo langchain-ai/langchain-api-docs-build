@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_core.utils.function_calling &mdash; 🦜🔗 LangChain 0.2.6</title>
+        <title>langchain_core.utils.function_calling &mdash; 🦜🔗 LangChain 0.2.7</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_core/utils/function_calling.html"/>
@@ -104,6 +104,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -175,6 +178,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../groq_api_reference.html">groq</a>
@@ -230,10 +234,8 @@
 
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
-<span class="kn">from</span> <span class="nn">types</span> <span class="kn">import</span> <span class="n">FunctionType</span><span class="p">,</span> <span class="n">MethodType</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
@@ -242,13 +244,12 @@
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Literal</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
-    <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
     <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">TypedDict</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
@@ -351,122 +352,6 @@
     <span class="k">return</span> <span class="n">function</span><span class="o">.</span><span class="vm">__name__</span>
 
 
-<span class="k">def</span> <span class="nf">_parse_python_function_docstring</span><span class="p">(</span><span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse the function and argument descriptions from the docstring of a function.</span>
-
-<span class="sd">    Assumes the function docstring follows Google Python style guide.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">docstring</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">docstring</span><span class="p">:</span>
-        <span class="n">docstring_blocks</span> <span class="o">=</span> <span class="n">docstring</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">descriptors</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">args_block</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">past_descriptors</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">docstring_blocks</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">block</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Args:&quot;</span><span class="p">):</span>
-                <span class="n">args_block</span> <span class="o">=</span> <span class="n">block</span>
-                <span class="k">break</span>
-            <span class="k">elif</span> <span class="n">block</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Returns:&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">block</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Example:&quot;</span><span class="p">):</span>
-                <span class="c1"># Don&#39;t break in case Args come after</span>
-                <span class="n">past_descriptors</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="k">elif</span> <span class="ow">not</span> <span class="n">past_descriptors</span><span class="p">:</span>
-                <span class="n">descriptors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">continue</span>
-        <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">descriptors</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-        <span class="n">args_block</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">if</span> <span class="n">args_block</span><span class="p">:</span>
-        <span class="n">arg</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">args_block</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]:</span>
-            <span class="k">if</span> <span class="s2">&quot;:&quot;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
-                <span class="n">arg</span><span class="p">,</span> <span class="n">desc</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="n">maxsplit</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-                <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span> <span class="o">=</span> <span class="n">desc</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-            <span class="k">elif</span> <span class="n">arg</span><span class="p">:</span>
-                <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span> <span class="o">+=</span> <span class="s2">&quot; &quot;</span> <span class="o">+</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span>
-
-
-<span class="k">def</span> <span class="nf">_is_annotated_type</span><span class="p">(</span><span class="n">typ</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">get_origin</span><span class="p">(</span><span class="n">typ</span><span class="p">)</span> <span class="ow">is</span> <span class="n">Annotated</span>
-
-
-<span class="k">def</span> <span class="nf">_get_python_function_arguments</span><span class="p">(</span><span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">arg_descriptions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get JsonSchema describing a Python functions arguments.</span>
-
-<span class="sd">    Assumes all function arguments are of primitive types (int, float, str, bool) or</span>
-<span class="sd">    are subclasses of pydantic.BaseModel.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">properties</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">annotations</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">function</span><span class="p">)</span><span class="o">.</span><span class="n">annotations</span>
-    <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">arg_type</span> <span class="ow">in</span> <span class="n">annotations</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">arg</span> <span class="o">==</span> <span class="s2">&quot;return&quot;</span><span class="p">:</span>
-            <span class="k">continue</span>
-
-        <span class="k">if</span> <span class="n">_is_annotated_type</span><span class="p">(</span><span class="n">arg_type</span><span class="p">):</span>
-            <span class="n">annotated_args</span> <span class="o">=</span> <span class="n">get_args</span><span class="p">(</span><span class="n">arg_type</span><span class="p">)</span>
-            <span class="n">arg_type</span> <span class="o">=</span> <span class="n">annotated_args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">annotated_args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">annotation</span> <span class="ow">in</span> <span class="n">annotated_args</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
-                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">annotation</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                        <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="n">annotation</span>
-                        <span class="k">break</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="s2">&quot;model_json_schema&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="n">arg_type</span><span class="o">.</span><span class="n">model_json_schema</span><span class="p">)</span>
-        <span class="p">):</span>
-            <span class="n">properties</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg_type</span><span class="o">.</span><span class="n">model_json_schema</span><span class="p">()</span>
-        <span class="k">elif</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="s2">&quot;schema&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">callable</span><span class="p">(</span><span class="n">arg_type</span><span class="o">.</span><span class="n">schema</span><span class="p">)</span>
-        <span class="p">):</span>
-            <span class="n">properties</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg_type</span><span class="o">.</span><span class="n">schema</span><span class="p">()</span>
-        <span class="k">elif</span> <span class="p">(</span>
-            <span class="nb">hasattr</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="s2">&quot;__name__&quot;</span><span class="p">)</span> <span class="ow">in</span> <span class="n">PYTHON_TO_JSON_TYPES</span>
-        <span class="p">):</span>
-            <span class="n">properties</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">PYTHON_TO_JSON_TYPES</span><span class="p">[</span><span class="n">arg_type</span><span class="o">.</span><span class="vm">__name__</span><span class="p">]}</span>
-        <span class="k">elif</span> <span class="p">(</span>
-            <span class="nb">hasattr</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="s2">&quot;__dict__&quot;</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">arg_type</span><span class="p">,</span> <span class="s2">&quot;__dict__&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;__origin__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="n">Literal</span>
-        <span class="p">):</span>
-            <span class="n">properties</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="s2">&quot;enum&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">arg_type</span><span class="o">.</span><span class="n">__args__</span><span class="p">),</span>
-                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">PYTHON_TO_JSON_TYPES</span><span class="p">[</span><span class="n">arg_type</span><span class="o">.</span><span class="n">__args__</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">],</span>
-            <span class="p">}</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Argument </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2"> of type </span><span class="si">{</span><span class="n">arg_type</span><span class="si">}</span><span class="s2"> from function </span><span class="si">{</span><span class="n">function</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> &quot;</span>
-                <span class="s2">&quot;could not be not be converted to a JSON schema.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">arg_descriptions</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">arg</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">properties</span><span class="p">:</span>
-                <span class="n">properties</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="n">properties</span><span class="p">[</span><span class="n">arg</span><span class="p">][</span><span class="s2">&quot;description&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span>
-
-    <span class="k">return</span> <span class="n">properties</span>
-
-
-<span class="k">def</span> <span class="nf">_get_python_function_required_args</span><span class="p">(</span><span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the required arguments for a Python function.&quot;&quot;&quot;</span>
-    <span class="n">spec</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
-    <span class="n">required</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">args</span><span class="p">[:</span> <span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">defaults</span><span class="p">)]</span> <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">defaults</span> <span class="k">else</span> <span class="n">spec</span><span class="o">.</span><span class="n">args</span>
-    <span class="n">required</span> <span class="o">+=</span> <span class="p">[</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">kwonlyargs</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">kwonlydefaults</span> <span class="ow">or</span> <span class="p">{})]</span>
-
-    <span class="n">is_function_type</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">FunctionType</span><span class="p">)</span>
-    <span class="n">is_method_type</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">MethodType</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">required</span> <span class="ow">and</span> <span class="n">is_function_type</span> <span class="ow">and</span> <span class="n">required</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;self&quot;</span><span class="p">:</span>
-        <span class="n">required</span> <span class="o">=</span> <span class="n">required</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-    <span class="k">elif</span> <span class="n">required</span> <span class="ow">and</span> <span class="n">is_method_type</span> <span class="ow">and</span> <span class="n">required</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;cls&quot;</span><span class="p">:</span>
-        <span class="n">required</span> <span class="o">=</span> <span class="n">required</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
-    <span class="k">return</span> <span class="n">required</span>
-
-
 <div class="viewcode-block" id="convert_python_function_to_openai_function"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.convert_python_function_to_openai_function.html#langchain_core.utils.function_calling.convert_python_function_to_openai_function">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span>
     <span class="s2">&quot;0.1.16&quot;</span><span class="p">,</span>
     <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;langchain_core.utils.function_calling.convert_to_openai_function()&quot;</span><span class="p">,</span>
@@ -474,23 +359,24 @@
 <span class="p">)</span>
 <span class="k">def</span> <span class="nf">convert_python_function_to_openai_function</span><span class="p">(</span>
     <span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FunctionDescription</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a Python function to an OpenAI function-calling API compatible dict.</span>
 
 <span class="sd">    Assumes the Python function has type hints and a docstring with a description. If</span>
 <span class="sd">        the docstring has Google Python style argument descriptions, these will be</span>
 <span class="sd">        included as well.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="n">_parse_python_function_docstring</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">_get_python_function_name</span><span class="p">(</span><span class="n">function</span><span class="p">),</span>
-        <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">description</span><span class="p">,</span>
-        <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;object&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;properties&quot;</span><span class="p">:</span> <span class="n">_get_python_function_arguments</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">arg_descriptions</span><span class="p">),</span>
-            <span class="s2">&quot;required&quot;</span><span class="p">:</span> <span class="n">_get_python_function_required_args</span><span class="p">(</span><span class="n">function</span><span class="p">),</span>
-        <span class="p">},</span>
-    <span class="p">}</span></div>
+    <span class="kn">from</span> <span class="nn">langchain_core</span> <span class="kn">import</span> <span class="n">tools</span>
+
+    <span class="n">func_name</span> <span class="o">=</span> <span class="n">_get_python_function_name</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">create_schema_from_function</span><span class="p">(</span>
+        <span class="n">func_name</span><span class="p">,</span> <span class="n">function</span><span class="p">,</span> <span class="n">filter_args</span><span class="o">=</span><span class="p">(),</span> <span class="n">parse_docstring</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">convert_pydantic_to_openai_function</span><span class="p">(</span>
+        <span class="n">model</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">func_name</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="vm">__doc__</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="format_tool_to_openai_function"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.format_tool_to_openai_function.html#langchain_core.utils.function_calling.format_tool_to_openai_function">[docs]</a><span class="nd">@deprecated</span><span class="p">(</span>
@@ -571,7 +457,7 @@
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">format_tool_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">convert_python_function_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">convert_python_function_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Unsupported function</span><span class="se">\n\n</span><span class="si">{</span><span class="n">function</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">Functions must be passed in&quot;</span>
@@ -701,7 +587,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 28, 2024.
+                                on Jul 09, 2024.
                 </footer>
             </div>
         </div>

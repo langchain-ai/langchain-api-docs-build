@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_core.messages.utils &mdash; 🦜🔗 LangChain 0.2.6</title>
+        <title>langchain_core.messages.utils &mdash; 🦜🔗 LangChain 0.2.7</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_core/messages/utils.html"/>
@@ -104,6 +104,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -175,6 +178,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../groq_api_reference.html">groq</a>
@@ -234,6 +238,7 @@
 <span class="sd">* Convert messages from dicts to Message objects (deserialization)</span>
 <span class="sd">* Filter messages from a list of messages based on name, type or id etc.</span>
 <span class="sd">&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">inspect</span>
@@ -259,6 +264,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.messages.chat</span> <span class="kn">import</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">ChatMessageChunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages.function</span> <span class="kn">import</span> <span class="n">FunctionMessage</span><span class="p">,</span> <span class="n">FunctionMessageChunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages.human</span> <span class="kn">import</span> <span class="n">HumanMessage</span><span class="p">,</span> <span class="n">HumanMessageChunk</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.modifier</span> <span class="kn">import</span> <span class="n">RemoveMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages.system</span> <span class="kn">import</span> <span class="n">SystemMessage</span><span class="p">,</span> <span class="n">SystemMessageChunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">ToolMessage</span><span class="p">,</span> <span class="n">ToolMessageChunk</span>
 
@@ -269,7 +275,12 @@
     <span class="kn">from</span> <span class="nn">langchain_core.runnables.base</span> <span class="kn">import</span> <span class="n">Runnable</span>
 
 <span class="n">AnyMessage</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span>
-    <span class="n">AIMessage</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">,</span> <span class="n">ChatMessage</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">,</span> <span class="n">FunctionMessage</span><span class="p">,</span> <span class="n">ToolMessage</span>
+    <span class="n">AIMessage</span><span class="p">,</span>
+    <span class="n">HumanMessage</span><span class="p">,</span>
+    <span class="n">ChatMessage</span><span class="p">,</span>
+    <span class="n">SystemMessage</span><span class="p">,</span>
+    <span class="n">FunctionMessage</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">]</span>
 
 
@@ -281,10 +292,14 @@
 <span class="sd">    Args:</span>
 <span class="sd">        messages: Messages to be converted to strings.</span>
 <span class="sd">        human_prefix: The prefix to prepend to contents of HumanMessages.</span>
-<span class="sd">        ai_prefix: THe prefix to prepend to contents of AIMessages.</span>
+<span class="sd">            Default is &quot;Human&quot;.</span>
+<span class="sd">        ai_prefix: THe prefix to prepend to contents of AIMessages. Default is &quot;AI&quot;.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A single string concatenation of all input messages.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If an unsupported message type is encountered.</span>
 
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
@@ -336,6 +351,8 @@
         <span class="k">return</span> <span class="n">FunctionMessage</span><span class="p">(</span><span class="o">**</span><span class="n">message</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
     <span class="k">elif</span> <span class="n">_type</span> <span class="o">==</span> <span class="s2">&quot;tool&quot;</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">ToolMessage</span><span class="p">(</span><span class="o">**</span><span class="n">message</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
+    <span class="k">elif</span> <span class="n">_type</span> <span class="o">==</span> <span class="s2">&quot;remove&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">RemoveMessage</span><span class="p">(</span><span class="o">**</span><span class="n">message</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
     <span class="k">elif</span> <span class="n">_type</span> <span class="o">==</span> <span class="s2">&quot;AIMessageChunk&quot;</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span><span class="o">**</span><span class="n">message</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
     <span class="k">elif</span> <span class="n">_type</span> <span class="o">==</span> <span class="s2">&quot;HumanMessageChunk&quot;</span><span class="p">:</span>
@@ -401,11 +418,20 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a message from a message type and content string.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        message_type: str the type of the message (e.g., &quot;human&quot;, &quot;ai&quot;, etc.)</span>
-<span class="sd">        content: str the content string.</span>
+<span class="sd">        message_type: (str) the type of the message (e.g., &quot;human&quot;, &quot;ai&quot;, etc.).</span>
+<span class="sd">        content: (str) the content string.</span>
+<span class="sd">        name: (str) the name of the message. Default is None.</span>
+<span class="sd">        tool_call_id: (str) the tool call id. Default is None.</span>
+<span class="sd">        tool_calls: (List[Dict[str, Any]]) the tool calls. Default is None.</span>
+<span class="sd">        id: (str) the id of the message. Default is None.</span>
+<span class="sd">        **additional_kwargs: (Dict[str, Any]) additional keyword arguments.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        a message of the appropriate type.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: if the message type is not one of &quot;human&quot;, &quot;user&quot;, &quot;ai&quot;,</span>
+<span class="sd">            &quot;assistant&quot;, &quot;system&quot;, &quot;function&quot;, or &quot;tool&quot;.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -428,10 +454,12 @@
         <span class="n">message</span> <span class="o">=</span> <span class="n">FunctionMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s2">&quot;tool&quot;</span><span class="p">:</span>
         <span class="n">message</span> <span class="o">=</span> <span class="n">ToolMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">message_type</span> <span class="o">==</span> <span class="s2">&quot;remove&quot;</span><span class="p">:</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">RemoveMessage</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Unexpected message type: </span><span class="si">{</span><span class="n">message_type</span><span class="si">}</span><span class="s2">. Use one of &#39;human&#39;,&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot; &#39;user&#39;, &#39;ai&#39;, &#39;assistant&#39;, or &#39;system&#39;.&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot; &#39;user&#39;, &#39;ai&#39;, &#39;assistant&#39;, &#39;function&#39;, &#39;tool&#39;, or &#39;system&#39;.&quot;</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">message</span>
 
@@ -448,10 +476,14 @@
 <span class="sd">    - string: shorthand for (&quot;human&quot;, template); e.g., &quot;{user_input}&quot;</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        message: a representation of a message in one of the supported formats</span>
+<span class="sd">        message: a representation of a message in one of the supported formats.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        an instance of a message or a message template</span>
+<span class="sd">        an instance of a message or a message template.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        NotImplementedError: if the message type is not supported.</span>
+<span class="sd">        ValueError: if the message dict does not contain the required keys.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">):</span>
         <span class="n">_message</span> <span class="o">=</span> <span class="n">message</span>
@@ -500,14 +532,12 @@
     <span class="nd">@overload</span>
     <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">MessageLikeRepresentation</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]]:</span>
-        <span class="o">...</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">MessageLikeRepresentation</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]]:</span> <span class="o">...</span>
 
     <span class="nd">@overload</span>
     <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">MessageLikeRepresentation</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span>
-        <span class="o">...</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span> <span class="o">...</span>
 
     <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">MessageLikeRepresentation</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
@@ -543,16 +573,16 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        messages: Sequence Message-like objects to filter.</span>
-<span class="sd">        include_names: Message names to include.</span>
-<span class="sd">        exclude_names: Messages names to exclude.</span>
+<span class="sd">        include_names: Message names to include. Default is None.</span>
+<span class="sd">        exclude_names: Messages names to exclude. Default is None.</span>
 <span class="sd">        include_types: Message types to include. Can be specified as string names (e.g.</span>
 <span class="sd">            &quot;system&quot;, &quot;human&quot;, &quot;ai&quot;, ...) or as BaseMessage classes (e.g.</span>
-<span class="sd">            SystemMessage, HumanMessage, AIMessage, ...).</span>
+<span class="sd">            SystemMessage, HumanMessage, AIMessage, ...). Default is None.</span>
 <span class="sd">        exclude_types: Message types to exclude. Can be specified as string names (e.g.</span>
 <span class="sd">            &quot;system&quot;, &quot;human&quot;, &quot;ai&quot;, ...) or as BaseMessage classes (e.g.</span>
-<span class="sd">            SystemMessage, HumanMessage, AIMessage, ...).</span>
-<span class="sd">        include_ids: Message IDs to include.</span>
-<span class="sd">        exclude_ids: Message IDs to exclude.</span>
+<span class="sd">            SystemMessage, HumanMessage, AIMessage, ...). Default is None.</span>
+<span class="sd">        include_ids: Message IDs to include. Default is None.</span>
+<span class="sd">        exclude_ids: Message IDs to exclude. Default is None.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A list of Messages that meets at least one of the incl_* conditions and none</span>
@@ -737,10 +767,12 @@
 <span class="sd">        strategy: Strategy for trimming.</span>
 <span class="sd">            - &quot;first&quot;: Keep the first &lt;= n_count tokens of the messages.</span>
 <span class="sd">            - &quot;last&quot;: Keep the last &lt;= n_count tokens of the messages.</span>
+<span class="sd">            Default is &quot;last&quot;.</span>
 <span class="sd">        allow_partial: Whether to split a message if only part of the message can be</span>
 <span class="sd">            included. If ``strategy=&quot;last&quot;`` then the last partial contents of a message</span>
 <span class="sd">            are included. If ``strategy=&quot;first&quot;`` then the first partial contents of a</span>
 <span class="sd">            message are included.</span>
+<span class="sd">            Default is False.</span>
 <span class="sd">        end_on: The message type to end on. If specified then every message after the</span>
 <span class="sd">            last occurrence of this type is ignored. If ``strategy==&quot;last&quot;`` then this</span>
 <span class="sd">            is done before we attempt to get the last ``max_tokens``. If</span>
@@ -748,6 +780,7 @@
 <span class="sd">            ``max_tokens``. Can be specified as string names (e.g. &quot;system&quot;, &quot;human&quot;,</span>
 <span class="sd">            &quot;ai&quot;, ...) or as BaseMessage classes (e.g. SystemMessage, HumanMessage,</span>
 <span class="sd">            AIMessage, ...). Can be a single type or a list of types.</span>
+<span class="sd">            Default is None.</span>
 <span class="sd">        start_on: The message type to start on. Should only be specified if</span>
 <span class="sd">            ``strategy=&quot;last&quot;``. If specified then every message before</span>
 <span class="sd">            the first occurrence of this type is ignored. This is done after we trim</span>
@@ -756,8 +789,10 @@
 <span class="sd">            specified as string names (e.g. &quot;system&quot;, &quot;human&quot;, &quot;ai&quot;, ...) or as</span>
 <span class="sd">            BaseMessage classes (e.g. SystemMessage, HumanMessage, AIMessage, ...). Can</span>
 <span class="sd">            be a single type or a list of types.</span>
+<span class="sd">            Default is None.</span>
 <span class="sd">        include_system: Whether to keep the SystemMessage if there is one at index 0.</span>
 <span class="sd">            Should only be specified if ``strategy=&quot;last&quot;``.</span>
+<span class="sd">            Default is False.</span>
 <span class="sd">        text_splitter: Function or ``langchain_text_splitters.TextSplitter`` for</span>
 <span class="sd">            splitting the string contents of a message. Only used if</span>
 <span class="sd">            ``allow_partial=True``. If ``strategy=&quot;last&quot;`` then the last split tokens</span>
@@ -1177,7 +1212,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 28, 2024.
+                                on Jul 09, 2024.
                 </footer>
             </div>
         </div>

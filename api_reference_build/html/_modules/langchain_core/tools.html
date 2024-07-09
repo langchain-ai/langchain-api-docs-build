@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_core.tools &mdash; 🦜🔗 LangChain 0.2.6</title>
+        <title>langchain_core.tools &mdash; 🦜🔗 LangChain 0.2.7</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_core/tools.html"/>
@@ -104,6 +104,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -175,6 +178,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../groq_api_reference.html">groq</a>
@@ -256,7 +260,20 @@
 <span class="kn">from</span> <span class="nn">contextvars</span> <span class="kn">import</span> <span class="n">copy_context</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
 <span class="kn">from</span> <span class="nn">inspect</span> <span class="kn">import</span> <span class="n">signature</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Awaitable</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">Tuple</span><span class="p">,</span>
+    <span class="n">Type</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
@@ -304,11 +321,32 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when &#39;args_schema&#39; is missing or has an incorrect type annotation.&quot;&quot;&quot;</span></div>
 
 
+<span class="k">def</span> <span class="nf">_is_annotated_type</span><span class="p">(</span><span class="n">typ</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">get_origin</span><span class="p">(</span><span class="n">typ</span><span class="p">)</span> <span class="ow">is</span> <span class="n">Annotated</span>
+
+
+<span class="k">def</span> <span class="nf">_get_annotation_description</span><span class="p">(</span><span class="n">arg</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">arg_type</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">_is_annotated_type</span><span class="p">(</span><span class="n">arg_type</span><span class="p">):</span>
+        <span class="n">annotated_args</span> <span class="o">=</span> <span class="n">get_args</span><span class="p">(</span><span class="n">arg_type</span><span class="p">)</span>
+        <span class="n">arg_type</span> <span class="o">=</span> <span class="n">annotated_args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">annotated_args</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">annotation</span> <span class="ow">in</span> <span class="n">annotated_args</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">annotation</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="n">annotation</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
 <span class="k">def</span> <span class="nf">_create_subset_model</span><span class="p">(</span>
-    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">field_names</span><span class="p">:</span> <span class="nb">list</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span>
+    <span class="n">field_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">descriptions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fn_description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pydantic model with only a subset of model&#39;s fields.&quot;&quot;&quot;</span>
     <span class="n">fields</span> <span class="o">=</span> <span class="p">{}</span>
+
     <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">field_names</span><span class="p">:</span>
         <span class="n">field</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span>
         <span class="n">t</span> <span class="o">=</span> <span class="p">(</span>
@@ -317,19 +355,89 @@
             <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">required</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">allow_none</span>
             <span class="k">else</span> <span class="n">Optional</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">outer_type_</span><span class="p">]</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="n">descriptions</span> <span class="ow">and</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">descriptions</span><span class="p">:</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">field_info</span><span class="o">.</span><span class="n">description</span> <span class="o">=</span> <span class="n">descriptions</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span>
         <span class="n">fields</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">field_info</span><span class="p">)</span>
+
     <span class="n">rtn</span> <span class="o">=</span> <span class="n">create_model</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+    <span class="n">rtn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">dedent</span><span class="p">(</span><span class="n">fn_description</span> <span class="ow">or</span> <span class="n">model</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">rtn</span>
 
 
 <span class="k">def</span> <span class="nf">_get_filtered_args</span><span class="p">(</span>
     <span class="n">inferred_model</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span>
     <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">filter_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the arguments from a function&#39;s signature.&quot;&quot;&quot;</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">schema</span><span class="p">()[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
     <span class="n">valid_keys</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="n">func</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
-    <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">schema</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">valid_keys</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;callbacks&quot;</span><span class="p">)}</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">k</span><span class="p">:</span> <span class="n">schema</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">valid_keys</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">filter_args</span> <span class="ow">and</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">param</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="s2">&quot;cls&quot;</span><span class="p">))</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">_parse_python_function_docstring</span><span class="p">(</span><span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse the function and argument descriptions from the docstring of a function.</span>
+
+<span class="sd">    Assumes the function docstring follows Google Python style guide.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">docstring</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">docstring</span><span class="p">:</span>
+        <span class="n">docstring_blocks</span> <span class="o">=</span> <span class="n">docstring</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">descriptors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">args_block</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">past_descriptors</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">docstring_blocks</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">block</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Args:&quot;</span><span class="p">):</span>
+                <span class="n">args_block</span> <span class="o">=</span> <span class="n">block</span>
+                <span class="k">break</span>
+            <span class="k">elif</span> <span class="n">block</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Returns:&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">block</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Example:&quot;</span><span class="p">):</span>
+                <span class="c1"># Don&#39;t break in case Args come after</span>
+                <span class="n">past_descriptors</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">elif</span> <span class="ow">not</span> <span class="n">past_descriptors</span><span class="p">:</span>
+                <span class="n">descriptors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">descriptors</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">args_block</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">args_block</span><span class="p">:</span>
+        <span class="n">arg</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">args_block</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="k">if</span> <span class="s2">&quot;:&quot;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+                <span class="n">arg</span><span class="p">,</span> <span class="n">desc</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="n">maxsplit</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span> <span class="o">=</span> <span class="n">desc</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="n">arg</span><span class="p">:</span>
+                <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span> <span class="o">+=</span> <span class="s2">&quot; &quot;</span> <span class="o">+</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span>
+
+
+<span class="k">def</span> <span class="nf">_infer_arg_descriptions</span><span class="p">(</span>
+    <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Infer argument descriptions from a function&#39;s docstring.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">parse_docstring</span><span class="p">:</span>
+        <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="n">_parse_python_function_docstring</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">inspect</span><span class="p">,</span> <span class="s2">&quot;get_annotations&quot;</span><span class="p">):</span>
+        <span class="c1"># This is for python &lt; 3.10</span>
+        <span class="n">annotations</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">get_annotations</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">annotations</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__annotations__&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">arg_type</span> <span class="ow">in</span> <span class="n">annotations</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">arg_descriptions</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">desc</span> <span class="o">:=</span> <span class="n">_get_annotation_description</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">arg_type</span><span class="p">):</span>
+            <span class="n">arg_descriptions</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span> <span class="o">=</span> <span class="n">desc</span>
+    <span class="k">return</span> <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span>
 
 
 <span class="k">class</span> <span class="nc">_SchemaConfig</span><span class="p">:</span>
@@ -342,25 +450,40 @@
 <div class="viewcode-block" id="create_schema_from_function"><a class="viewcode-back" href="../../tools/langchain_core.tools.create_schema_from_function.html#langchain_community.agent_toolkits.nla.tool.create_schema_from_function">[docs]</a><span class="k">def</span> <span class="nf">create_schema_from_function</span><span class="p">(</span>
     <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">filter_args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pydantic schema from a function&#39;s signature.</span>
 <span class="sd">    Args:</span>
 <span class="sd">        model_name: Name to assign to the generated pydandic schema</span>
 <span class="sd">        func: Function to generate the schema from</span>
+<span class="sd">        filter_args: Optional list of arguments to exclude from the schema</span>
+<span class="sd">        parse_docstring: Whether to parse the function&#39;s docstring for descriptions</span>
+<span class="sd">             for each argument.</span>
 <span class="sd">    Returns:</span>
 <span class="sd">        A pydantic model with the same arguments as the function</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># https://docs.pydantic.dev/latest/usage/validation_decorator/</span>
     <span class="n">validated</span> <span class="o">=</span> <span class="n">validate_arguments</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">_SchemaConfig</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
     <span class="n">inferred_model</span> <span class="o">=</span> <span class="n">validated</span><span class="o">.</span><span class="n">model</span>  <span class="c1"># type: ignore</span>
-    <span class="k">if</span> <span class="s2">&quot;run_manager&quot;</span> <span class="ow">in</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">:</span>
-        <span class="k">del</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="s2">&quot;run_manager&quot;</span><span class="p">]</span>
-    <span class="k">if</span> <span class="s2">&quot;callbacks&quot;</span> <span class="ow">in</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">:</span>
-        <span class="k">del</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span>
+    <span class="n">filter_args</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">filter_args</span> <span class="k">if</span> <span class="n">filter_args</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">filter_args</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span>
+    <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="n">_infer_arg_descriptions</span><span class="p">(</span>
+        <span class="n">func</span><span class="p">,</span> <span class="n">parse_docstring</span><span class="o">=</span><span class="n">parse_docstring</span>
+    <span class="p">)</span>
     <span class="c1"># Pydantic adds placeholder virtual fields we need to strip</span>
-    <span class="n">valid_properties</span> <span class="o">=</span> <span class="n">_get_filtered_args</span><span class="p">(</span><span class="n">inferred_model</span><span class="p">,</span> <span class="n">func</span><span class="p">)</span>
+    <span class="n">valid_properties</span> <span class="o">=</span> <span class="n">_get_filtered_args</span><span class="p">(</span><span class="n">inferred_model</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">filter_args</span><span class="o">=</span><span class="n">filter_args</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_create_subset_model</span><span class="p">(</span>
-        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">Schema&quot;</span><span class="p">,</span> <span class="n">inferred_model</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">valid_properties</span><span class="p">)</span>
+        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">Schema&quot;</span><span class="p">,</span>
+        <span class="n">inferred_model</span><span class="p">,</span>
+        <span class="nb">list</span><span class="p">(</span><span class="n">valid_properties</span><span class="p">),</span>
+        <span class="n">descriptions</span><span class="o">=</span><span class="n">arg_descriptions</span><span class="p">,</span>
+        <span class="n">fn_description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 
@@ -438,9 +561,9 @@
 <span class="sd">    You can use these to eg identify a specific instance of a tool with its use case.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">handle_tool_error</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-        <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">ToolException</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">handle_tool_error</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">ToolException</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="kc">False</span>
+    <span class="p">)</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Handle the content of the ToolException thrown.&quot;&quot;&quot;</span>
 
     <span class="n">handle_validation_error</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
@@ -1335,7 +1458,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 28, 2024.
+                                on Jul 09, 2024.
                 </footer>
             </div>
         </div>

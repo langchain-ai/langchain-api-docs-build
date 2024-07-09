@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_core.indexing.api &mdash; 🦜🔗 LangChain 0.2.6</title>
+        <title>langchain_core.indexing.api &mdash; 🦜🔗 LangChain 0.2.7</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_core/indexing/api.html"/>
@@ -104,6 +104,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -175,6 +178,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../groq_api_reference.html">groq</a>
@@ -227,6 +231,7 @@
                 
   <h1>Source code for langchain_core.indexing.api</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Module contains logic for indexing documents into vector stores.&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">hashlib</span>
@@ -460,8 +465,8 @@
 <span class="sd">        record_manager: Timestamped set to keep track of which documents were</span>
 <span class="sd">                         updated.</span>
 <span class="sd">        vector_store: Vector store to index the documents into.</span>
-<span class="sd">        batch_size: Batch size to use when indexing.</span>
-<span class="sd">        cleanup: How to handle clean up of documents.</span>
+<span class="sd">        batch_size: Batch size to use when indexing. Default is 100.</span>
+<span class="sd">        cleanup: How to handle clean up of documents. Default is None.</span>
 <span class="sd">            - Incremental: Cleans up all documents that haven&#39;t been updated AND</span>
 <span class="sd">                           that are associated with source ids that were seen</span>
 <span class="sd">                           during indexing.</span>
@@ -474,14 +479,23 @@
 <span class="sd">                    This means that users may see duplicated content during indexing.</span>
 <span class="sd">            - None: Do not delete any documents.</span>
 <span class="sd">        source_id_key: Optional key that helps identify the original source</span>
-<span class="sd">            of the document.</span>
+<span class="sd">            of the document. Default is None.</span>
 <span class="sd">        cleanup_batch_size: Batch size to use when cleaning up documents.</span>
+<span class="sd">            Default is 1_000.</span>
 <span class="sd">        force_update: Force update documents even if they are present in the</span>
 <span class="sd">            record manager. Useful if you are re-indexing with updated embeddings.</span>
+<span class="sd">            Default is False.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Indexing result which contains information about how many documents</span>
 <span class="sd">        were added, updated, deleted, or skipped.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If cleanup mode is not one of &#39;incremental&#39;, &#39;full&#39; or None</span>
+<span class="sd">        ValueError: If cleanup mode is incremental and source_id_key is None.</span>
+<span class="sd">        ValueError: If vectorstore does not have</span>
+<span class="sd">            &quot;delete&quot; and &quot;add_documents&quot; required methods.</span>
+<span class="sd">        ValueError: If source_id_key is not None, but is not a string or callable.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">cleanup</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;incremental&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">}:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -643,7 +657,7 @@
     <span class="n">cleanup_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1_000</span><span class="p">,</span>
     <span class="n">force_update</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IndexingResult</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Index data from the loader into the vector store.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Async index data from the loader into the vector store.</span>
 
 <span class="sd">    Indexing functionality uses a manager to keep track of which documents</span>
 <span class="sd">    are in the vector store.</span>
@@ -665,8 +679,8 @@
 <span class="sd">        record_manager: Timestamped set to keep track of which documents were</span>
 <span class="sd">                         updated.</span>
 <span class="sd">        vector_store: Vector store to index the documents into.</span>
-<span class="sd">        batch_size: Batch size to use when indexing.</span>
-<span class="sd">        cleanup: How to handle clean up of documents.</span>
+<span class="sd">        batch_size: Batch size to use when indexing. Default is 100.</span>
+<span class="sd">        cleanup: How to handle clean up of documents. Default is None.</span>
 <span class="sd">            - Incremental: Cleans up all documents that haven&#39;t been updated AND</span>
 <span class="sd">                           that are associated with source ids that were seen</span>
 <span class="sd">                           during indexing.</span>
@@ -678,14 +692,23 @@
 <span class="sd">                    This means that users may see duplicated content during indexing.</span>
 <span class="sd">            - None: Do not delete any documents.</span>
 <span class="sd">        source_id_key: Optional key that helps identify the original source</span>
-<span class="sd">            of the document.</span>
+<span class="sd">            of the document. Default is None.</span>
 <span class="sd">        cleanup_batch_size: Batch size to use when cleaning up documents.</span>
+<span class="sd">            Default is 1_000.</span>
 <span class="sd">        force_update: Force update documents even if they are present in the</span>
 <span class="sd">            record manager. Useful if you are re-indexing with updated embeddings.</span>
+<span class="sd">            Default is False.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Indexing result which contains information about how many documents</span>
 <span class="sd">        were added, updated, deleted, or skipped.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If cleanup mode is not one of &#39;incremental&#39;, &#39;full&#39; or None</span>
+<span class="sd">        ValueError: If cleanup mode is incremental and source_id_key is None.</span>
+<span class="sd">        ValueError: If vectorstore does not have</span>
+<span class="sd">            &quot;adelete&quot; and &quot;aadd_documents&quot; required methods.</span>
+<span class="sd">        ValueError: If source_id_key is not None, but is not a string or callable.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">if</span> <span class="n">cleanup</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;incremental&quot;</span><span class="p">,</span> <span class="s2">&quot;full&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">}:</span>
@@ -848,7 +871,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 28, 2024.
+                                on Jul 09, 2024.
                 </footer>
             </div>
         </div>

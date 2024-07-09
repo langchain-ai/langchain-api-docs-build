@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_openai.chat_models.azure &mdash; 🦜🔗 LangChain 0.2.6</title>
+        <title>langchain_openai.chat_models.azure &mdash; 🦜🔗 LangChain 0.2.7</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_openai/chat_models/azure.html"/>
@@ -104,6 +104,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../fireworks_api_reference.html">fireworks</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_community_api_reference.html">google-community</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../google_genai_api_reference.html">google-genai</a>
         </li>
         <li class="nav-item">
@@ -175,6 +178,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../elasticsearch_api_reference.html">elasticsearch</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../exa_api_reference.html">exa</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../fireworks_api_reference.html">fireworks</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_community_api_reference.html">google-community</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_genai_api_reference.html">google-genai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../google_vertexai_api_reference.html">google-vertexai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../groq_api_reference.html">groq</a>
@@ -227,6 +231,7 @@
                 
   <h1>Source code for langchain_openai.chat_models.azure</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Azure OpenAI chat wrapper.&quot;&quot;&quot;</span>
+
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">logging</span>
@@ -285,48 +290,417 @@
 
 
 <div class="viewcode-block" id="AzureChatOpenAI"><a class="viewcode-back" href="../../../chat_models/langchain_openai.chat_models.azure.AzureChatOpenAI.html#langchain_openai.chat_models.azure.AzureChatOpenAI">[docs]</a><span class="k">class</span> <span class="nc">AzureChatOpenAI</span><span class="p">(</span><span class="n">BaseChatOpenAI</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;`Azure OpenAI` Chat Completion API.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Azure OpenAI chat model integration.</span>
 
-<span class="sd">    To use this class you</span>
-<span class="sd">    must have a deployed model on Azure OpenAI. Use `deployment_name` in the</span>
-<span class="sd">    constructor to refer to the &quot;Model deployment name&quot; in the Azure portal.</span>
+<span class="sd">    Setup:</span>
+<span class="sd">        Head to the https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line%2Cpython-new&amp;pivots=programming-language-python</span>
+<span class="sd">        to create your Azure OpenAI deployment.</span>
 
-<span class="sd">    In addition, you should have the</span>
-<span class="sd">    following environment variables set or passed in constructor in lower case:</span>
-<span class="sd">    - ``AZURE_OPENAI_API_KEY``</span>
-<span class="sd">    - ``AZURE_OPENAI_ENDPOINT``</span>
-<span class="sd">    - ``AZURE_OPENAI_AD_TOKEN``</span>
-<span class="sd">    - ``OPENAI_API_VERSION``</span>
-<span class="sd">    - ``OPENAI_PROXY``</span>
+<span class="sd">        Then install ``langchain-openai`` and set environment variables</span>
+<span class="sd">        ``AZURE_OPENAI_API_KEY`` and ``AZURE_OPENAI_ENDPOINT``:</span>
 
-<span class="sd">    For example, if you have `gpt-3.5-turbo` deployed, with the deployment name</span>
-<span class="sd">    `35-turbo-dev`, the constructor should look like:</span>
+<span class="sd">        .. code-block:: bash</span>
 
-<span class="sd">    .. code-block:: python</span>
+<span class="sd">            pip install -U langchain-openai</span>
 
-<span class="sd">        from langchain_openai import AzureChatOpenAI</span>
+<span class="sd">            export AZURE_OPENAI_API_KEY=&quot;your-api-key&quot;</span>
+<span class="sd">            export AZURE_OPENAI_ENDPOINT=&quot;https://your-endpoint.openai.azure.com/&quot;</span>
 
-<span class="sd">        AzureChatOpenAI(azure_deployment=&quot;35-turbo-dev&quot;, openai_api_version=&quot;2023-05-15&quot;)</span>
+<span class="sd">    Key init args — completion params:</span>
+<span class="sd">        azure_deployment: str</span>
+<span class="sd">            Name of Azure OpenAI deployment to use.</span>
+<span class="sd">        temperature: float</span>
+<span class="sd">            Sampling temperature.</span>
+<span class="sd">        max_tokens: Optional[int]</span>
+<span class="sd">            Max number of tokens to generate.</span>
+<span class="sd">        logprobs: Optional[bool]</span>
+<span class="sd">            Whether to return logprobs.</span>
 
-<span class="sd">    Be aware the API version may change.</span>
+<span class="sd">    Key init args — client params:</span>
+<span class="sd">        api_version: str</span>
+<span class="sd">            Azure OpenAI API version to use. See more on the different versions here:</span>
+<span class="sd">            https://learn.microsoft.com/en-us/azure/ai-services/openai/reference#rest-api-versioning</span>
+<span class="sd">        timeout: Union[float, Tuple[float, float], Any, None]</span>
+<span class="sd">            Timeout for requests.</span>
+<span class="sd">        max_retries: int</span>
+<span class="sd">            Max number of retries.</span>
+<span class="sd">        organization: Optional[str]</span>
+<span class="sd">            OpenAI organization ID. If not passed in will be read from env</span>
+<span class="sd">            var OPENAI_ORG_ID.</span>
 
-<span class="sd">    You can also specify the version of the model using ``model_version`` constructor</span>
-<span class="sd">    parameter, as Azure OpenAI doesn&#39;t return model version with the response.</span>
+<span class="sd">    See full list of supported init args and their descriptions in the params section.</span>
 
-<span class="sd">    Default is empty. When you specify the version, it will be appended to the</span>
-<span class="sd">    model name in the response. Setting correct version will help you to calculate the</span>
-<span class="sd">    cost properly. Model version is not validated, so make sure you set it correctly</span>
-<span class="sd">    to get the correct cost.</span>
+<span class="sd">    Instantiate:</span>
+<span class="sd">        .. code-block:: python</span>
 
-<span class="sd">    Any parameters that are valid to be passed to the openai.create call can be passed</span>
-<span class="sd">    in, even if not explicitly saved on this class.</span>
+<span class="sd">            from langchain_openai import AzureChatOpenAI</span>
+
+<span class="sd">            llm = AzureChatOpenAI(</span>
+<span class="sd">                azure_deployment=&quot;your-deployment&quot;,</span>
+<span class="sd">                api_version=&quot;2024-05-01-preview&quot;,</span>
+<span class="sd">                temperature=0,</span>
+<span class="sd">                max_tokens=None,</span>
+<span class="sd">                timeout=None,</span>
+<span class="sd">                max_retries=2,</span>
+<span class="sd">                # organization=&quot;...&quot;,</span>
+<span class="sd">                # other params...</span>
+<span class="sd">            )</span>
+
+<span class="sd">    **NOTE**: Any param which is not explicitly supported will be passed directly to the</span>
+<span class="sd">    ``openai.AzureOpenAI.chat.completions.create(...)`` API every time to the model is</span>
+<span class="sd">    invoked. For example:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_openai import AzureChatOpenAI</span>
+<span class="sd">            import openai</span>
+
+<span class="sd">            AzureChatOpenAI(..., logprobs=True).invoke(...)</span>
+
+<span class="sd">            # results in underlying API call of:</span>
+
+<span class="sd">            openai.AzureOpenAI(..).chat.completions.create(..., logprobs=True)</span>
+
+<span class="sd">            # which is also equivalent to:</span>
+
+<span class="sd">            AzureChatOpenAI(...).invoke(..., logprobs=True)</span>
+
+<span class="sd">    Invoke:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            messages = [</span>
+<span class="sd">                (</span>
+<span class="sd">                    &quot;system&quot;,</span>
+<span class="sd">                    &quot;You are a helpful translator. Translate the user sentence to French.&quot;,</span>
+<span class="sd">                ),</span>
+<span class="sd">                (&quot;human&quot;, &quot;I love programming.&quot;),</span>
+<span class="sd">            ]</span>
+<span class="sd">            llm.invoke(messages)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessage(</span>
+<span class="sd">                content=&quot;J&#39;adore programmer.&quot;,</span>
+<span class="sd">                usage_metadata={&quot;input_tokens&quot;: 28, &quot;output_tokens&quot;: 6, &quot;total_tokens&quot;: 34},</span>
+<span class="sd">                response_metadata={</span>
+<span class="sd">                    &quot;token_usage&quot;: {</span>
+<span class="sd">                        &quot;completion_tokens&quot;: 6,</span>
+<span class="sd">                        &quot;prompt_tokens&quot;: 28,</span>
+<span class="sd">                        &quot;total_tokens&quot;: 34,</span>
+<span class="sd">                    },</span>
+<span class="sd">                    &quot;model_name&quot;: &quot;gpt-4&quot;,</span>
+<span class="sd">                    &quot;system_fingerprint&quot;: &quot;fp_7ec89fabc6&quot;,</span>
+<span class="sd">                    &quot;prompt_filter_results&quot;: [</span>
+<span class="sd">                        {</span>
+<span class="sd">                            &quot;prompt_index&quot;: 0,</span>
+<span class="sd">                            &quot;content_filter_results&quot;: {</span>
+<span class="sd">                                &quot;hate&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                                &quot;self_harm&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                                &quot;sexual&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                                &quot;violence&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                            },</span>
+<span class="sd">                        }</span>
+<span class="sd">                    ],</span>
+<span class="sd">                    &quot;finish_reason&quot;: &quot;stop&quot;,</span>
+<span class="sd">                    &quot;logprobs&quot;: None,</span>
+<span class="sd">                    &quot;content_filter_results&quot;: {</span>
+<span class="sd">                        &quot;hate&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                        &quot;self_harm&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                        &quot;sexual&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                        &quot;violence&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                    },</span>
+<span class="sd">                },</span>
+<span class="sd">                id=&quot;run-6d7a5282-0de0-4f27-9cc0-82a9db9a3ce9-0&quot;,</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Stream:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            for chunk in llm.stream(messages):</span>
+<span class="sd">                print(chunk)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessageChunk(content=&quot;&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;J&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;&#39;&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;ad&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;ore&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot; la&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot; programm&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;ation&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(content=&quot;.&quot;, id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;)</span>
+<span class="sd">            AIMessageChunk(</span>
+<span class="sd">                content=&quot;&quot;,</span>
+<span class="sd">                response_metadata={</span>
+<span class="sd">                    &quot;finish_reason&quot;: &quot;stop&quot;,</span>
+<span class="sd">                    &quot;model_name&quot;: &quot;gpt-4&quot;,</span>
+<span class="sd">                    &quot;system_fingerprint&quot;: &quot;fp_811936bd4f&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">                id=&quot;run-a6f294d3-0700-4f6a-abc2-c6ef1178c37f&quot;,</span>
+<span class="sd">            )</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            stream = llm.stream(messages)</span>
+<span class="sd">            full = next(stream)</span>
+<span class="sd">            for chunk in stream:</span>
+<span class="sd">                full += chunk</span>
+<span class="sd">            full</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            AIMessageChunk(</span>
+<span class="sd">                content=&quot;J&#39;adore la programmation.&quot;,</span>
+<span class="sd">                response_metadata={</span>
+<span class="sd">                    &quot;finish_reason&quot;: &quot;stop&quot;,</span>
+<span class="sd">                    &quot;model_name&quot;: &quot;gpt-4&quot;,</span>
+<span class="sd">                    &quot;system_fingerprint&quot;: &quot;fp_811936bd4f&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">                id=&quot;run-ba60e41c-9258-44b8-8f3a-2f10599643b3&quot;,</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Async:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            await llm.ainvoke(messages)</span>
+
+<span class="sd">            # stream:</span>
+<span class="sd">            # async for chunk in (await llm.astream(messages))</span>
+
+<span class="sd">            # batch:</span>
+<span class="sd">            # await llm.abatch([messages])</span>
+
+<span class="sd">    Tool calling:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+
+<span class="sd">            class GetWeather(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Get the current weather in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                location: str = Field(</span>
+<span class="sd">                    ..., description=&quot;The city and state, e.g. San Francisco, CA&quot;</span>
+<span class="sd">                )</span>
+
+
+<span class="sd">            class GetPopulation(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Get the current population in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                location: str = Field(</span>
+<span class="sd">                    ..., description=&quot;The city and state, e.g. San Francisco, CA&quot;</span>
+<span class="sd">                )</span>
+
+
+<span class="sd">            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])</span>
+<span class="sd">            ai_msg = llm_with_tools.invoke(</span>
+<span class="sd">                &quot;Which city is hotter today and which is bigger: LA or NY?&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            ai_msg.tool_calls</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;name&quot;: &quot;GetWeather&quot;,</span>
+<span class="sd">                    &quot;args&quot;: {&quot;location&quot;: &quot;Los Angeles, CA&quot;},</span>
+<span class="sd">                    &quot;id&quot;: &quot;call_6XswGD5Pqk8Tt5atYr7tfenU&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;name&quot;: &quot;GetWeather&quot;,</span>
+<span class="sd">                    &quot;args&quot;: {&quot;location&quot;: &quot;New York, NY&quot;},</span>
+<span class="sd">                    &quot;id&quot;: &quot;call_ZVL15vA8Y7kXqOy3dtmQgeCi&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;name&quot;: &quot;GetPopulation&quot;,</span>
+<span class="sd">                    &quot;args&quot;: {&quot;location&quot;: &quot;Los Angeles, CA&quot;},</span>
+<span class="sd">                    &quot;id&quot;: &quot;call_49CFW8zqC9W7mh7hbMLSIrXw&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;name&quot;: &quot;GetPopulation&quot;,</span>
+<span class="sd">                    &quot;args&quot;: {&quot;location&quot;: &quot;New York, NY&quot;},</span>
+<span class="sd">                    &quot;id&quot;: &quot;call_6ghfKxV264jEfe1mRIkS3PE7&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">            ]</span>
+
+<span class="sd">    Structured output:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from typing import Optional</span>
+
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+
+<span class="sd">            class Joke(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Joke to tell user.&#39;&#39;&#39;</span>
+
+<span class="sd">                setup: str = Field(description=&quot;The setup of the joke&quot;)</span>
+<span class="sd">                punchline: str = Field(description=&quot;The punchline to the joke&quot;)</span>
+<span class="sd">                rating: Optional[int] = Field(description=&quot;How funny the joke is, from 1 to 10&quot;)</span>
+
+
+<span class="sd">            structured_llm = llm.with_structured_output(Joke)</span>
+<span class="sd">            structured_llm.invoke(&quot;Tell me a joke about cats&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            Joke(</span>
+<span class="sd">                setup=&quot;Why was the cat sitting on the computer?&quot;,</span>
+<span class="sd">                punchline=&quot;To keep an eye on the mouse!&quot;,</span>
+<span class="sd">                rating=None,</span>
+<span class="sd">            )</span>
+
+<span class="sd">        See ``AzureChatOpenAI.with_structured_output()`` for more.</span>
+
+<span class="sd">    JSON mode:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            json_llm = llm.bind(response_format={&quot;type&quot;: &quot;json_object&quot;})</span>
+<span class="sd">            ai_msg = json_llm.invoke(</span>
+<span class="sd">                &quot;Return a JSON object with key &#39;random_ints&#39; and a value of 10 random ints in [0-99]&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            ai_msg.content</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            &#39;\\n{\\n  &quot;random_ints&quot;: [23, 87, 45, 12, 78, 34, 56, 90, 11, 67]\\n}&#39;</span>
+
+<span class="sd">    Image input:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            import base64</span>
+<span class="sd">            import httpx</span>
+<span class="sd">            from langchain_core.messages import HumanMessage</span>
+
+<span class="sd">            image_url = &quot;https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg&quot;</span>
+<span class="sd">            image_data = base64.b64encode(httpx.get(image_url).content).decode(&quot;utf-8&quot;)</span>
+<span class="sd">            message = HumanMessage(</span>
+<span class="sd">                content=[</span>
+<span class="sd">                    {&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;describe the weather in this image&quot;},</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;type&quot;: &quot;image_url&quot;,</span>
+<span class="sd">                        &quot;image_url&quot;: {&quot;url&quot;: f&quot;data:image/jpeg;base64,{image_data}&quot;},</span>
+<span class="sd">                    },</span>
+<span class="sd">                ]</span>
+<span class="sd">            )</span>
+<span class="sd">            ai_msg = llm.invoke([message])</span>
+<span class="sd">            ai_msg.content</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            &quot;The weather in the image appears to be quite pleasant. The sky is mostly clear&quot;</span>
+
+<span class="sd">    Token usage:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            ai_msg = llm.invoke(messages)</span>
+<span class="sd">            ai_msg.usage_metadata</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {&quot;input_tokens&quot;: 28, &quot;output_tokens&quot;: 5, &quot;total_tokens&quot;: 33}</span>
+
+<span class="sd">    Logprobs:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            logprobs_llm = llm.bind(logprobs=True)</span>
+<span class="sd">            ai_msg = logprobs_llm.invoke(messages)</span>
+<span class="sd">            ai_msg.response_metadata[&quot;logprobs&quot;]</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {</span>
+<span class="sd">                &quot;content&quot;: [</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;token&quot;: &quot;J&quot;,</span>
+<span class="sd">                        &quot;bytes&quot;: [74],</span>
+<span class="sd">                        &quot;logprob&quot;: -4.9617593e-06,</span>
+<span class="sd">                        &quot;top_logprobs&quot;: [],</span>
+<span class="sd">                    },</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;token&quot;: &quot;&#39;adore&quot;,</span>
+<span class="sd">                        &quot;bytes&quot;: [39, 97, 100, 111, 114, 101],</span>
+<span class="sd">                        &quot;logprob&quot;: -0.25202933,</span>
+<span class="sd">                        &quot;top_logprobs&quot;: [],</span>
+<span class="sd">                    },</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;token&quot;: &quot; la&quot;,</span>
+<span class="sd">                        &quot;bytes&quot;: [32, 108, 97],</span>
+<span class="sd">                        &quot;logprob&quot;: -0.20141791,</span>
+<span class="sd">                        &quot;top_logprobs&quot;: [],</span>
+<span class="sd">                    },</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;token&quot;: &quot; programmation&quot;,</span>
+<span class="sd">                        &quot;bytes&quot;: [</span>
+<span class="sd">                            32,</span>
+<span class="sd">                            112,</span>
+<span class="sd">                            114,</span>
+<span class="sd">                            111,</span>
+<span class="sd">                            103,</span>
+<span class="sd">                            114,</span>
+<span class="sd">                            97,</span>
+<span class="sd">                            109,</span>
+<span class="sd">                            109,</span>
+<span class="sd">                            97,</span>
+<span class="sd">                            116,</span>
+<span class="sd">                            105,</span>
+<span class="sd">                            111,</span>
+<span class="sd">                            110,</span>
+<span class="sd">                        ],</span>
+<span class="sd">                        &quot;logprob&quot;: -1.9361265e-07,</span>
+<span class="sd">                        &quot;top_logprobs&quot;: [],</span>
+<span class="sd">                    },</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;token&quot;: &quot;.&quot;,</span>
+<span class="sd">                        &quot;bytes&quot;: [46],</span>
+<span class="sd">                        &quot;logprob&quot;: -1.2233183e-05,</span>
+<span class="sd">                        &quot;top_logprobs&quot;: [],</span>
+<span class="sd">                    },</span>
+<span class="sd">                ]</span>
+<span class="sd">            }</span>
+
+<span class="sd">    Response metadata</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            ai_msg = llm.invoke(messages)</span>
+<span class="sd">            ai_msg.response_metadata</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {</span>
+<span class="sd">                &quot;token_usage&quot;: {</span>
+<span class="sd">                    &quot;completion_tokens&quot;: 6,</span>
+<span class="sd">                    &quot;prompt_tokens&quot;: 28,</span>
+<span class="sd">                    &quot;total_tokens&quot;: 34,</span>
+<span class="sd">                },</span>
+<span class="sd">                &quot;model_name&quot;: &quot;gpt-35-turbo&quot;,</span>
+<span class="sd">                &quot;system_fingerprint&quot;: None,</span>
+<span class="sd">                &quot;prompt_filter_results&quot;: [</span>
+<span class="sd">                    {</span>
+<span class="sd">                        &quot;prompt_index&quot;: 0,</span>
+<span class="sd">                        &quot;content_filter_results&quot;: {</span>
+<span class="sd">                            &quot;hate&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                            &quot;self_harm&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                            &quot;sexual&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                            &quot;violence&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                        },</span>
+<span class="sd">                    }</span>
+<span class="sd">                ],</span>
+<span class="sd">                &quot;finish_reason&quot;: &quot;stop&quot;,</span>
+<span class="sd">                &quot;logprobs&quot;: None,</span>
+<span class="sd">                &quot;content_filter_results&quot;: {</span>
+<span class="sd">                    &quot;hate&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                    &quot;self_harm&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                    &quot;sexual&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                    &quot;violence&quot;: {&quot;filtered&quot;: False, &quot;severity&quot;: &quot;safe&quot;},</span>
+<span class="sd">                },</span>
+<span class="sd">            }</span>
 <span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="n">azure_endpoint</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Your Azure endpoint, including the resource.</span>
 <span class="sd">    </span>
 <span class="sd">        Automatically inferred from env var `AZURE_OPENAI_ENDPOINT` if not provided.</span>
-<span class="sd">    </span>
 <span class="sd">        Example: `https://example-resource.azure.openai.com/`</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">deployment_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;azure_deployment&quot;</span><span class="p">)</span>
@@ -343,7 +717,6 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Your Azure Active Directory token.</span>
 <span class="sd">    </span>
 <span class="sd">        Automatically inferred from env var `AZURE_OPENAI_AD_TOKEN` if not provided.</span>
-<span class="sd">        </span>
 <span class="sd">        For more: </span>
 <span class="sd">        https://www.microsoft.com/en-us/security/business/identity-access/microsoft-entra-id.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -352,13 +725,25 @@
 <span class="sd">        </span>
 <span class="sd">        Will be invoked on every request.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="n">model_version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Legacy, for openai&lt;1.0.0 support.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The version of the model (e.g. &quot;0125&quot; for gpt-3.5-0125).</span>
+
+<span class="sd">    Azure OpenAI doesn&#39;t return model version with the response by default so it must </span>
+<span class="sd">    be manually specified if you want to use this information downstream, e.g. when</span>
+<span class="sd">    calculating costs.</span>
+
+<span class="sd">    When you specify the version, it will be appended to the model name in the </span>
+<span class="sd">    response. Setting correct version will help you to calculate the cost properly. </span>
+<span class="sd">    Model version is not validated, so make sure you set it correctly to get the </span>
+<span class="sd">    correct cost.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="n">openai_api_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Legacy, for openai&lt;1.0.0 support.&quot;&quot;&quot;</span>
     <span class="n">validate_base_url</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;For backwards compatibility. If legacy val openai_api_base is passed in, try to </span>
-<span class="sd">        infer if it is a base_url or azure_endpoint and update accordingly.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;If legacy arg openai_api_base is passed in, try to infer if it is a base_url or </span>
+<span class="sd">        azure_endpoint and update client params accordingly.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
@@ -396,8 +781,10 @@
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">convert_to_secret_str</span><span class="p">(</span><span class="n">openai_api_key</span><span class="p">)</span> <span class="k">if</span> <span class="n">openai_api_key</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="p">)</span>
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
-            <span class="s2">&quot;OPENAI_API_BASE&quot;</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;openai_api_base&quot;</span> <span class="ow">in</span> <span class="n">values</span>
+            <span class="k">else</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;OPENAI_API_BASE&quot;</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_version&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_version&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span>
             <span class="s2">&quot;OPENAI_API_VERSION&quot;</span>
@@ -449,12 +836,16 @@
             <span class="s2">&quot;api_version&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_version&quot;</span><span class="p">],</span>
             <span class="s2">&quot;azure_endpoint&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_endpoint&quot;</span><span class="p">],</span>
             <span class="s2">&quot;azure_deployment&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;deployment_name&quot;</span><span class="p">],</span>
-            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="s2">&quot;azure_ad_token&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_key&quot;</span><span class="p">]</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;azure_ad_token&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token&quot;</span><span class="p">]</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
             <span class="s2">&quot;azure_ad_token_provider&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;azure_ad_token_provider&quot;</span><span class="p">],</span>
             <span class="s2">&quot;organization&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_organization&quot;</span><span class="p">],</span>
             <span class="s2">&quot;base_url&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_api_base&quot;</span><span class="p">],</span>
@@ -505,8 +896,7 @@
         <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;function_calling&quot;</span><span class="p">,</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">,</span>
         <span class="n">include_raw</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_AllReturnType</span><span class="p">]:</span>
-        <span class="o">...</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_AllReturnType</span><span class="p">]:</span> <span class="o">...</span>
 
     <span class="nd">@overload</span>
     <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
@@ -516,8 +906,7 @@
         <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;function_calling&quot;</span><span class="p">,</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">,</span>
         <span class="n">include_raw</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_DictOrPydantic</span><span class="p">]:</span>
-        <span class="o">...</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_DictOrPydantic</span><span class="p">]:</span> <span class="o">...</span>
 
 <div class="viewcode-block" id="AzureChatOpenAI.with_structured_output"><a class="viewcode-back" href="../../../chat_models/langchain_openai.chat_models.azure.AzureChatOpenAI.html#langchain_openai.chat_models.azure.AzureChatOpenAI.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -705,20 +1094,21 @@
                     <span class="s2">&quot;schema must be specified when method is &#39;function_calling&#39;. &quot;</span>
                     <span class="s2">&quot;Received None.&quot;</span>
                 <span class="p">)</span>
-            <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">],</span> <span class="n">tool_choice</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">tool_name</span> <span class="o">=</span> <span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">schema</span><span class="p">)[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">],</span> <span class="n">tool_choice</span><span class="o">=</span><span class="n">tool_name</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">is_pydantic_schema</span><span class="p">:</span>
                 <span class="n">output_parser</span><span class="p">:</span> <span class="n">OutputParserLike</span> <span class="o">=</span> <span class="n">PydanticToolsParser</span><span class="p">(</span>
-                    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">],</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">],</span>  <span class="c1"># type: ignore[list-item]</span>
+                    <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># type: ignore[list-item]</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">key_name</span> <span class="o">=</span> <span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">schema</span><span class="p">)[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
                 <span class="n">output_parser</span> <span class="o">=</span> <span class="n">JsonOutputKeyToolsParser</span><span class="p">(</span>
-                    <span class="n">key_name</span><span class="o">=</span><span class="n">key_name</span><span class="p">,</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+                    <span class="n">key_name</span><span class="o">=</span><span class="n">tool_name</span><span class="p">,</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
                 <span class="p">)</span>
         <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">:</span>
             <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">response_format</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;json_object&quot;</span><span class="p">})</span>
             <span class="n">output_parser</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">PydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+                <span class="n">PydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
                 <span class="k">if</span> <span class="n">is_pydantic_schema</span>
                 <span class="k">else</span> <span class="n">JsonOutputParser</span><span class="p">()</span>
             <span class="p">)</span>
@@ -811,7 +1201,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jun 28, 2024.
+                                on Jul 09, 2024.
                 </footer>
             </div>
         </div>
