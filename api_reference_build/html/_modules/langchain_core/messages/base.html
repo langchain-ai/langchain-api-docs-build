@@ -343,7 +343,7 @@
 
 <div class="viewcode-block" id="merge_content"><a class="viewcode-back" href="../../../messages/langchain_core.messages.base.merge_content.html#langchain_core.messages.function.merge_content">[docs]</a><span class="k">def</span> <span class="nf">merge_content</span><span class="p">(</span>
     <span class="n">first_content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]],</span>
-    <span class="n">second_content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]],</span>
+    <span class="o">*</span><span class="n">contents</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge two message contents.</span>
 
@@ -354,31 +354,32 @@
 <span class="sd">    Returns:</span>
 <span class="sd">        The merged content.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># If first chunk is a string</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-        <span class="c1"># If the second chunk is also a string, then merge them naively</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">second_content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">first_content</span> <span class="o">+</span> <span class="n">second_content</span>
-        <span class="c1"># If the second chunk is a list, add the first chunk to the start of the list</span>
+    <span class="n">merged</span> <span class="o">=</span> <span class="n">first_content</span>
+    <span class="k">for</span> <span class="n">content</span> <span class="ow">in</span> <span class="n">contents</span><span class="p">:</span>
+        <span class="c1"># If current is a string</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">merged</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="c1"># If the next chunk is also a string, then merge them naively</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">merged</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">merged</span><span class="p">)</span> <span class="o">+</span> <span class="n">content</span>
+            <span class="c1"># If the next chunk is a list, add the current to the start of the list</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">merged</span> <span class="o">=</span> <span class="p">[</span><span class="n">merged</span><span class="p">]</span> <span class="o">+</span> <span class="n">content</span>  <span class="c1"># type: ignore</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="c1"># If both are lists</span>
+            <span class="n">merged</span> <span class="o">=</span> <span class="n">merge_lists</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">,</span> <span class="n">merged</span><span class="p">),</span> <span class="n">content</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="c1"># If the first content is a list, and the second content is a string</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">return_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span><span class="n">first_content</span><span class="p">]</span>
-            <span class="k">return</span> <span class="n">return_list</span> <span class="o">+</span> <span class="n">second_content</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">second_content</span><span class="p">,</span> <span class="n">List</span><span class="p">):</span>
-        <span class="c1"># If both are lists</span>
-        <span class="n">merged_list</span> <span class="o">=</span> <span class="n">merge_lists</span><span class="p">(</span><span class="n">first_content</span><span class="p">,</span> <span class="n">second_content</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="n">merged_list</span><span class="p">)</span>
-    <span class="c1"># If the first content is a list, and the second content is a string</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># If the last element of the first content is a string</span>
-        <span class="c1"># Add the second content to the last element</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_content</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">first_content</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">first_content</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">second_content</span><span class="p">]</span>
-        <span class="c1"># If second content is an empty string, treat as a no-op</span>
-        <span class="k">elif</span> <span class="n">second_content</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">first_content</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Otherwise, add the second content as a new element of the list</span>
-            <span class="k">return</span> <span class="n">first_content</span> <span class="o">+</span> <span class="p">[</span><span class="n">second_content</span><span class="p">]</span></div>
+            <span class="c1"># If the last element of the first content is a string</span>
+            <span class="c1"># Add the second content to the last element</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">merged</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+                <span class="n">merged</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="n">content</span>
+            <span class="c1"># If second content is an empty string, treat as a no-op</span>
+            <span class="k">elif</span> <span class="n">content</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Otherwise, add the second content as a new element of the list</span>
+                <span class="n">merged</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">merged</span></div>
 
 
 <div class="viewcode-block" id="BaseMessageChunk"><a class="viewcode-back" href="../../../messages/langchain_core.messages.base.BaseMessageChunk.html#langchain_core.messages.function.BaseMessageChunk">[docs]</a><span class="k">class</span> <span class="nc">BaseMessageChunk</span><span class="p">(</span><span class="n">BaseMessage</span><span class="p">):</span>
@@ -426,6 +427,22 @@
                 <span class="n">response_metadata</span><span class="o">=</span><span class="n">merge_dicts</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">response_metadata</span>
                 <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">BaseMessageChunk</span><span class="p">)</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">other</span>
+        <span class="p">):</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">merge_content</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">content</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">other</span><span class="p">))</span>
+            <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">additional_kwargs</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">other</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">response_metadata</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">response_metadata</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">other</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>  <span class="c1"># type: ignore[call-arg]</span>
+                <span class="nb">id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+                <span class="n">response_metadata</span><span class="o">=</span><span class="n">response_metadata</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
@@ -485,7 +502,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 09, 2024.
+                                on Jul 10, 2024.
                 </footer>
             </div>
         </div>

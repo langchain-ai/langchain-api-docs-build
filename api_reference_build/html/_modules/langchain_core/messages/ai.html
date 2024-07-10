@@ -499,67 +499,72 @@
 
     <span class="k">def</span> <span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseMessageChunk</span><span class="p">:</span>  <span class="c1"># type: ignore</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">example</span> <span class="o">!=</span> <span class="n">other</span><span class="o">.</span><span class="n">example</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot concatenate AIMessageChunks with different example values.&quot;</span>
-                <span class="p">)</span>
-
-            <span class="n">content</span> <span class="o">=</span> <span class="n">merge_content</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-            <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">additional_kwargs</span>
-            <span class="p">)</span>
-            <span class="n">response_metadata</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">response_metadata</span>
-            <span class="p">)</span>
-
-            <span class="c1"># Merge tool call chunks</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tool_call_chunks</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">:</span>
-                <span class="n">raw_tool_calls</span> <span class="o">=</span> <span class="n">merge_lists</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">,</span>
-                    <span class="n">other</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">raw_tool_calls</span><span class="p">:</span>
-                    <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
-                        <span class="n">ToolCallChunk</span><span class="p">(</span>
-                            <span class="n">name</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
-                            <span class="n">args</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">),</span>
-                            <span class="n">index</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
-                            <span class="nb">id</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
-                        <span class="p">)</span>
-                        <span class="k">for</span> <span class="n">rtc</span> <span class="ow">in</span> <span class="n">raw_tool_calls</span>
-                    <span class="p">]</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
-
-            <span class="c1"># Token usage</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">or</span> <span class="n">other</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">:</span>
-                <span class="n">left</span><span class="p">:</span> <span class="n">UsageMetadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">or</span> <span class="n">UsageMetadata</span><span class="p">(</span>
-                    <span class="n">input_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">output_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">total_tokens</span><span class="o">=</span><span class="mi">0</span>
-                <span class="p">)</span>
-                <span class="n">right</span><span class="p">:</span> <span class="n">UsageMetadata</span> <span class="o">=</span> <span class="n">other</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">or</span> <span class="n">UsageMetadata</span><span class="p">(</span>
-                    <span class="n">input_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">output_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">total_tokens</span><span class="o">=</span><span class="mi">0</span>
-                <span class="p">)</span>
-                <span class="n">usage_metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UsageMetadata</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="s2">&quot;input_tokens&quot;</span><span class="p">:</span> <span class="n">left</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">right</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">],</span>
-                    <span class="s2">&quot;output_tokens&quot;</span><span class="p">:</span> <span class="n">left</span><span class="p">[</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">right</span><span class="p">[</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">],</span>
-                    <span class="s2">&quot;total_tokens&quot;</span><span class="p">:</span> <span class="n">left</span><span class="p">[</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">right</span><span class="p">[</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">],</span>
-                <span class="p">}</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">usage_metadata</span> <span class="o">=</span> <span class="kc">None</span>
-
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
-                <span class="n">example</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">example</span><span class="p">,</span>
-                <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
-                <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
-                <span class="n">response_metadata</span><span class="o">=</span><span class="n">response_metadata</span><span class="p">,</span>
-                <span class="n">usage_metadata</span><span class="o">=</span><span class="n">usage_metadata</span><span class="p">,</span>
-                <span class="nb">id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
-            <span class="p">)</span>
-
+            <span class="k">return</span> <span class="n">add_ai_message_chunks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">o</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">)</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">other</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="n">add_ai_message_chunks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">other</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__add__</span><span class="p">(</span><span class="n">other</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="add_ai_message_chunks"><a class="viewcode-back" href="../../../messages/langchain_core.messages.ai.add_ai_message_chunks.html#langchain_core.messages.ai.add_ai_message_chunks">[docs]</a><span class="k">def</span> <span class="nf">add_ai_message_chunks</span><span class="p">(</span>
+    <span class="n">left</span><span class="p">:</span> <span class="n">AIMessageChunk</span><span class="p">,</span> <span class="o">*</span><span class="n">others</span><span class="p">:</span> <span class="n">AIMessageChunk</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AIMessageChunk</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Add multiple AIMessageChunks together.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">left</span><span class="o">.</span><span class="n">example</span> <span class="o">!=</span> <span class="n">o</span><span class="o">.</span><span class="n">example</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">others</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Cannot concatenate AIMessageChunks with different example values.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">content</span> <span class="o">=</span> <span class="n">merge_content</span><span class="p">(</span><span class="n">left</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">content</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">others</span><span class="p">))</span>
+    <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
+        <span class="n">left</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">additional_kwargs</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">others</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">response_metadata</span> <span class="o">=</span> <span class="n">merge_dicts</span><span class="p">(</span>
+        <span class="n">left</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">response_metadata</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">others</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Merge tool call chunks</span>
+    <span class="k">if</span> <span class="n">raw_tool_calls</span> <span class="o">:=</span> <span class="n">merge_lists</span><span class="p">(</span>
+        <span class="n">left</span><span class="o">.</span><span class="n">tool_call_chunks</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">tool_call_chunks</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">others</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">ToolCallChunk</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                <span class="n">args</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;args&quot;</span><span class="p">),</span>
+                <span class="n">index</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
+                <span class="nb">id</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">rtc</span> <span class="ow">in</span> <span class="n">raw_tool_calls</span>
+        <span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Token usage</span>
+    <span class="k">if</span> <span class="n">left</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="n">o</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">others</span><span class="p">):</span>
+        <span class="n">usage_metadata_</span><span class="p">:</span> <span class="n">UsageMetadata</span> <span class="o">=</span> <span class="n">left</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">or</span> <span class="n">UsageMetadata</span><span class="p">(</span>
+            <span class="n">input_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">output_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">total_tokens</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="n">others</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">other</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">usage_metadata_</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">other</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]</span>
+                <span class="n">usage_metadata_</span><span class="p">[</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">other</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">[</span>
+                    <span class="s2">&quot;output_tokens&quot;</span>
+                <span class="p">]</span>
+                <span class="n">usage_metadata_</span><span class="p">[</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">other</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">[</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">]</span>
+        <span class="n">usage_metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">UsageMetadata</span><span class="p">]</span> <span class="o">=</span> <span class="n">usage_metadata_</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">usage_metadata</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">return</span> <span class="n">left</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
+        <span class="n">example</span><span class="o">=</span><span class="n">left</span><span class="o">.</span><span class="n">example</span><span class="p">,</span>
+        <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+        <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
+        <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+        <span class="n">response_metadata</span><span class="o">=</span><span class="n">response_metadata</span><span class="p">,</span>
+        <span class="n">usage_metadata</span><span class="o">=</span><span class="n">usage_metadata</span><span class="p">,</span>
+        <span class="nb">id</span><span class="o">=</span><span class="n">left</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+    <span class="p">)</span></div>
 </pre></div>
 
             </div>
@@ -568,7 +573,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 09, 2024.
+                                on Jul 10, 2024.
                 </footer>
             </div>
         </div>

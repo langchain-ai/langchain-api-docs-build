@@ -290,7 +290,7 @@
         <span class="k">pass</span>
 
     <span class="c1"># Initialize variables.</span>
-    <span class="n">new_s</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">new_chars</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">stack</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">is_inside_string</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">escaped</span> <span class="o">=</span> <span class="kc">False</span>
@@ -322,34 +322,35 @@
                     <span class="k">return</span> <span class="kc">None</span>
 
         <span class="c1"># Append the processed character to the new string.</span>
-        <span class="n">new_s</span> <span class="o">+=</span> <span class="n">char</span>
+        <span class="n">new_chars</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">char</span><span class="p">)</span>
 
     <span class="c1"># If we&#39;re still inside a string at the end of processing,</span>
     <span class="c1"># we need to close the string.</span>
     <span class="k">if</span> <span class="n">is_inside_string</span><span class="p">:</span>
-        <span class="n">new_s</span> <span class="o">+=</span> <span class="s1">&#39;&quot;&#39;</span>
+        <span class="n">new_chars</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;&quot;&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Reverse the stack to get the closing characters.</span>
+    <span class="n">stack</span><span class="o">.</span><span class="n">reverse</span><span class="p">()</span>
 
     <span class="c1"># Try to parse mods of string until we succeed or run out of characters.</span>
-    <span class="k">while</span> <span class="n">new_s</span><span class="p">:</span>
-        <span class="n">final_s</span> <span class="o">=</span> <span class="n">new_s</span>
-
+    <span class="k">while</span> <span class="n">new_chars</span><span class="p">:</span>
         <span class="c1"># Close any remaining open structures in the reverse</span>
         <span class="c1"># order that they were opened.</span>
-        <span class="k">for</span> <span class="n">closing_char</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">stack</span><span class="p">):</span>
-            <span class="n">final_s</span> <span class="o">+=</span> <span class="n">closing_char</span>
-
         <span class="c1"># Attempt to parse the modified string as JSON.</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">final_s</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">new_chars</span> <span class="o">+</span> <span class="n">stack</span><span class="p">),</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
             <span class="c1"># If we still can&#39;t parse the string as JSON,</span>
             <span class="c1"># try removing the last character</span>
-            <span class="n">new_s</span> <span class="o">=</span> <span class="n">new_s</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">new_chars</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
 
     <span class="c1"># If we got here, we ran out of characters to remove</span>
     <span class="c1"># and still couldn&#39;t parse the string as JSON, so return the parse error</span>
     <span class="c1"># for the original string.</span>
     <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span></div>
+
+
+<span class="n">_json_markdown_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;```(json)?(.*)&quot;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="parse_json_markdown"><a class="viewcode-back" href="../../../utils/langchain_core.utils.json.parse_json_markdown.html#langchain_core.utils.json.parse_json_markdown">[docs]</a><span class="k">def</span> <span class="nf">parse_json_markdown</span><span class="p">(</span>
@@ -368,7 +369,7 @@
         <span class="k">return</span> <span class="n">_parse_json</span><span class="p">(</span><span class="n">json_string</span><span class="p">,</span> <span class="n">parser</span><span class="o">=</span><span class="n">parser</span><span class="p">)</span>
     <span class="k">except</span> <span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">:</span>
         <span class="c1"># Try to find JSON string within triple backticks</span>
-        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;```(json)?(.*)&quot;</span><span class="p">,</span> <span class="n">json_string</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">DOTALL</span><span class="p">)</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">_json_markdown_re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">json_string</span><span class="p">)</span>
 
         <span class="c1"># If no match found, assume the entire string is a JSON string</span>
         <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -379,11 +380,14 @@
     <span class="k">return</span> <span class="n">_parse_json</span><span class="p">(</span><span class="n">json_str</span><span class="p">,</span> <span class="n">parser</span><span class="o">=</span><span class="n">parser</span><span class="p">)</span></div>
 
 
+<span class="n">_json_strip_chars</span> <span class="o">=</span> <span class="s2">&quot; </span><span class="se">\n\r\t</span><span class="s2">`&quot;</span>
+
+
 <span class="k">def</span> <span class="nf">_parse_json</span><span class="p">(</span>
     <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">parser</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">parse_partial_json</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-    <span class="c1"># Strip whitespace and newlines from the start and end</span>
-    <span class="n">json_str</span> <span class="o">=</span> <span class="n">json_str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s2">&quot;`&quot;</span><span class="p">)</span>
+    <span class="c1"># Strip whitespace,newlines,backtick from the start and end</span>
+    <span class="n">json_str</span> <span class="o">=</span> <span class="n">json_str</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="n">_json_strip_chars</span><span class="p">)</span>
 
     <span class="c1"># handle newlines and other special characters inside the returned value</span>
     <span class="n">json_str</span> <span class="o">=</span> <span class="n">_custom_parser</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
@@ -423,7 +427,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 09, 2024.
+                                on Jul 10, 2024.
                 </footer>
             </div>
         </div>

@@ -1515,9 +1515,107 @@
                 <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
             <span class="p">)</span></div>
 
+    <span class="k">def</span> <span class="nf">_run_mmr_query_by_sort</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sort</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">metadata_parameter</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+        <span class="n">query_vector_l</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+
+        <span class="k">def</span> <span class="nf">_response_setter</span><span class="p">(</span>
+            <span class="n">resp</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+            <span class="n">qvl</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">qvl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">resp</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">][</span><span class="s2">&quot;sortVector&quot;</span><span class="p">]</span>
+
+        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
+                <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+                <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span>
+                <span class="n">options</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">fetch_k</span><span class="p">,</span>
+                    <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;includeSortVector&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">raw_response_callback</span><span class="o">=</span><span class="n">_response_setter</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">query_vector</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># the callback has surely filled query_vector:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_mmr_hits</span><span class="p">(</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">query_vector</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">prefetch_hits</span><span class="o">=</span><span class="n">prefetch_hits</span><span class="p">,</span>
+            <span class="n">content_field</span><span class="o">=</span><span class="s2">&quot;$vectorize&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_using_vectorize</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_arun_mmr_query_by_sort</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sort</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">metadata_parameter</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+        <span class="n">query_vector_l</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+
+        <span class="k">def</span> <span class="nf">_response_setter</span><span class="p">(</span>
+            <span class="n">resp</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+            <span class="n">qvl</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">qvl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">resp</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">][</span><span class="s2">&quot;sortVector&quot;</span><span class="p">]</span>
+
+        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">hit</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>
+                <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+                <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span>
+                <span class="n">options</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">fetch_k</span><span class="p">,</span>
+                    <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;includeSortVector&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="n">raw_response_callback</span><span class="o">=</span><span class="n">_response_setter</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">]</span>
+        <span class="c1"># the callback has surely filled query_vector:</span>
+        <span class="n">query_vector</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_mmr_hits</span><span class="p">(</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">query_vector</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">prefetch_hits</span><span class="o">=</span><span class="n">prefetch_hits</span><span class="p">,</span>
+            <span class="n">content_field</span><span class="o">=</span><span class="s2">&quot;$vectorize&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_using_vectorize</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_get_mmr_hits</span><span class="p">(</span>
-        <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">prefetch_hits</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">DocDict</span><span class="p">]</span>
+        <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">prefetch_hits</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">DocDict</span><span class="p">],</span>
+        <span class="n">content_field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="n">mmr_chosen_indices</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
             <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
@@ -1532,7 +1630,7 @@
         <span class="p">]</span>
         <span class="k">return</span> <span class="p">[</span>
             <span class="n">Document</span><span class="p">(</span>
-                <span class="n">page_content</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">],</span>
+                <span class="n">page_content</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="n">content_field</span><span class="p">],</span>
                 <span class="n">metadata</span><span class="o">=</span><span class="n">hit</span><span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">],</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">mmr_hits</span>
@@ -1567,22 +1665,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">ensure_db_setup</span><span class="p">()</span>
         <span class="n">metadata_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
 
-        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
-            <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">fetch_k</span><span class="p">,</span> <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
-                <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_mmr_hits</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">lambda_mult</span><span class="p">,</span> <span class="n">prefetch_hits</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_mmr_query_by_sort</span><span class="p">(</span>
+            <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">metadata_parameter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.amax_marginal_relevance_search_by_vector"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.amax_marginal_relevance_search_by_vector">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">amax_marginal_relevance_search_by_vector</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1613,22 +1702,13 @@
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">aensure_db_setup</span><span class="p">()</span>
         <span class="n">metadata_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
 
-        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">hit</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">fetch_k</span><span class="p">,</span> <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
-                <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="p">},</span>
-            <span class="p">)</span>
-        <span class="p">]</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_mmr_hits</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">lambda_mult</span><span class="p">,</span> <span class="n">prefetch_hits</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_arun_mmr_query_by_sort</span><span class="p">(</span>
+            <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">metadata_parameter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.max_marginal_relevance_search"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.max_marginal_relevance_search">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1657,7 +1737,17 @@
 <span class="sd">            The list of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_using_vectorize</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;MMR search is unsupported for server-side embeddings.&quot;</span><span class="p">)</span>
+            <span class="c1"># this case goes directly to the &quot;_by_sort&quot; method</span>
+            <span class="c1"># (and does its own filter normalization, as it cannot</span>
+            <span class="c1">#  use the path for the with-embedding mmr querying)</span>
+            <span class="n">metadata_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_mmr_query_by_sort</span><span class="p">(</span>
+                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
+                <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+                <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+                <span class="n">metadata_parameter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
@@ -1696,7 +1786,17 @@
 <span class="sd">            The list of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_using_vectorize</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;MMR search is unsupported for server-side embeddings.&quot;</span><span class="p">)</span>
+            <span class="c1"># this case goes directly to the &quot;_by_sort&quot; method</span>
+            <span class="c1"># (and does its own filter normalization, as it cannot</span>
+            <span class="c1">#  use the path for the with-embedding mmr querying)</span>
+            <span class="n">metadata_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_arun_mmr_query_by_sort</span><span class="p">(</span>
+                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
+                <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+                <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+                <span class="n">metadata_parameter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="n">embedding_vector</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">aembed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
@@ -1928,7 +2028,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 09, 2024.
+                                on Jul 10, 2024.
                 </footer>
             </div>
         </div>
