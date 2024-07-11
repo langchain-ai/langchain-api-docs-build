@@ -271,6 +271,7 @@
     <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
+    <span class="n">get_type_hints</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
@@ -1450,6 +1451,79 @@
 <div class="viewcode-block" id="BaseToolkit.get_tools"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseToolkit.html#langchain_community.agent_toolkits.nla.tool.BaseToolkit.get_tools">[docs]</a>    <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">get_tools</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseTool</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the tools in the toolkit.&quot;&quot;&quot;</span></div></div>
+
+
+<span class="k">def</span> <span class="nf">_get_description_from_runnable</span><span class="p">(</span><span class="n">runnable</span><span class="p">:</span> <span class="n">Runnable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate a placeholder description of a runnable.&quot;&quot;&quot;</span>
+    <span class="n">input_schema</span> <span class="o">=</span> <span class="n">runnable</span><span class="o">.</span><span class="n">input_schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;Takes </span><span class="si">{</span><span class="n">input_schema</span><span class="si">}</span><span class="s2">.&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_get_schema_from_runnable_and_arg_types</span><span class="p">(</span>
+    <span class="n">runnable</span><span class="p">:</span> <span class="n">Runnable</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">arg_types</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Type</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Infer args_schema for tool.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">arg_types</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">arg_types</span> <span class="o">=</span> <span class="n">get_type_hints</span><span class="p">(</span><span class="n">runnable</span><span class="o">.</span><span class="n">InputType</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">TypeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Tool input must be str or dict. If dict, dict arguments must be &quot;</span>
+                <span class="s2">&quot;typed. Either annotate types (e.g., with TypedDict) or pass &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;arg_types into `.as_tool` to specify. </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="p">(</span><span class="n">key_type</span><span class="p">,</span> <span class="n">Field</span><span class="p">(</span><span class="o">...</span><span class="p">))</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">key_type</span> <span class="ow">in</span> <span class="n">arg_types</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="k">return</span> <span class="n">create_model</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+
+
+<div class="viewcode-block" id="convert_runnable_to_tool"><a class="viewcode-back" href="../../tools/langchain_core.tools.convert_runnable_to_tool.html#langchain_community.agent_toolkits.nla.tool.convert_runnable_to_tool">[docs]</a><span class="k">def</span> <span class="nf">convert_runnable_to_tool</span><span class="p">(</span>
+    <span class="n">runnable</span><span class="p">:</span> <span class="n">Runnable</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">arg_types</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Type</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseTool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a Runnable into a BaseTool.&quot;&quot;&quot;</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="n">description</span> <span class="ow">or</span> <span class="n">_get_description_from_runnable</span><span class="p">(</span><span class="n">runnable</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">name</span> <span class="ow">or</span> <span class="n">runnable</span><span class="o">.</span><span class="n">get_name</span><span class="p">()</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">runnable</span><span class="o">.</span><span class="n">input_schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;string&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Tool</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">func</span><span class="o">=</span><span class="n">runnable</span><span class="o">.</span><span class="n">invoke</span><span class="p">,</span>
+            <span class="n">coroutine</span><span class="o">=</span><span class="n">runnable</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke_wrapper</span><span class="p">(</span>
+            <span class="n">callbacks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callbacks</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="n">runnable</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;callbacks&quot;</span><span class="p">:</span> <span class="n">callbacks</span><span class="p">})</span>
+
+        <span class="k">def</span> <span class="nf">invoke_wrapper</span><span class="p">(</span><span class="n">callbacks</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callbacks</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">runnable</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;callbacks&quot;</span><span class="p">:</span> <span class="n">callbacks</span><span class="p">})</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">arg_types</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;object&quot;</span>
+            <span class="ow">and</span> <span class="n">schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">args_schema</span> <span class="o">=</span> <span class="n">runnable</span><span class="o">.</span><span class="n">input_schema</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">args_schema</span> <span class="o">=</span> <span class="n">_get_schema_from_runnable_and_arg_types</span><span class="p">(</span>
+                <span class="n">runnable</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">arg_types</span><span class="o">=</span><span class="n">arg_types</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">StructuredTool</span><span class="o">.</span><span class="n">from_function</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">func</span><span class="o">=</span><span class="n">invoke_wrapper</span><span class="p">,</span>
+            <span class="n">coroutine</span><span class="o">=</span><span class="n">ainvoke_wrapper</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+            <span class="n">args_schema</span><span class="o">=</span><span class="n">args_schema</span><span class="p">,</span>
+        <span class="p">)</span></div>
 </pre></div>
 
             </div>
@@ -1458,7 +1532,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 10, 2024.
+                                on Jul 11, 2024.
                 </footer>
             </div>
         </div>

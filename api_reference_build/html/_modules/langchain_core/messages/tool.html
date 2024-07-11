@@ -235,12 +235,8 @@
 
 <span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
 
-<span class="kn">from</span> <span class="nn">langchain_core.messages.base</span> <span class="kn">import</span> <span class="p">(</span>
-    <span class="n">BaseMessage</span><span class="p">,</span>
-    <span class="n">BaseMessageChunk</span><span class="p">,</span>
-    <span class="n">merge_content</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils._merge</span> <span class="kn">import</span> <span class="n">merge_dicts</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.base</span> <span class="kn">import</span> <span class="n">BaseMessage</span><span class="p">,</span> <span class="n">BaseMessageChunk</span><span class="p">,</span> <span class="n">merge_content</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils._merge</span> <span class="kn">import</span> <span class="n">merge_dicts</span><span class="p">,</span> <span class="n">merge_obj</span>
 
 
 <div class="viewcode-block" id="ToolMessage"><a class="viewcode-back" href="../../../messages/langchain_core.messages.tool.ToolMessage.html#langchain_core.messages.tool.ToolMessage">[docs]</a><span class="k">class</span> <span class="nc">ToolMessage</span><span class="p">(</span><span class="n">BaseMessage</span><span class="p">):</span>
@@ -249,7 +245,7 @@
 <span class="sd">    ToolMessages contain the result of a tool invocation. Typically, the result</span>
 <span class="sd">    is encoded inside the `content` field.</span>
 
-<span class="sd">    Example: A TooMessage representing a result of 42 from a tool call with id</span>
+<span class="sd">    Example: A ToolMessage representing a result of 42 from a tool call with id</span>
 
 <span class="sd">        .. code-block:: python</span>
 
@@ -257,10 +253,29 @@
 
 <span class="sd">            ToolMessage(content=&#39;42&#39;, tool_call_id=&#39;call_Jja7J89XsjrOLA5r!MEOW!SL&#39;)</span>
 
+<span class="sd">    Example: A ToolMessage where only part of the tool output is sent to the model</span>
+<span class="sd">        and the full output is passed in to raw_output.</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.messages import ToolMessage</span>
+
+<span class="sd">            tool_output = {</span>
+<span class="sd">                &quot;stdout&quot;: &quot;From the graph we can see that the correlation between x and y is ...&quot;,</span>
+<span class="sd">                &quot;stderr&quot;: None,</span>
+<span class="sd">                &quot;artifacts&quot;: {&quot;type&quot;: &quot;image&quot;, &quot;base64_data&quot;: &quot;/9j/4gIcSU...&quot;},</span>
+<span class="sd">            }</span>
+
+<span class="sd">            ToolMessage(</span>
+<span class="sd">                content=tool_output[&quot;stdout&quot;],</span>
+<span class="sd">                raw_output=tool_output,</span>
+<span class="sd">                tool_call_id=&#39;call_Jja7J89XsjrOLA5r!MEOW!SL&#39;,</span>
+<span class="sd">            )</span>
+
 <span class="sd">    The tool_call_id field is used to associate the tool call request with the</span>
 <span class="sd">    tool call response. This is useful in situations where a chat model is able</span>
 <span class="sd">    to request multiple tool calls in parallel.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="n">tool_call_id</span><span class="p">:</span> <span class="nb">str</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Tool call that this message is responding to.&quot;&quot;&quot;</span>
@@ -270,6 +285,14 @@
 
     <span class="nb">type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;tool&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;tool&quot;</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The type of the message (used for serialization). Defaults to &quot;tool&quot;.&quot;&quot;&quot;</span>
+
+    <span class="n">raw_output</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The raw output of the tool.</span>
+<span class="sd">    </span>
+<span class="sd">    **Not part of the payload sent to the model.** Should only be specified if it is </span>
+<span class="sd">    different from the message content, i.e. if only a subset of the full tool output</span>
+<span class="sd">    is being passed as message content.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_lc_namespace</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
@@ -315,6 +338,7 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">(</span>
                 <span class="n">tool_call_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tool_call_id</span><span class="p">,</span>
                 <span class="n">content</span><span class="o">=</span><span class="n">merge_content</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">content</span><span class="p">),</span>
+                <span class="n">raw_output</span><span class="o">=</span><span class="n">merge_obj</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">raw_output</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">raw_output</span><span class="p">),</span>
                 <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">merge_dicts</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">additional_kwargs</span>
                 <span class="p">),</span>
@@ -460,7 +484,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 10, 2024.
+                                on Jul 11, 2024.
                 </footer>
             </div>
         </div>
