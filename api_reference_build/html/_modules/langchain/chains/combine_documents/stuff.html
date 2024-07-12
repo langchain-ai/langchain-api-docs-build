@@ -259,13 +259,14 @@
     <span class="n">output_parser</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseOutputParser</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">document_prompt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BasePromptTemplate</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">document_separator</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DEFAULT_DOCUMENT_SEPARATOR</span><span class="p">,</span>
+    <span class="n">document_variable_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">DOCUMENTS_KEY</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a chain for passing a list of Documents to a model.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        llm: Language model.</span>
-<span class="sd">        prompt: Prompt template. Must contain input variable &quot;context&quot;, which will be</span>
-<span class="sd">            used for passing in the formatted documents.</span>
+<span class="sd">        prompt: Prompt template. Must contain input variable &quot;context&quot; (override by</span>
+<span class="sd">            setting document_variable), which will be used for passing in the formatted documents.</span>
 <span class="sd">        output_parser: Output parser. Defaults to StrOutputParser.</span>
 <span class="sd">        document_prompt: Prompt used for formatting each document into a string. Input</span>
 <span class="sd">            variables can be &quot;page_content&quot; or any metadata keys that are in all</span>
@@ -274,6 +275,8 @@
 <span class="sd">            automatically retrieved from the `Document.metadata` dictionary. Default to</span>
 <span class="sd">            a prompt that only contains `Document.page_content`.</span>
 <span class="sd">        document_separator: String separator to use between formatted document strings.</span>
+<span class="sd">        document_variable_name: Variable name to use for the formatted documents in the prompt.</span>
+<span class="sd">            Defaults to &quot;context&quot;.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        An LCEL Runnable. The input is a dictionary that must have a &quot;context&quot; key that</span>
@@ -310,11 +313,12 @@
 
     <span class="k">def</span> <span class="nf">format_docs</span><span class="p">(</span><span class="n">inputs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">document_separator</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-            <span class="n">format_document</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">_document_prompt</span><span class="p">)</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">[</span><span class="n">DOCUMENTS_KEY</span><span class="p">]</span>
+            <span class="n">format_document</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">_document_prompt</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">[</span><span class="n">document_variable_name</span><span class="p">]</span>
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="p">(</span>
-        <span class="n">RunnablePassthrough</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">DOCUMENTS_KEY</span><span class="p">:</span> <span class="n">format_docs</span><span class="p">})</span><span class="o">.</span><span class="n">with_config</span><span class="p">(</span>
+        <span class="n">RunnablePassthrough</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">document_variable_name</span><span class="p">:</span> <span class="n">format_docs</span><span class="p">})</span><span class="o">.</span><span class="n">with_config</span><span class="p">(</span>
             <span class="n">run_name</span><span class="o">=</span><span class="s2">&quot;format_inputs&quot;</span>
         <span class="p">)</span>
         <span class="o">|</span> <span class="n">prompt</span>
@@ -505,7 +509,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 11, 2024.
+                                on Jul 12, 2024.
                 </footer>
             </div>
         </div>

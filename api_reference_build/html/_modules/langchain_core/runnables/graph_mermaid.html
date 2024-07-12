@@ -233,25 +233,26 @@
 <span></span><span class="kn">import</span> <span class="nn">base64</span>
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">asdict</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.graph</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">CurveStyle</span><span class="p">,</span>
     <span class="n">Edge</span><span class="p">,</span>
     <span class="n">MermaidDrawMethod</span><span class="p">,</span>
-    <span class="n">NodeColors</span><span class="p">,</span>
+    <span class="n">Node</span><span class="p">,</span>
+    <span class="n">NodeStyles</span><span class="p">,</span>
 <span class="p">)</span>
 
 
 <div class="viewcode-block" id="draw_mermaid"><a class="viewcode-back" href="../../../runnables/langchain_core.runnables.graph_mermaid.draw_mermaid.html#langchain_core.runnables.graph_mermaid.draw_mermaid">[docs]</a><span class="k">def</span> <span class="nf">draw_mermaid</span><span class="p">(</span>
-    <span class="n">nodes</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">nodes</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Node</span><span class="p">],</span>
     <span class="n">edges</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Edge</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">first_node_label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">last_node_label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">first_node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">last_node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">with_styles</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">curve_style</span><span class="p">:</span> <span class="n">CurveStyle</span> <span class="o">=</span> <span class="n">CurveStyle</span><span class="o">.</span><span class="n">LINEAR</span><span class="p">,</span>
-    <span class="n">node_colors</span><span class="p">:</span> <span class="n">NodeColors</span> <span class="o">=</span> <span class="n">NodeColors</span><span class="p">(),</span>
+    <span class="n">node_styles</span><span class="p">:</span> <span class="n">NodeStyles</span> <span class="o">=</span> <span class="n">NodeStyles</span><span class="p">(),</span>
     <span class="n">wrap_label_n_words</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">9</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Draws a Mermaid graph using the provided graph data</span>
@@ -280,18 +281,27 @@
     <span class="k">if</span> <span class="n">with_styles</span><span class="p">:</span>
         <span class="c1"># Node formatting templates</span>
         <span class="n">default_class_label</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span>
-        <span class="n">format_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">default_class_label</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">([</span><span class="si">{1}</span><span class="s2">]):::otherclass&quot;</span><span class="p">}</span>
-        <span class="k">if</span> <span class="n">first_node_label</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">format_dict</span><span class="p">[</span><span class="n">first_node_label</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">[</span><span class="si">{0}</span><span class="s2">]:::startclass&quot;</span>
-        <span class="k">if</span> <span class="n">last_node_label</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">format_dict</span><span class="p">[</span><span class="n">last_node_label</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">[</span><span class="si">{0}</span><span class="s2">]:::endclass&quot;</span>
+        <span class="n">format_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">default_class_label</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">(</span><span class="si">{1}</span><span class="s2">)&quot;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">first_node</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">format_dict</span><span class="p">[</span><span class="n">first_node</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">([</span><span class="si">{0}</span><span class="s2">]):::first&quot;</span>
+        <span class="k">if</span> <span class="n">last_node</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">format_dict</span><span class="p">[</span><span class="n">last_node</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{0}</span><span class="s2">([</span><span class="si">{0}</span><span class="s2">]):::last&quot;</span>
 
         <span class="c1"># Add nodes to the graph</span>
-        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">node_label</span> <span class="o">=</span> <span class="n">format_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">format_dict</span><span class="p">[</span><span class="n">default_class_label</span><span class="p">])</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="n">_escape_node_label</span><span class="p">(</span><span class="n">node</span><span class="p">),</span> <span class="n">node</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">metadata</span><span class="p">:</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">&lt;hr/&gt;&lt;small&gt;&lt;em&gt;&quot;</span>
+                    <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                    <span class="p">)</span>
+                    <span class="o">+</span> <span class="s2">&quot;&lt;/em&gt;&lt;/small&gt;&quot;</span>
+                <span class="p">)</span>
+            <span class="n">node_label</span> <span class="o">=</span> <span class="n">format_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">format_dict</span><span class="p">[</span><span class="n">default_class_label</span><span class="p">])</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">_escape_node_label</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="n">label</span>
             <span class="p">)</span>
-            <span class="n">mermaid_graph</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\t</span><span class="si">{</span><span class="n">node_label</span><span class="si">}</span><span class="s2">;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="n">mermaid_graph</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\t</span><span class="si">{</span><span class="n">node_label</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
 
     <span class="n">subgraph</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
     <span class="c1"># Add edges to the graph</span>
@@ -306,9 +316,8 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">subgraph</span> <span class="ow">and</span> <span class="n">src_prefix</span> <span class="ow">and</span> <span class="n">src_prefix</span> <span class="o">==</span> <span class="n">tgt_prefix</span><span class="p">:</span>
             <span class="n">mermaid_graph</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">subgraph </span><span class="si">{</span><span class="n">src_prefix</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
             <span class="n">subgraph</span> <span class="o">=</span> <span class="n">src_prefix</span>
-        <span class="n">adjusted_edge</span> <span class="o">=</span> <span class="n">_adjust_mermaid_edge</span><span class="p">(</span><span class="n">edge</span><span class="o">=</span><span class="n">edge</span><span class="p">,</span> <span class="n">nodes</span><span class="o">=</span><span class="n">nodes</span><span class="p">)</span>
 
-        <span class="n">source</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="n">adjusted_edge</span>
+        <span class="n">source</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="n">edge</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">edge</span><span class="o">.</span><span class="n">target</span>
 
         <span class="c1"># Add BR every wrap_label_n_words words</span>
         <span class="k">if</span> <span class="n">edge</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -316,16 +325,14 @@
             <span class="n">words</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">edge_data</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>  <span class="c1"># Split the string into words</span>
             <span class="c1"># Group words into chunks of wrap_label_n_words size</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">words</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">wrap_label_n_words</span><span class="p">:</span>
-                <span class="n">edge_data</span> <span class="o">=</span> <span class="s2">&quot;&lt;br&gt;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">words</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">wrap_label_n_words</span><span class="p">])</span>
-                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">words</span><span class="p">),</span> <span class="n">wrap_label_n_words</span><span class="p">)</span>
-                    <span class="p">]</span>
+                <span class="n">edge_data</span> <span class="o">=</span> <span class="s2">&quot;&amp;nbsp&lt;br&gt;&amp;nbsp&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                    <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">words</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">wrap_label_n_words</span><span class="p">])</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">words</span><span class="p">),</span> <span class="n">wrap_label_n_words</span><span class="p">)</span>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">edge</span><span class="o">.</span><span class="n">conditional</span><span class="p">:</span>
-                <span class="n">edge_label</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; -. </span><span class="si">{</span><span class="n">edge_data</span><span class="si">}</span><span class="s2"> .-&gt; &quot;</span>
+                <span class="n">edge_label</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; -. &amp;nbsp</span><span class="si">{</span><span class="n">edge_data</span><span class="si">}</span><span class="s2">&amp;nbsp .-&gt; &quot;</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">edge_label</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; -- </span><span class="si">{</span><span class="n">edge_data</span><span class="si">}</span><span class="s2"> --&gt; &quot;</span>
+                <span class="n">edge_label</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot; -- &amp;nbsp</span><span class="si">{</span><span class="n">edge_data</span><span class="si">}</span><span class="s2">&amp;nbsp --&gt; &quot;</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">edge</span><span class="o">.</span><span class="n">conditional</span><span class="p">:</span>
                 <span class="n">edge_label</span> <span class="o">=</span> <span class="s2">&quot; -.-&gt; &quot;</span>
@@ -340,7 +347,7 @@
 
     <span class="c1"># Add custom styles for nodes</span>
     <span class="k">if</span> <span class="n">with_styles</span><span class="p">:</span>
-        <span class="n">mermaid_graph</span> <span class="o">+=</span> <span class="n">_generate_mermaid_graph_styles</span><span class="p">(</span><span class="n">node_colors</span><span class="p">)</span>
+        <span class="n">mermaid_graph</span> <span class="o">+=</span> <span class="n">_generate_mermaid_graph_styles</span><span class="p">(</span><span class="n">node_styles</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">mermaid_graph</span></div>
 
 
@@ -349,22 +356,11 @@
     <span class="k">return</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;[^a-zA-Z-_0-9]&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="n">node_label</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_adjust_mermaid_edge</span><span class="p">(</span>
-    <span class="n">edge</span><span class="p">:</span> <span class="n">Edge</span><span class="p">,</span>
-    <span class="n">nodes</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Adjusts Mermaid edge to map conditional nodes to pure nodes.&quot;&quot;&quot;</span>
-    <span class="n">source_node_label</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">edge</span><span class="o">.</span><span class="n">source</span><span class="p">,</span> <span class="n">edge</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
-    <span class="n">target_node_label</span> <span class="o">=</span> <span class="n">nodes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">edge</span><span class="o">.</span><span class="n">target</span><span class="p">,</span> <span class="n">edge</span><span class="o">.</span><span class="n">target</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">source_node_label</span><span class="p">,</span> <span class="n">target_node_label</span>
-
-
-<span class="k">def</span> <span class="nf">_generate_mermaid_graph_styles</span><span class="p">(</span><span class="n">node_colors</span><span class="p">:</span> <span class="n">NodeColors</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span> <span class="nf">_generate_mermaid_graph_styles</span><span class="p">(</span><span class="n">node_colors</span><span class="p">:</span> <span class="n">NodeStyles</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generates Mermaid graph styles for different node types.&quot;&quot;&quot;</span>
     <span class="n">styles</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-    <span class="k">for</span> <span class="n">class_name</span><span class="p">,</span> <span class="n">color</span> <span class="ow">in</span> <span class="n">asdict</span><span class="p">(</span><span class="n">node_colors</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="n">styles</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">classDef </span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">class fill:</span><span class="si">{</span><span class="n">color</span><span class="si">}</span><span class="s2">;</span><span class="se">\n</span><span class="s2">&quot;</span>
+    <span class="k">for</span> <span class="n">class_name</span><span class="p">,</span> <span class="n">style</span> <span class="ow">in</span> <span class="n">asdict</span><span class="p">(</span><span class="n">node_colors</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">styles</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">classDef </span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">style</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span>
     <span class="k">return</span> <span class="n">styles</span>
 
 
@@ -520,7 +516,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 11, 2024.
+                                on Jul 12, 2024.
                 </footer>
             </div>
         </div>

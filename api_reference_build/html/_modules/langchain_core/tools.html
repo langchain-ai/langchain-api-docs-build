@@ -252,7 +252,9 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">functools</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">textwrap</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
@@ -266,6 +268,7 @@
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
+    <span class="n">Literal</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Tuple</span><span class="p">,</span>
@@ -274,7 +277,7 @@
     <span class="n">get_type_hints</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
@@ -288,6 +291,7 @@
     <span class="n">Callbacks</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.load.serializable</span> <span class="kn">import</span> <span class="n">Serializable</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">ToolCall</span><span class="p">,</span> <span class="n">ToolMessage</span>
 <span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">BasePromptTemplate</span><span class="p">,</span>
     <span class="n">PromptTemplate</span><span class="p">,</span>
@@ -316,6 +320,8 @@
     <span class="n">run_in_executor</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.utils</span> <span class="kn">import</span> <span class="n">accepts_context</span>
+
+<span class="n">FILTERED_ARGS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="SchemaAnnotationError"><a class="viewcode-back" href="../../tools/langchain_core.tools.SchemaAnnotationError.html#langchain_community.agent_toolkits.nla.tool.SchemaAnnotationError">[docs]</a><span class="k">class</span> <span class="nc">SchemaAnnotationError</span><span class="p">(</span><span class="ne">TypeError</span><span class="p">):</span>
@@ -381,14 +387,27 @@
     <span class="p">}</span>
 
 
-<span class="k">def</span> <span class="nf">_parse_python_function_docstring</span><span class="p">(</span><span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">_parse_python_function_docstring</span><span class="p">(</span>
+    <span class="n">function</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">annotations</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">error_on_invalid_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse the function and argument descriptions from the docstring of a function.</span>
 
 <span class="sd">    Assumes the function docstring follows Google Python style guide.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">invalid_docstring_error</span> <span class="o">=</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Found invalid Google-Style docstring for </span><span class="si">{</span><span class="n">function</span><span class="si">}</span><span class="s2">.&quot;</span>
+    <span class="p">)</span>
     <span class="n">docstring</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">docstring</span><span class="p">:</span>
         <span class="n">docstring_blocks</span> <span class="o">=</span> <span class="n">docstring</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">error_on_invalid_docstring</span><span class="p">:</span>
+            <span class="n">filtered_annotations</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">arg</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">annotations</span> <span class="k">if</span> <span class="n">arg</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="p">(</span><span class="n">FILTERED_ARGS</span><span class="p">),</span> <span class="s2">&quot;return&quot;</span><span class="p">)</span>
+            <span class="p">}</span>
+            <span class="k">if</span> <span class="n">filtered_annotations</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">docstring_blocks</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">docstring_blocks</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;Args:&quot;</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="p">(</span><span class="n">invalid_docstring_error</span><span class="p">)</span>
         <span class="n">descriptors</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">args_block</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">past_descriptors</span> <span class="o">=</span> <span class="kc">False</span>
@@ -405,6 +424,8 @@
                 <span class="k">continue</span>
         <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">descriptors</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">error_on_invalid_docstring</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="p">(</span><span class="n">invalid_docstring_error</span><span class="p">)</span>
         <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
         <span class="n">args_block</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
@@ -419,20 +440,38 @@
     <span class="k">return</span> <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span>
 
 
+<span class="k">def</span> <span class="nf">_validate_docstring_args_against_annotations</span><span class="p">(</span>
+    <span class="n">arg_descriptions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">annotations</span><span class="p">:</span> <span class="nb">dict</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raise error if docstring arg is not in type annotations.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">docstring_arg</span> <span class="ow">in</span> <span class="n">arg_descriptions</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">docstring_arg</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">annotations</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Arg </span><span class="si">{</span><span class="n">docstring_arg</span><span class="si">}</span><span class="s2"> in docstring not found in function signature.&quot;</span>
+            <span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">_infer_arg_descriptions</span><span class="p">(</span>
-    <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">error_on_invalid_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Infer argument descriptions from a function&#39;s docstring.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">parse_docstring</span><span class="p">:</span>
-        <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="n">_parse_python_function_docstring</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">description</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
-        <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">inspect</span><span class="p">,</span> <span class="s2">&quot;get_annotations&quot;</span><span class="p">):</span>
         <span class="c1"># This is for python &lt; 3.10</span>
         <span class="n">annotations</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">get_annotations</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">annotations</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s2">&quot;__annotations__&quot;</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">if</span> <span class="n">parse_docstring</span><span class="p">:</span>
+        <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="n">_parse_python_function_docstring</span><span class="p">(</span>
+            <span class="n">fn</span><span class="p">,</span> <span class="n">annotations</span><span class="p">,</span> <span class="n">error_on_invalid_docstring</span><span class="o">=</span><span class="n">error_on_invalid_docstring</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getdoc</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">parse_docstring</span><span class="p">:</span>
+        <span class="n">_validate_docstring_args_against_annotations</span><span class="p">(</span><span class="n">arg_descriptions</span><span class="p">,</span> <span class="n">annotations</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">arg</span><span class="p">,</span> <span class="n">arg_type</span> <span class="ow">in</span> <span class="n">annotations</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="k">if</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">arg_descriptions</span><span class="p">:</span>
             <span class="k">continue</span>
@@ -454,6 +493,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">filter_args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">error_on_invalid_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pydantic schema from a function&#39;s signature.</span>
 <span class="sd">    Args:</span>
@@ -461,21 +501,23 @@
 <span class="sd">        func: Function to generate the schema from</span>
 <span class="sd">        filter_args: Optional list of arguments to exclude from the schema</span>
 <span class="sd">        parse_docstring: Whether to parse the function&#39;s docstring for descriptions</span>
-<span class="sd">             for each argument.</span>
+<span class="sd">            for each argument.</span>
+<span class="sd">        error_on_invalid_docstring: if ``parse_docstring`` is provided, configures</span>
+<span class="sd">            whether to raise ValueError on invalid Google Style docstrings.</span>
 <span class="sd">    Returns:</span>
 <span class="sd">        A pydantic model with the same arguments as the function</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># https://docs.pydantic.dev/latest/usage/validation_decorator/</span>
     <span class="n">validated</span> <span class="o">=</span> <span class="n">validate_arguments</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">_SchemaConfig</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
     <span class="n">inferred_model</span> <span class="o">=</span> <span class="n">validated</span><span class="o">.</span><span class="n">model</span>  <span class="c1"># type: ignore</span>
-    <span class="n">filter_args</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">filter_args</span> <span class="k">if</span> <span class="n">filter_args</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
-    <span class="p">)</span>
+    <span class="n">filter_args</span> <span class="o">=</span> <span class="n">filter_args</span> <span class="k">if</span> <span class="n">filter_args</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">FILTERED_ARGS</span>
     <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">filter_args</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">:</span>
             <span class="k">del</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">arg</span><span class="p">]</span>
     <span class="n">description</span><span class="p">,</span> <span class="n">arg_descriptions</span> <span class="o">=</span> <span class="n">_infer_arg_descriptions</span><span class="p">(</span>
-        <span class="n">func</span><span class="p">,</span> <span class="n">parse_docstring</span><span class="o">=</span><span class="n">parse_docstring</span>
+        <span class="n">func</span><span class="p">,</span>
+        <span class="n">parse_docstring</span><span class="o">=</span><span class="n">parse_docstring</span><span class="p">,</span>
+        <span class="n">error_on_invalid_docstring</span><span class="o">=</span><span class="n">error_on_invalid_docstring</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="c1"># Pydantic adds placeholder virtual fields we need to strip</span>
     <span class="n">valid_properties</span> <span class="o">=</span> <span class="n">_get_filtered_args</span><span class="p">(</span><span class="n">inferred_model</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">filter_args</span><span class="o">=</span><span class="n">filter_args</span><span class="p">)</span>
@@ -500,7 +542,7 @@
     <span class="k">pass</span></div>
 
 
-<div class="viewcode-block" id="BaseTool"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseTool.html#langchain_community.agent_toolkits.nla.tool.BaseTool">[docs]</a><span class="k">class</span> <span class="nc">BaseTool</span><span class="p">(</span><span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span> <span class="n">Any</span><span class="p">]):</span>
+<div class="viewcode-block" id="BaseTool"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseTool.html#langchain_community.agent_toolkits.nla.tool.BaseTool">[docs]</a><span class="k">class</span> <span class="nc">BaseTool</span><span class="p">(</span><span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">ToolCall</span><span class="p">],</span> <span class="n">Any</span><span class="p">]):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Interface LangChain tools must implement.&quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -572,6 +614,14 @@
     <span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Handle the content of the ValidationError thrown.&quot;&quot;&quot;</span>
 
+    <span class="n">response_format</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;content_and_raw_output&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;content&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The tool response format. </span>
+
+<span class="sd">    If &quot;content&quot; then the output of the tool is interpreted as the contents of a </span>
+<span class="sd">    ToolMessage. If &quot;content_and_raw_output&quot; then the output is expected to be a </span>
+<span class="sd">    two-tuple corresponding to the (content, raw_output) of a ToolMessage.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">class</span> <span class="nc">Config</span><span class="p">(</span><span class="n">Serializable</span><span class="o">.</span><span class="n">Config</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
 
@@ -604,46 +654,25 @@
 
 <div class="viewcode-block" id="BaseTool.invoke"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseTool.html#langchain_community.agent_toolkits.nla.tool.BaseTool.invoke">[docs]</a>    <span class="k">def</span> <span class="nf">invoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">ToolCall</span><span class="p">],</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-            <span class="nb">input</span><span class="p">,</span>
-            <span class="n">callbacks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
-            <span class="n">tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
-            <span class="n">run_name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
-            <span class="n">run_id</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="n">tool_input</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_prep_run_args</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="BaseTool.ainvoke"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseTool.html#langchain_community.agent_toolkits.nla.tool.BaseTool.ainvoke">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">ToolCall</span><span class="p">],</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">arun</span><span class="p">(</span>
-            <span class="nb">input</span><span class="p">,</span>
-            <span class="n">callbacks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
-            <span class="n">tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
-            <span class="n">metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
-            <span class="n">run_name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
-            <span class="n">run_id</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="n">tool_input</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_prep_run_args</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">arun</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
     <span class="c1"># --- Tool ---</span>
 
-    <span class="k">def</span> <span class="nf">_parse_input</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">tool_input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">_parse_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tool_input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert tool input to pydantic model.&quot;&quot;&quot;</span>
         <span class="n">input_args</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">args_schema</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -659,7 +688,7 @@
                     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">dict</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
                     <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">tool_input</span>
                 <span class="p">}</span>
-        <span class="k">return</span> <span class="n">tool_input</span>
+            <span class="k">return</span> <span class="n">tool_input</span>
 
     <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">raise_deprecation</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
@@ -673,30 +702,27 @@
         <span class="k">return</span> <span class="n">values</span>
 
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool.</span>
 
 <span class="sd">        Add run_manager: Optional[CallbackManagerForToolRun] = None</span>
-<span class="sd">        to child implementations to enable tracing,</span>
+<span class="sd">        to child implementations to enable tracing.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">_arun</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">_arun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool asynchronously.</span>
 
 <span class="sd">        Add run_manager: Optional[AsyncCallbackManagerForToolRun] = None</span>
-<span class="sd">        to child implementations to enable tracing,</span>
+<span class="sd">        to child implementations to enable tracing.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="s2">&quot;run_manager&quot;</span>
+        <span class="p">):</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;run_manager&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;run_manager&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_sync</span><span class="p">()</span>
         <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_to_args_and_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tool_input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">,</span> <span class="n">Dict</span><span class="p">]:</span>
+        <span class="n">tool_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse_input</span><span class="p">(</span><span class="n">tool_input</span><span class="p">)</span>
         <span class="c1"># For backwards compatibility, if run_input is a string,</span>
         <span class="c1"># pass as a positional argument.</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -717,24 +743,20 @@
         <span class="n">run_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">run_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tool_call_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the tool.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">and</span> <span class="n">verbose</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">verbose_</span> <span class="o">=</span> <span class="n">verbose</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">verbose_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span>
         <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">CallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
             <span class="n">callbacks</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">callbacks</span><span class="p">,</span>
-            <span class="n">verbose_</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">or</span> <span class="nb">bool</span><span class="p">(</span><span class="n">verbose</span><span class="p">),</span>
             <span class="n">tags</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
             <span class="n">metadata</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c1"># TODO: maybe also pass through run_manager is _run supports kwargs</span>
-        <span class="n">new_arg_supported</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">)</span>
+
         <span class="n">run_manager</span> <span class="o">=</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_tool_start</span><span class="p">(</span>
             <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">},</span>
             <span class="n">tool_input</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">tool_input</span><span class="p">),</span>
@@ -744,67 +766,55 @@
             <span class="c1"># Inputs by definition should always be dicts.</span>
             <span class="c1"># For now, it&#39;s unclear whether this assumption is ever violated,</span>
             <span class="c1"># but if it is we will send a `None` value to the callback instead</span>
-            <span class="c1"># And will need to address issue via a patch.</span>
-            <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">tool_input</span><span class="p">,</span>
+            <span class="c1"># TODO: will need to address issue via a patch.</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">tool_input</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
+
+        <span class="n">content</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">raw_output</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">error_to_raise</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="ne">Exception</span><span class="p">,</span> <span class="ne">KeyboardInterrupt</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">child_config</span> <span class="o">=</span> <span class="n">patch_config</span><span class="p">(</span>
-                <span class="n">config</span><span class="p">,</span>
-                <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">(),</span>
-            <span class="p">)</span>
+            <span class="n">child_config</span> <span class="o">=</span> <span class="n">patch_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">())</span>
             <span class="n">context</span> <span class="o">=</span> <span class="n">copy_context</span><span class="p">()</span>
             <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">_set_config_context</span><span class="p">,</span> <span class="n">child_config</span><span class="p">)</span>
-            <span class="n">parsed_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse_input</span><span class="p">(</span><span class="n">tool_input</span><span class="p">)</span>
-            <span class="n">tool_args</span><span class="p">,</span> <span class="n">tool_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_args_and_kwargs</span><span class="p">(</span><span class="n">parsed_input</span><span class="p">)</span>
-            <span class="n">observation</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span> <span class="o">*</span><span class="n">tool_args</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">tool_kwargs</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">new_arg_supported</span>
-                <span class="k">else</span> <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span> <span class="o">*</span><span class="n">tool_args</span><span class="p">,</span> <span class="o">**</span><span class="n">tool_kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="n">tool_args</span><span class="p">,</span> <span class="n">tool_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_args_and_kwargs</span><span class="p">(</span><span class="n">tool_input</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">):</span>
+                <span class="n">tool_kwargs</span><span class="p">[</span><span class="s2">&quot;run_manager&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_manager</span>
+
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">):</span>
+                <span class="n">tool_kwargs</span><span class="p">[</span><span class="n">config_param</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span> <span class="o">*</span><span class="n">tool_args</span><span class="p">,</span> <span class="o">**</span><span class="n">tool_kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">response_format</span> <span class="o">==</span> <span class="s2">&quot;content_and_raw_output&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Since response_format=&#39;content_and_raw_output&#39; &quot;</span>
+                        <span class="s2">&quot;a two-tuple of the message content and raw tool output is &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;expected. Instead generated response of type: &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">response</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">content</span><span class="p">,</span> <span class="n">raw_output</span> <span class="o">=</span> <span class="n">response</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">response</span>
         <span class="k">except</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">e</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="s2">&quot;Tool input validation error&quot;</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span>
-            <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                <span class="n">error_to_raise</span> <span class="o">=</span> <span class="n">e</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Got unexpected type of `handle_validation_error`. Expected bool, &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;str or callable. Received: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="k">return</span> <span class="n">observation</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">_handle_validation_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">flag</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">ToolException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">:</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
-                    <span class="n">observation</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">observation</span> <span class="o">=</span> <span class="s2">&quot;Tool execution error&quot;</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span>
-            <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                <span class="n">error_to_raise</span> <span class="o">=</span> <span class="n">e</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Got unexpected type of `handle_tool_error`. Expected bool, str &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;or callable. Received: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_end</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">observation</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">_handle_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">flag</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">)</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">Exception</span><span class="p">,</span> <span class="ne">KeyboardInterrupt</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">e</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_end</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">observation</span></div>
+            <span class="n">error_to_raise</span> <span class="o">=</span> <span class="n">e</span>
+
+        <span class="k">if</span> <span class="n">error_to_raise</span><span class="p">:</span>
+            <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_error</span><span class="p">(</span><span class="n">error_to_raise</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">error_to_raise</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">_format_output</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">raw_output</span><span class="p">,</span> <span class="n">tool_call_id</span><span class="p">)</span>
+        <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_end</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">output</span></div>
 
 <div class="viewcode-block" id="BaseTool.arun"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseTool.html#langchain_community.agent_toolkits.nla.tool.BaseTool.arun">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">arun</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -819,99 +829,84 @@
         <span class="n">run_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">run_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">uuid</span><span class="o">.</span><span class="n">UUID</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tool_call_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the tool asynchronously.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">and</span> <span class="n">verbose</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">verbose_</span> <span class="o">=</span> <span class="n">verbose</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">verbose_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span>
         <span class="n">callback_manager</span> <span class="o">=</span> <span class="n">AsyncCallbackManager</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
             <span class="n">callbacks</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">callbacks</span><span class="p">,</span>
-            <span class="n">verbose_</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">or</span> <span class="nb">bool</span><span class="p">(</span><span class="n">verbose</span><span class="p">),</span>
             <span class="n">tags</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tags</span><span class="p">,</span>
             <span class="n">metadata</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">new_arg_supported</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arun</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">)</span>
         <span class="n">run_manager</span> <span class="o">=</span> <span class="k">await</span> <span class="n">callback_manager</span><span class="o">.</span><span class="n">on_tool_start</span><span class="p">(</span>
             <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">},</span>
             <span class="n">tool_input</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">tool_input</span><span class="p">),</span>
             <span class="n">color</span><span class="o">=</span><span class="n">start_color</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="n">run_name</span><span class="p">,</span>
-            <span class="n">inputs</span><span class="o">=</span><span class="n">tool_input</span><span class="p">,</span>
             <span class="n">run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+            <span class="c1"># Inputs by definition should always be dicts.</span>
+            <span class="c1"># For now, it&#39;s unclear whether this assumption is ever violated,</span>
+            <span class="c1"># but if it is we will send a `None` value to the callback instead</span>
+            <span class="c1"># TODO: will need to address issue via a patch.</span>
+            <span class="n">inputs</span><span class="o">=</span><span class="n">tool_input</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_input</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">raw_output</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">error_to_raise</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="ne">Exception</span><span class="p">,</span> <span class="ne">KeyboardInterrupt</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">parsed_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parse_input</span><span class="p">(</span><span class="n">tool_input</span><span class="p">)</span>
-            <span class="c1"># We then call the tool on the tool input to get an observation</span>
-            <span class="n">tool_args</span><span class="p">,</span> <span class="n">tool_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_args_and_kwargs</span><span class="p">(</span><span class="n">parsed_input</span><span class="p">)</span>
-            <span class="n">child_config</span> <span class="o">=</span> <span class="n">patch_config</span><span class="p">(</span>
-                <span class="n">config</span><span class="p">,</span>
-                <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">(),</span>
-            <span class="p">)</span>
+            <span class="n">tool_args</span><span class="p">,</span> <span class="n">tool_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_args_and_kwargs</span><span class="p">(</span><span class="n">tool_input</span><span class="p">)</span>
+            <span class="n">child_config</span> <span class="o">=</span> <span class="n">patch_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">())</span>
             <span class="n">context</span> <span class="o">=</span> <span class="n">copy_context</span><span class="p">()</span>
             <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">_set_config_context</span><span class="p">,</span> <span class="n">child_config</span><span class="p">)</span>
-            <span class="n">coro</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_arun</span><span class="p">,</span> <span class="o">*</span><span class="n">tool_args</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">tool_kwargs</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">new_arg_supported</span>
-                <span class="k">else</span> <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arun</span><span class="p">,</span> <span class="o">*</span><span class="n">tool_args</span><span class="p">,</span> <span class="o">**</span><span class="n">tool_kwargs</span><span class="p">)</span>
+            <span class="n">func_to_check</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_run</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="n">_arun</span> <span class="ow">is</span> <span class="n">BaseTool</span><span class="o">.</span><span class="n">_arun</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_arun</span>
             <span class="p">)</span>
-            <span class="k">if</span> <span class="n">accepts_context</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">coro</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="k">await</span> <span class="n">coro</span>
+            <span class="k">if</span> <span class="n">signature</span><span class="p">(</span><span class="n">func_to_check</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">):</span>
+                <span class="n">tool_kwargs</span><span class="p">[</span><span class="s2">&quot;run_manager&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_manager</span>
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="n">func_to_check</span><span class="p">):</span>
+                <span class="n">tool_kwargs</span><span class="p">[</span><span class="n">config_param</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
 
+            <span class="n">coro</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_arun</span><span class="p">,</span> <span class="o">*</span><span class="n">tool_args</span><span class="p">,</span> <span class="o">**</span><span class="n">tool_kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">accepts_context</span><span class="p">(</span><span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">):</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">coro</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">coro</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">response_format</span> <span class="o">==</span> <span class="s2">&quot;content_and_raw_output&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Since response_format=&#39;content_and_raw_output&#39; &quot;</span>
+                        <span class="s2">&quot;a two-tuple of the message content and raw tool output is &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;expected. Instead generated response of type: &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">response</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">content</span><span class="p">,</span> <span class="n">raw_output</span> <span class="o">=</span> <span class="n">response</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">response</span>
         <span class="k">except</span> <span class="n">ValidationError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">e</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="s2">&quot;Tool input validation error&quot;</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span>
-            <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                <span class="n">error_to_raise</span> <span class="o">=</span> <span class="n">e</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Got unexpected type of `handle_validation_error`. Expected bool, &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;str or callable. Received: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="k">return</span> <span class="n">observation</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">_handle_validation_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">flag</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_validation_error</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">ToolException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
-                    <span class="n">observation</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">observation</span> <span class="o">=</span> <span class="s2">&quot;Tool execution error&quot;</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span>
-            <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">):</span>
-                <span class="n">observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                <span class="n">error_to_raise</span> <span class="o">=</span> <span class="n">e</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Got unexpected type of `handle_tool_error`. Expected bool, str &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;or callable. Received: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_end</span><span class="p">(</span>
-                <span class="n">observation</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">observation</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">_handle_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">flag</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">handle_tool_error</span><span class="p">)</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">Exception</span><span class="p">,</span> <span class="ne">KeyboardInterrupt</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">e</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_end</span><span class="p">(</span>
-                <span class="n">observation</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">observation</span></div>
+            <span class="n">error_to_raise</span> <span class="o">=</span> <span class="n">e</span>
+
+        <span class="k">if</span> <span class="n">error_to_raise</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_error</span><span class="p">(</span><span class="n">error_to_raise</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">error_to_raise</span>
+
+        <span class="n">output</span> <span class="o">=</span> <span class="n">_format_output</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">raw_output</span><span class="p">,</span> <span class="n">tool_call_id</span><span class="p">)</span>
+        <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_tool_end</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">color</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">output</span></div>
 
 <div class="viewcode-block" id="BaseTool.__call__"><a class="viewcode-back" href="../../tools/langchain_core.tools.BaseTool.html#langchain_community.agent_toolkits.nla.tool.BaseTool.__call__">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span><span class="s2">&quot;0.1.47&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;invoke&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tool_input</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">callbacks</span><span class="p">:</span> <span class="n">Callbacks</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -932,7 +927,7 @@
 
 <div class="viewcode-block" id="Tool.ainvoke"><a class="viewcode-back" href="../../tools/langchain_core.tools.Tool.html#langchain_community.agent_toolkits.nla.tool.Tool.ainvoke">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">ToolCall</span><span class="p">],</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -969,51 +964,39 @@
     <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForToolRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">:</span>
-            <span class="n">new_argument_supported</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span>
-                    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                    <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">new_argument_supported</span>
-                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Tool does not support sync&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">config_param</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Tool does not support sync invocation.&quot;</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_arun</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForToolRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool asynchronously.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">:</span>
-            <span class="n">new_argument_supported</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="s2">&quot;callbacks&quot;</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">(</span>
-                    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                    <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">new_argument_supported</span>
-                <span class="k">else</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
-                <span class="kc">None</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span>
-                <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_sync</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">config_param</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># NOTE: this code is unreachable since _arun is only called if coroutine is not</span>
+        <span class="c1"># None.</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_arun</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
 
     <span class="c1"># TODO: this is for backwards compatibility, remove in future</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
@@ -1064,9 +1047,10 @@
 
     <span class="c1"># --- Runnable ---</span>
 
+    <span class="c1"># TODO: Is this needed?</span>
 <div class="viewcode-block" id="StructuredTool.ainvoke"><a class="viewcode-back" href="../../tools/langchain_core.tools.StructuredTool.html#langchain_community.agent_toolkits.nla.tool.StructuredTool.ainvoke">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">ainvoke</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">ToolCall</span><span class="p">],</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -1086,49 +1070,38 @@
     <span class="k">def</span> <span class="nf">_run</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForToolRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">:</span>
-            <span class="n">new_argument_supported</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span>
-                    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                    <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">new_argument_supported</span>
-                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Tool does not support sync&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">config_param</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;StructuredTool does not support sync invocation.&quot;</span><span class="p">)</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_arun</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForToolRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Use the tool asynchronously.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">:</span>
-            <span class="n">new_argument_supported</span> <span class="o">=</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="s2">&quot;callbacks&quot;</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="p">(</span>
-                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">(</span>
-                    <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-                    <span class="n">callbacks</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">new_argument_supported</span>
-                <span class="k">else</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
-            <span class="kc">None</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">,</span>
-            <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="o">.</span><span class="n">get_sync</span><span class="p">()</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="o">*</span><span class="n">args</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">and</span> <span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;callbacks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="n">config_param</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">coroutine</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># NOTE: this code is unreachable since _arun is only called if coroutine is not</span>
+        <span class="c1"># None.</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_arun</span><span class="p">(</span>
+            <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
 
 <div class="viewcode-block" id="StructuredTool.from_function"><a class="viewcode-back" href="../../tools/langchain_core.tools.StructuredTool.html#langchain_community.agent_toolkits.nla.tool.StructuredTool.from_function">[docs]</a>    <span class="nd">@classmethod</span>
@@ -1141,6 +1114,10 @@
         <span class="n">return_direct</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">args_schema</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">infer_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">response_format</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;content_and_raw_output&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span>
+        <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">error_on_invalid_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StructuredTool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create tool from a given function.</span>
@@ -1155,6 +1132,14 @@
 <span class="sd">            return_direct: Whether to return the result directly or as a callback</span>
 <span class="sd">            args_schema: The schema of the tool&#39;s input arguments</span>
 <span class="sd">            infer_schema: Whether to infer the schema from the function&#39;s signature</span>
+<span class="sd">            response_format: The tool response format. If &quot;content&quot; then the output of</span>
+<span class="sd">                the tool is interpreted as the contents of a ToolMessage. If</span>
+<span class="sd">                &quot;content_and_raw_output&quot; then the output is expected to be a two-tuple</span>
+<span class="sd">                corresponding to the (content, raw_output) of a ToolMessage.</span>
+<span class="sd">            parse_docstring: if ``infer_schema`` and ``parse_docstring``, will attempt</span>
+<span class="sd">                to parse parameter descriptions from Google Style function docstrings.</span>
+<span class="sd">            error_on_invalid_docstring: if ``parse_docstring`` is provided, configures</span>
+<span class="sd">                whether to raise ValueError on invalid Google Style docstrings.</span>
 <span class="sd">            **kwargs: Additional arguments to pass to the tool</span>
 
 <span class="sd">        Returns:</span>
@@ -1194,8 +1179,22 @@
         <span class="n">description_</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">description_</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="n">_args_schema</span> <span class="o">=</span> <span class="n">args_schema</span>
         <span class="k">if</span> <span class="n">_args_schema</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">infer_schema</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">config_param</span> <span class="o">:=</span> <span class="n">_get_runnable_config_param</span><span class="p">(</span><span class="n">source_function</span><span class="p">):</span>
+                <span class="n">filter_args</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">config_param</span><span class="p">,</span>
+                    <span class="s2">&quot;run_manager&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;callbacks&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">filter_args</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
             <span class="c1"># schema name is appended within function</span>
-            <span class="n">_args_schema</span> <span class="o">=</span> <span class="n">create_schema_from_function</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">source_function</span><span class="p">)</span>
+            <span class="n">_args_schema</span> <span class="o">=</span> <span class="n">create_schema_from_function</span><span class="p">(</span>
+                <span class="n">name</span><span class="p">,</span>
+                <span class="n">source_function</span><span class="p">,</span>
+                <span class="n">parse_docstring</span><span class="o">=</span><span class="n">parse_docstring</span><span class="p">,</span>
+                <span class="n">error_on_invalid_docstring</span><span class="o">=</span><span class="n">error_on_invalid_docstring</span><span class="p">,</span>
+                <span class="n">filter_args</span><span class="o">=</span><span class="n">filter_args</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
             <span class="n">func</span><span class="o">=</span><span class="n">func</span><span class="p">,</span>
@@ -1203,6 +1202,7 @@
             <span class="n">args_schema</span><span class="o">=</span><span class="n">_args_schema</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="n">description</span><span class="o">=</span><span class="n">description_</span><span class="p">,</span>
             <span class="n">return_direct</span><span class="o">=</span><span class="n">return_direct</span><span class="p">,</span>
+            <span class="n">response_format</span><span class="o">=</span><span class="n">response_format</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 
@@ -1212,6 +1212,9 @@
     <span class="n">return_direct</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">args_schema</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">infer_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">response_format</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;content_and_raw_output&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span>
+    <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">error_on_invalid_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Make tools out of functions, can be used with or without arguments.</span>
 
@@ -1223,6 +1226,14 @@
 <span class="sd">        infer_schema: Whether to infer the schema of the arguments from</span>
 <span class="sd">            the function&#39;s signature. This also makes the resultant tool</span>
 <span class="sd">            accept a dictionary input to its `run()` function.</span>
+<span class="sd">        response_format: The tool response format. If &quot;content&quot; then the output of</span>
+<span class="sd">            the tool is interpreted as the contents of a ToolMessage. If</span>
+<span class="sd">            &quot;content_and_raw_output&quot; then the output is expected to be a two-tuple</span>
+<span class="sd">            corresponding to the (content, raw_output) of a ToolMessage.</span>
+<span class="sd">        parse_docstring: if ``infer_schema`` and ``parse_docstring``, will attempt to</span>
+<span class="sd">            parse parameter descriptions from Google Style function docstrings.</span>
+<span class="sd">        error_on_invalid_docstring: if ``parse_docstring`` is provided, configures</span>
+<span class="sd">            whether to raise ValueError on invalid Google Style docstrings.</span>
 
 <span class="sd">    Requires:</span>
 <span class="sd">        - Function must be of type (str) -&gt; str</span>
@@ -1240,6 +1251,82 @@
 <span class="sd">            def search_api(query: str) -&gt; str:</span>
 <span class="sd">                # Searches the API for the query.</span>
 <span class="sd">                return</span>
+
+<span class="sd">            @tool(response_format=&quot;content_and_raw_output&quot;)</span>
+<span class="sd">            def search_api(query: str) -&gt; Tuple[str, dict]:</span>
+<span class="sd">                return &quot;partial json of results&quot;, {&quot;full&quot;: &quot;object of results&quot;}</span>
+
+<span class="sd">    .. versionadded:: 0.2.14</span>
+<span class="sd">    Parse Google-style docstrings:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            @tool(parse_docstring=True)</span>
+<span class="sd">            def foo(bar: str, baz: int) -&gt; str:</span>
+<span class="sd">                \&quot;\&quot;\&quot;The foo.</span>
+
+<span class="sd">                Args:</span>
+<span class="sd">                    bar: The bar.</span>
+<span class="sd">                    baz: The baz.</span>
+<span class="sd">                \&quot;\&quot;\&quot;</span>
+<span class="sd">                return bar</span>
+
+<span class="sd">            foo.args_schema.schema()</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            {</span>
+<span class="sd">                &quot;title&quot;: &quot;fooSchema&quot;,</span>
+<span class="sd">                &quot;description&quot;: &quot;The foo.&quot;,</span>
+<span class="sd">                &quot;type&quot;: &quot;object&quot;,</span>
+<span class="sd">                &quot;properties&quot;: {</span>
+<span class="sd">                    &quot;bar&quot;: {</span>
+<span class="sd">                        &quot;title&quot;: &quot;Bar&quot;,</span>
+<span class="sd">                        &quot;description&quot;: &quot;The bar.&quot;,</span>
+<span class="sd">                        &quot;type&quot;: &quot;string&quot;</span>
+<span class="sd">                    },</span>
+<span class="sd">                    &quot;baz&quot;: {</span>
+<span class="sd">                        &quot;title&quot;: &quot;Baz&quot;,</span>
+<span class="sd">                        &quot;description&quot;: &quot;The baz.&quot;,</span>
+<span class="sd">                        &quot;type&quot;: &quot;integer&quot;</span>
+<span class="sd">                    }</span>
+<span class="sd">                },</span>
+<span class="sd">                &quot;required&quot;: [</span>
+<span class="sd">                    &quot;bar&quot;,</span>
+<span class="sd">                    &quot;baz&quot;</span>
+<span class="sd">                ]</span>
+<span class="sd">            }</span>
+
+<span class="sd">        Note that parsing by default will raise ``ValueError`` if the docstring</span>
+<span class="sd">        is considered invalid. A docstring is considered invalid if it contains</span>
+<span class="sd">        arguments not in the function signature, or is unable to be parsed into</span>
+<span class="sd">        a summary and &quot;Args:&quot; blocks. Examples below:</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            # No args section</span>
+<span class="sd">            def invalid_docstring_1(bar: str, baz: int) -&gt; str:</span>
+<span class="sd">                \&quot;\&quot;\&quot;The foo.\&quot;\&quot;\&quot;</span>
+<span class="sd">                return bar</span>
+
+<span class="sd">            # Improper whitespace between summary and args section</span>
+<span class="sd">            def invalid_docstring_2(bar: str, baz: int) -&gt; str:</span>
+<span class="sd">                \&quot;\&quot;\&quot;The foo.</span>
+<span class="sd">                Args:</span>
+<span class="sd">                    bar: The bar.</span>
+<span class="sd">                    baz: The baz.</span>
+<span class="sd">                \&quot;\&quot;\&quot;</span>
+<span class="sd">                return bar</span>
+
+<span class="sd">            # Documented args absent from function signature</span>
+<span class="sd">            def invalid_docstring_3(bar: str, baz: int) -&gt; str:</span>
+<span class="sd">                \&quot;\&quot;\&quot;The foo.</span>
+
+<span class="sd">                Args:</span>
+<span class="sd">                    banana: The bar.</span>
+<span class="sd">                    monkey: The baz.</span>
+<span class="sd">                \&quot;\&quot;\&quot;</span>
+<span class="sd">                return bar</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">_make_with_name</span><span class="p">(</span><span class="n">tool_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
@@ -1284,10 +1371,13 @@
                     <span class="n">return_direct</span><span class="o">=</span><span class="n">return_direct</span><span class="p">,</span>
                     <span class="n">args_schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
                     <span class="n">infer_schema</span><span class="o">=</span><span class="n">infer_schema</span><span class="p">,</span>
+                    <span class="n">response_format</span><span class="o">=</span><span class="n">response_format</span><span class="p">,</span>
+                    <span class="n">parse_docstring</span><span class="o">=</span><span class="n">parse_docstring</span><span class="p">,</span>
+                    <span class="n">error_on_invalid_docstring</span><span class="o">=</span><span class="n">error_on_invalid_docstring</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="c1"># If someone doesn&#39;t want a schema applied, we must treat it as</span>
             <span class="c1"># a simple string-&gt;string function</span>
-            <span class="k">if</span> <span class="n">func</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dec_func</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;Function must have a docstring if &quot;</span>
                     <span class="s2">&quot;description not provided and infer_schema is False.&quot;</span>
@@ -1298,6 +1388,7 @@
                 <span class="n">description</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2"> tool&quot;</span><span class="p">,</span>
                 <span class="n">return_direct</span><span class="o">=</span><span class="n">return_direct</span><span class="p">,</span>
                 <span class="n">coroutine</span><span class="o">=</span><span class="n">coroutine</span><span class="p">,</span>
+                <span class="n">response_format</span><span class="o">=</span><span class="n">response_format</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">_make_tool</span>
@@ -1453,6 +1544,103 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the tools in the toolkit.&quot;&quot;&quot;</span></div></div>
 
 
+<span class="k">def</span> <span class="nf">_is_tool_call</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">x</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;tool_call&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_handle_validation_error</span><span class="p">(</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">ValidationError</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">flag</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">ValidationError</span><span class="p">],</span> <span class="nb">str</span><span class="p">]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flag</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;Tool input validation error&quot;</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flag</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">flag</span>
+    <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">flag</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">flag</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Got unexpected type of `handle_validation_error`. Expected bool, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;str or callable. Received: </span><span class="si">{</span><span class="n">flag</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">content</span>
+
+
+<span class="k">def</span> <span class="nf">_handle_tool_error</span><span class="p">(</span>
+    <span class="n">e</span><span class="p">:</span> <span class="n">ToolException</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">flag</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">ToolException</span><span class="p">],</span> <span class="nb">str</span><span class="p">]]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flag</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;Tool execution error&quot;</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">flag</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">flag</span>
+    <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">flag</span><span class="p">):</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">flag</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Got unexpected type of `handle_tool_error`. Expected bool, str &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;or callable. Received: </span><span class="si">{</span><span class="n">flag</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">content</span>
+
+
+<span class="k">def</span> <span class="nf">_prep_run_args</span><span class="p">(</span>
+    <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">ToolCall</span><span class="p">],</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RunnableConfig</span><span class="p">],</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">],</span> <span class="n">Dict</span><span class="p">]:</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">ensure_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">_is_tool_call</span><span class="p">(</span><span class="nb">input</span><span class="p">):</span>
+        <span class="n">tool_call_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">ToolCall</span><span class="p">,</span> <span class="nb">input</span><span class="p">)[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="n">tool_input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">ToolCall</span><span class="p">,</span> <span class="nb">input</span><span class="p">)[</span><span class="s2">&quot;args&quot;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">tool_call_id</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">tool_input</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">],</span> <span class="nb">input</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">tool_input</span><span class="p">,</span>
+        <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">callbacks</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;callbacks&quot;</span><span class="p">),</span>
+            <span class="n">tags</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">),</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">),</span>
+            <span class="n">run_name</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;run_name&quot;</span><span class="p">),</span>
+            <span class="n">run_id</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;run_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">tool_call_id</span><span class="o">=</span><span class="n">tool_call_id</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_format_output</span><span class="p">(</span>
+    <span class="n">content</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">raw_output</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">tool_call_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">ToolMessage</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">tool_call_id</span><span class="p">:</span>
+        <span class="c1"># NOTE: This will fail to stringify lists which aren&#39;t actually content blocks</span>
+        <span class="c1"># but whose first element happens to be a string or dict. Tools should avoid</span>
+        <span class="c1"># returning such contents.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">content</span>
+            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">))</span>
+        <span class="p">):</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">_stringify</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ToolMessage</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="n">raw_output</span><span class="o">=</span><span class="n">raw_output</span><span class="p">,</span> <span class="n">tool_call_id</span><span class="o">=</span><span class="n">tool_call_id</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">content</span>
+
+
+<span class="k">def</span> <span class="nf">_stringify</span><span class="p">(</span><span class="n">content</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">_get_description_from_runnable</span><span class="p">(</span><span class="n">runnable</span><span class="p">:</span> <span class="n">Runnable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate a placeholder description of a runnable.&quot;&quot;&quot;</span>
     <span class="n">input_schema</span> <span class="o">=</span> <span class="n">runnable</span><span class="o">.</span><span class="n">input_schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()</span>
@@ -1524,6 +1712,20 @@
             <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
             <span class="n">args_schema</span><span class="o">=</span><span class="n">args_schema</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">_get_runnable_config_param</span><span class="p">(</span><span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
+        <span class="n">func</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">func</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">type_hints</span> <span class="o">=</span> <span class="n">get_type_hints</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">type_</span> <span class="ow">in</span> <span class="n">type_hints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">type_</span> <span class="ow">is</span> <span class="n">RunnableConfig</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">name</span>
+    <span class="k">return</span> <span class="kc">None</span>
 </pre></div>
 
             </div>
@@ -1532,7 +1734,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 11, 2024.
+                                on Jul 12, 2024.
                 </footer>
             </div>
         </div>
