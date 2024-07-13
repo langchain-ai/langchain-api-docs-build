@@ -343,7 +343,7 @@
 
 
 <span class="k">def</span> <span class="nf">_set_config_context</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the child runnable config + tracing context</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Set the child Runnable config + tracing context</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        config (RunnableConfig): The config to set.</span>
@@ -448,7 +448,6 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        config (Optional[RunnableConfig]): The config to patch.</span>
-<span class="sd">        copy_locals (bool, optional): Whether to copy locals. Defaults to False.</span>
 <span class="sd">        callbacks (Optional[BaseCallbackManager], optional): The callbacks to set.</span>
 <span class="sd">          Defaults to None.</span>
 <span class="sd">        recursion_limit (Optional[int], optional): The recursion limit to set.</span>
@@ -594,9 +593,9 @@
 <span class="sd">          Callable[[Input, CallbackManagerForChainRun, RunnableConfig], Output]]):</span>
 <span class="sd">           The function to call.</span>
 <span class="sd">        input (Input): The input to the function.</span>
-<span class="sd">        run_manager (CallbackManagerForChainRun): The run manager to</span>
-<span class="sd">          pass to the function.</span>
 <span class="sd">        config (RunnableConfig): The config to pass to the function.</span>
+<span class="sd">        run_manager (CallbackManagerForChainRun): The run manager to</span>
+<span class="sd">          pass to the function. Defaults to None.</span>
 <span class="sd">        **kwargs (Any): The keyword arguments to pass to the function.</span>
 
 <span class="sd">    Returns:</span>
@@ -627,7 +626,7 @@
     <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForChainRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Awaitable</span><span class="p">[</span><span class="n">Output</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Call function that may optionally accept a run_manager and/or config.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Async call function that may optionally accept a run_manager and/or config.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        func (Union[Callable[[Input], Awaitable[Output]], Callable[[Input,</span>
@@ -635,9 +634,9 @@
 <span class="sd">            AsyncCallbackManagerForChainRun, RunnableConfig], Awaitable[Output]]]):</span>
 <span class="sd">            The function to call.</span>
 <span class="sd">        input (Input): The input to the function.</span>
-<span class="sd">        run_manager (AsyncCallbackManagerForChainRun): The run manager</span>
-<span class="sd">          to pass to the function.</span>
 <span class="sd">        config (RunnableConfig): The config to pass to the function.</span>
+<span class="sd">        run_manager (AsyncCallbackManagerForChainRun): The run manager</span>
+<span class="sd">          to pass to the function. Defaults to None.</span>
 <span class="sd">        **kwargs (Any): The keyword arguments to pass to the function.</span>
 
 <span class="sd">    Returns:</span>
@@ -725,6 +724,18 @@
         <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">chunksize</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">T</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Map a function to multiple iterables.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            fn (Callable[..., T]): The function to map.</span>
+<span class="sd">            *iterables (Iterable[Any]): The iterables to map over.</span>
+<span class="sd">            timeout (float | None, optional): The timeout for the map.</span>
+<span class="sd">                Defaults to None.</span>
+<span class="sd">            chunksize (int, optional): The chunksize for the map. Defaults to 1.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Iterator[T]: The iterator for the mapped function.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">contexts</span> <span class="o">=</span> <span class="p">[</span><span class="n">copy_context</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">iterables</span><span class="p">[</span><span class="mi">0</span><span class="p">]))]</span>  <span class="c1"># type: ignore[arg-type]</span>
 
         <span class="k">def</span> <span class="nf">_wrapped_fn</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
@@ -766,13 +777,16 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Run a function in an executor.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        executor (Executor): The executor.</span>
+<span class="sd">        executor_or_config: The executor or config to run in.</span>
 <span class="sd">        func (Callable[P, Output]): The function.</span>
 <span class="sd">        *args (Any): The positional arguments to the function.</span>
 <span class="sd">        **kwargs (Any): The keyword arguments to the function.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        Output: The output of the function.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        RuntimeError: If the function raises a StopIteration.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">wrapper</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
@@ -800,7 +814,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 12, 2024.
+                                on Jul 13, 2024.
                 </footer>
             </div>
         </div>
