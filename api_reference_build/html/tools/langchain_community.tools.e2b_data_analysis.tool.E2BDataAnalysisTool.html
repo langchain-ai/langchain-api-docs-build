@@ -11,7 +11,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_community.tools.e2b_data_analysis.tool.E2BDataAnalysisTool &mdash; 🦜🔗 LangChain 0.2.7</title>
+        <title>langchain_community.tools.e2b_data_analysis.tool.E2BDataAnalysisTool &mdash; 🦜🔗 LangChain 0.2.8</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/tools/langchain_community.tools.e2b_data_analysis.tool.E2BDataAnalysisTool.html"/>
@@ -507,10 +507,12 @@ the Runnable did not implement a native async version of invoke.</p>
 <code class="docutils literal notranslate"><span class="pre">args_schema</span></code> from a Runnable. Where possible, schemas are inferred
 from <code class="docutils literal notranslate"><span class="pre">runnable.get_input_schema</span></code>. Alternatively (e.g., if the
 Runnable takes a dict as input and the specific dict keys are not typed),
-pass <code class="docutils literal notranslate"><span class="pre">arg_types</span></code> to specify the required arguments.</p>
+the schema can be specified directly with <code class="docutils literal notranslate"><span class="pre">args_schema</span></code>. You can also
+pass <code class="docutils literal notranslate"><span class="pre">arg_types</span></code> to just specify the required arguments and their types.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>args_schema</strong> – The schema for the tool. Defaults to None.</p></li>
 <li><p><strong>name</strong> – The name of the tool. Defaults to None.</p></li>
 <li><p><strong>description</strong> – The description of the tool. Defaults to None.</p></li>
 <li><p><strong>arg_types</strong> – A dictionary of argument names to types. Defaults to None.</p></li>
@@ -540,7 +542,26 @@ pass <code class="docutils literal notranslate"><span class="pre">arg_types</spa
 <span class="n">as_tool</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]})</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">dict</span></code> input, specifying schema:</p>
+<p><code class="docutils literal notranslate"><span class="pre">dict</span></code> input, specifying schema via <code class="docutils literal notranslate"><span class="pre">args_schema</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableLambda</span>
+
+<span class="k">def</span> <span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;b&quot;</span><span class="p">]))</span>
+
+<span class="k">class</span> <span class="nc">FSchema</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Apply a function to an integer and list of integers.&quot;&quot;&quot;</span>
+
+    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Integer&quot;</span><span class="p">)</span>
+    <span class="n">b</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List of ints&quot;</span><span class="p">)</span>
+
+<span class="n">runnable</span> <span class="o">=</span> <span class="n">RunnableLambda</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+<span class="n">as_tool</span> <span class="o">=</span> <span class="n">runnable</span><span class="o">.</span><span class="n">as_tool</span><span class="p">(</span><span class="n">FSchema</span><span class="p">)</span>
+<span class="n">as_tool</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]})</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dict</span></code> input, specifying schema via <code class="docutils literal notranslate"><span class="pre">arg_types</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableLambda</span>
 
@@ -1194,7 +1215,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 15, 2024.
+                                on Jul 16, 2024.
                 </footer>
             </div>
         </div>
