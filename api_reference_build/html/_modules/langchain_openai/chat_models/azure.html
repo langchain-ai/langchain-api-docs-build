@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_openai.chat_models.azure &mdash; 🦜🔗 LangChain 0.2.8</title>
+        <title>langchain_openai.chat_models.azure &mdash; 🦜🔗 LangChain 0.2.9</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_openai/chat_models/azure.html"/>
@@ -327,6 +327,12 @@
 <span class="sd">        organization: Optional[str]</span>
 <span class="sd">            OpenAI organization ID. If not passed in will be read from env</span>
 <span class="sd">            var OPENAI_ORG_ID.</span>
+<span class="sd">        model: Optional[str]</span>
+<span class="sd">            The name of the underlying OpenAI model. Used for tracing and token</span>
+<span class="sd">            counting. Does not affect completion. E.g. &quot;gpt-4&quot;, &quot;gpt-35-turbo&quot;, etc.</span>
+<span class="sd">        model_version: Optional[str]</span>
+<span class="sd">            The version of the underlying OpenAI model. Used for tracing and token</span>
+<span class="sd">            counting. Does not affect completion. E.g., &quot;0125&quot;, &quot;0125-preview&quot;, etc.</span>
 
 <span class="sd">    See full list of supported init args and their descriptions in the params section.</span>
 
@@ -343,6 +349,8 @@
 <span class="sd">                timeout=None,</span>
 <span class="sd">                max_retries=2,</span>
 <span class="sd">                # organization=&quot;...&quot;,</span>
+<span class="sd">                # model=&quot;gpt-35-turbo&quot;,</span>
+<span class="sd">                # model_version=&quot;0125&quot;,</span>
 <span class="sd">                # other params...</span>
 <span class="sd">            )</span>
 
@@ -744,6 +752,13 @@
     <span class="n">validate_base_url</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;If legacy arg openai_api_base is passed in, try to infer if it is a base_url or </span>
 <span class="sd">        azure_endpoint and update client params accordingly.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">model_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">alias</span><span class="o">=</span><span class="s2">&quot;model&quot;</span><span class="p">)</span>  <span class="c1"># type: ignore[assignment]</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Name of the deployed OpenAI model, e.g. &quot;gpt-4o&quot;, &quot;gpt-35-turbo&quot;, etc. </span>
+<span class="sd">    </span>
+<span class="sd">    Distinct from the Azure deployment name, which is set by the Azure user.</span>
+<span class="sd">    Used for tracing and token counting. Does NOT affect completion.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@classmethod</span>
@@ -1155,7 +1170,14 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the parameters used to invoke the model.&quot;&quot;&quot;</span>
         <span class="n">params</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_get_ls_params</span><span class="p">(</span><span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">params</span><span class="p">[</span><span class="s2">&quot;ls_provider&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;azure&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">deployment_name</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_version</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_version</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;ls_model_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span> <span class="o">+</span> <span class="s2">&quot;-&quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_version</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">[</span><span class="s2">&quot;ls_model_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">deployment_name</span><span class="p">:</span>
             <span class="n">params</span><span class="p">[</span><span class="s2">&quot;ls_model_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">deployment_name</span>
         <span class="k">return</span> <span class="n">params</span>
 
@@ -1203,7 +1225,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 17, 2024.
+                                on Jul 18, 2024.
                 </footer>
             </div>
         </div>

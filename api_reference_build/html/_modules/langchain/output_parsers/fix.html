@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain.output_parsers.fix &mdash; 🦜🔗 LangChain 0.2.8</title>
+        <title>langchain.output_parsers.fix &mdash; 🦜🔗 LangChain 0.2.9</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain/output_parsers/fix.html"/>
@@ -239,10 +239,17 @@
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseOutputParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">BasePromptTemplate</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableSerializable</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
 
 <span class="kn">from</span> <span class="nn">langchain.output_parsers.prompts</span> <span class="kn">import</span> <span class="n">NAIVE_FIX_PROMPT</span>
 
 <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="OutputFixingParserRetryChainInput"><a class="viewcode-back" href="../../../output_parsers/langchain.output_parsers.fix.OutputFixingParserRetryChainInput.html#langchain.output_parsers.fix.OutputFixingParserRetryChainInput">[docs]</a><span class="k">class</span> <span class="nc">OutputFixingParserRetryChainInput</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">instructions</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">completion</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span></div>
 
 
 <div class="viewcode-block" id="OutputFixingParser"><a class="viewcode-back" href="../../../output_parsers/langchain.output_parsers.fix.OutputFixingParser.html#langchain.output_parsers.fix.OutputFixingParser">[docs]</a><span class="k">class</span> <span class="nc">OutputFixingParser</span><span class="p">(</span><span class="n">BaseOutputParser</span><span class="p">[</span><span class="n">T</span><span class="p">]):</span>
@@ -255,7 +262,9 @@
     <span class="n">parser</span><span class="p">:</span> <span class="n">BaseOutputParser</span><span class="p">[</span><span class="n">T</span><span class="p">]</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The parser to use to parse the output.&quot;&quot;&quot;</span>
     <span class="c1"># Should be an LLMChain but we want to avoid top-level imports from langchain.chains</span>
-    <span class="n">retry_chain</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">RunnableSerializable</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+    <span class="n">retry_chain</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span>
+        <span class="n">RunnableSerializable</span><span class="p">[</span><span class="n">OutputFixingParserRetryChainInput</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">Any</span>
+    <span class="p">]</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The RunnableSerializable to use to retry the completion (Legacy: LLMChain).&quot;&quot;&quot;</span>
     <span class="n">max_retries</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;The maximum number of times to retry the parse.&quot;&quot;&quot;</span>
@@ -305,16 +314,16 @@
                         <span class="k">try</span><span class="p">:</span>
                             <span class="n">completion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry_chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
                                 <span class="nb">dict</span><span class="p">(</span>
-                                    <span class="n">instructions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>  <span class="c1"># noqa: E501</span>
-                                    <span class="nb">input</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
+                                    <span class="n">instructions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>
+                                    <span class="n">completion</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
                                     <span class="n">error</span><span class="o">=</span><span class="nb">repr</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
                                 <span class="p">)</span>
                             <span class="p">)</span>
                         <span class="k">except</span> <span class="p">(</span><span class="ne">NotImplementedError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
-                            <span class="c1"># Case: self.parser does not have get_format_instructions  # noqa: E501</span>
+                            <span class="c1"># Case: self.parser does not have get_format_instructions</span>
                             <span class="n">completion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry_chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
                                 <span class="nb">dict</span><span class="p">(</span>
-                                    <span class="nb">input</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
+                                    <span class="n">completion</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
                                     <span class="n">error</span><span class="o">=</span><span class="nb">repr</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
                                 <span class="p">)</span>
                             <span class="p">)</span>
@@ -334,7 +343,7 @@
                     <span class="n">retries</span> <span class="o">+=</span> <span class="mi">1</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">legacy</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">retry_chain</span><span class="p">,</span> <span class="s2">&quot;arun&quot;</span><span class="p">):</span>
                         <span class="n">completion</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry_chain</span><span class="o">.</span><span class="n">arun</span><span class="p">(</span>
-                            <span class="n">instructions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>  <span class="c1"># noqa: E501</span>
+                            <span class="n">instructions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>
                             <span class="n">completion</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
                             <span class="n">error</span><span class="o">=</span><span class="nb">repr</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
                         <span class="p">)</span>
@@ -342,16 +351,16 @@
                         <span class="k">try</span><span class="p">:</span>
                             <span class="n">completion</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry_chain</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
                                 <span class="nb">dict</span><span class="p">(</span>
-                                    <span class="n">instructions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>  <span class="c1"># noqa: E501</span>
-                                    <span class="nb">input</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
+                                    <span class="n">instructions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parser</span><span class="o">.</span><span class="n">get_format_instructions</span><span class="p">(),</span>
+                                    <span class="n">completion</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
                                     <span class="n">error</span><span class="o">=</span><span class="nb">repr</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
                                 <span class="p">)</span>
                             <span class="p">)</span>
                         <span class="k">except</span> <span class="p">(</span><span class="ne">NotImplementedError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
-                            <span class="c1"># Case: self.parser does not have get_format_instructions  # noqa: E501</span>
+                            <span class="c1"># Case: self.parser does not have get_format_instructions</span>
                             <span class="n">completion</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry_chain</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
                                 <span class="nb">dict</span><span class="p">(</span>
-                                    <span class="nb">input</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
+                                    <span class="n">completion</span><span class="o">=</span><span class="n">completion</span><span class="p">,</span>
                                     <span class="n">error</span><span class="o">=</span><span class="nb">repr</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
                                 <span class="p">)</span>
                             <span class="p">)</span>
@@ -376,7 +385,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 17, 2024.
+                                on Jul 18, 2024.
                 </footer>
             </div>
         </div>
