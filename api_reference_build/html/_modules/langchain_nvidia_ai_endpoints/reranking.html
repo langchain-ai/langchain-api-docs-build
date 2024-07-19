@@ -232,7 +232,7 @@
   <h1>Source code for langchain_nvidia_ai_endpoints.reranking</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Generator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Generator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="n">Callbacks</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
@@ -267,6 +267,13 @@
     <span class="p">)</span>
     <span class="n">top_n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The number of documents to return.&quot;</span><span class="p">)</span>
     <span class="n">model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;The model to use for reranking.&quot;</span><span class="p">)</span>
+    <span class="n">truncate</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;NONE&quot;</span><span class="p">,</span> <span class="s2">&quot;END&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;Truncate input text if it exceeds the model&#39;s maximum token length. &quot;</span>
+            <span class="s2">&quot;Default is model dependent and is likely to raise error if an &quot;</span>
+            <span class="s2">&quot;input is too long.&quot;</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
     <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
         <span class="n">_default_batch_size</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The maximum batch size.&quot;</span>
     <span class="p">)</span>
@@ -285,6 +292,9 @@
 <span class="sd">            nvidia_api_key (str): The API key to use for connecting to the hosted NIM.</span>
 <span class="sd">            api_key (str): Alternative to nvidia_api_key.</span>
 <span class="sd">            base_url (str): The base URL of the NIM to connect to.</span>
+<span class="sd">            truncate (str): &quot;NONE&quot;, &quot;END&quot;, truncate input text if it exceeds</span>
+<span class="sd">                            the model&#39;s context length. Default is model dependent and</span>
+<span class="sd">                            is likely to raise an error if an input is too long.</span>
 
 <span class="sd">        API Key:</span>
 <span class="sd">        - The recommended way to provide the API key is through the `NVIDIA_API_KEY`</span>
@@ -321,13 +331,14 @@
 
     <span class="c1"># todo: batching when len(documents) &gt; endpoint&#39;s max batch size</span>
     <span class="k">def</span> <span class="nf">_rank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Ranking</span><span class="p">]:</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get_req</span><span class="p">(</span>
-            <span class="n">payload</span><span class="o">=</span><span class="p">{</span>
-                <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
-                <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
-                <span class="s2">&quot;passages&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">passage</span><span class="p">}</span> <span class="k">for</span> <span class="n">passage</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">],</span>
-            <span class="p">},</span>
-        <span class="p">)</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span>
+            <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
+            <span class="s2">&quot;passages&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">passage</span><span class="p">}</span> <span class="k">for</span> <span class="n">passage</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">],</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncate</span><span class="p">:</span>
+            <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;truncate&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncate</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get_req</span><span class="p">(</span><span class="n">payload</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
             <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
         <span class="c1"># todo: handle errors</span>
@@ -366,6 +377,9 @@
                 <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span> <span class="n">documents</span><span class="o">=</span><span class="p">[</span><span class="n">d</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">doc_batch</span><span class="p">]</span>
             <span class="p">)</span>
             <span class="k">for</span> <span class="n">ranking</span> <span class="ow">in</span> <span class="n">rankings</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="p">(</span>
+                    <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">ranking</span><span class="o">.</span><span class="n">index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">doc_batch</span><span class="p">)</span>
+                <span class="p">),</span> <span class="s2">&quot;invalid response from server: index out of range&quot;</span>
                 <span class="n">doc</span> <span class="o">=</span> <span class="n">doc_batch</span><span class="p">[</span><span class="n">ranking</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
                 <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;relevance_score&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ranking</span><span class="o">.</span><span class="n">logit</span>
                 <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
@@ -383,7 +397,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 18, 2024.
+                                on Jul 19, 2024.
                 </footer>
             </div>
         </div>

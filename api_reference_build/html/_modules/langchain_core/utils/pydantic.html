@@ -232,8 +232,12 @@
   <h1>Source code for langchain_core.utils.pydantic</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;Utilities for tests.&quot;&quot;&quot;</span>
 
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">textwrap</span>
 <span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">wraps</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Type</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">root_validator</span>
 
@@ -249,6 +253,66 @@
 
 
 <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">=</span> <span class="n">get_pydantic_major_version</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="is_basemodel_subclass"><a class="viewcode-back" href="../../../utils/langchain_core.utils.pydantic.is_basemodel_subclass.html#langchain_core.utils.pydantic.is_basemodel_subclass">[docs]</a><span class="k">def</span> <span class="nf">is_basemodel_subclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the given class is a subclass of Pydantic BaseModel.</span>
+
+<span class="sd">    Check if the given class is a subclass of any of the following:</span>
+
+<span class="sd">    * pydantic.BaseModel in Pydantic 1.x</span>
+<span class="sd">    * pydantic.BaseModel in Pydantic 2.x</span>
+<span class="sd">    * pydantic.v1.BaseModel in Pydantic 2.x</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Before we can use issubclass on the cls we need to check if it is a class</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">if</span> <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV1Proper</span>
+
+        <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">BaseModelV1Proper</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">elif</span> <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV2</span>
+        <span class="kn">from</span> <span class="nn">pydantic.v1</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV1</span>
+
+        <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">BaseModelV2</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">BaseModelV1</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported Pydantic version: </span><span class="si">{</span><span class="n">PYDANTIC_MAJOR_VERSION</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="is_basemodel_instance"><a class="viewcode-back" href="../../../utils/langchain_core.utils.pydantic.is_basemodel_instance.html#langchain_core.utils.pydantic.is_basemodel_instance">[docs]</a><span class="k">def</span> <span class="nf">is_basemodel_instance</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if the given class is an instance of Pydantic BaseModel.</span>
+
+<span class="sd">    Check if the given class is an instance of any of the following:</span>
+
+<span class="sd">    * pydantic.BaseModel in Pydantic 1.x</span>
+<span class="sd">    * pydantic.BaseModel in Pydantic 2.x</span>
+<span class="sd">    * pydantic.v1.BaseModel in Pydantic 2.x</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV1Proper</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">BaseModelV1Proper</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">elif</span> <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV2</span>
+        <span class="kn">from</span> <span class="nn">pydantic.v1</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV1</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">BaseModelV2</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">BaseModelV1</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported Pydantic version: </span><span class="si">{</span><span class="n">PYDANTIC_MAJOR_VERSION</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">False</span></div>
 
 
 <span class="c1"># How to type hint this?</span>
@@ -296,6 +360,109 @@
         <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">wrapper</span></div>
+
+
+<span class="k">def</span> <span class="nf">_create_subset_model_v1</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span>
+    <span class="n">field_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">descriptions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fn_description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pydantic model with only a subset of model&#39;s fields.&quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">create_model</span>
+
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">field_names</span><span class="p">:</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">__fields__</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="c1"># this isn&#39;t perfect but should work for most functions</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">outer_type_</span>
+            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">required</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">allow_none</span>
+            <span class="k">else</span> <span class="n">Optional</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">outer_type_</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">descriptions</span> <span class="ow">and</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">descriptions</span><span class="p">:</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">field_info</span><span class="o">.</span><span class="n">description</span> <span class="o">=</span> <span class="n">descriptions</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span>
+        <span class="n">fields</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">field_info</span><span class="p">)</span>
+
+    <span class="n">rtn</span> <span class="o">=</span> <span class="n">create_model</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+    <span class="n">rtn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">dedent</span><span class="p">(</span><span class="n">fn_description</span> <span class="ow">or</span> <span class="n">model</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rtn</span>
+
+
+<span class="k">def</span> <span class="nf">_create_subset_model_v2</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span>
+    <span class="n">field_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">descriptions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fn_description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pydantic model with a subset of the model fields.&quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">pydantic</span> <span class="kn">import</span> <span class="n">create_model</span>  <span class="c1"># pydantic: ignore</span>
+    <span class="kn">from</span> <span class="nn">pydantic.fields</span> <span class="kn">import</span> <span class="n">FieldInfo</span>  <span class="c1"># pydantic: ignore</span>
+
+    <span class="n">descriptions_</span> <span class="o">=</span> <span class="n">descriptions</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">field_name</span> <span class="ow">in</span> <span class="n">field_names</span><span class="p">:</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">model_fields</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span>  <span class="c1"># type: ignore</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="n">descriptions_</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field_name</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">description</span><span class="p">)</span>
+        <span class="n">fields</span><span class="p">[</span><span class="n">field_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">field</span><span class="o">.</span><span class="n">annotation</span><span class="p">,</span>
+            <span class="n">FieldInfo</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="n">field</span><span class="o">.</span><span class="n">default</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="n">rtn</span> <span class="o">=</span> <span class="n">create_model</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+
+    <span class="n">rtn</span><span class="o">.</span><span class="vm">__doc__</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">dedent</span><span class="p">(</span><span class="n">fn_description</span> <span class="ow">or</span> <span class="n">model</span><span class="o">.</span><span class="vm">__doc__</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rtn</span>
+
+
+<span class="c1"># Private functionality to create a subset model that&#39;s compatible across</span>
+<span class="c1"># different versions of pydantic.</span>
+<span class="c1"># Handles pydantic versions 1.x and 2.x. including v1 of pydantic in 2.x.</span>
+<span class="c1"># However, can&#39;t find a way to type hint this.</span>
+<span class="k">def</span> <span class="nf">_create_subset_model</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span>
+    <span class="n">field_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">descriptions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fn_description</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create subset model using the same pydantic version as the input model.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_create_subset_model_v1</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">model</span><span class="p">,</span>
+            <span class="n">field_names</span><span class="p">,</span>
+            <span class="n">descriptions</span><span class="o">=</span><span class="n">descriptions</span><span class="p">,</span>
+            <span class="n">fn_description</span><span class="o">=</span><span class="n">fn_description</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">PYDANTIC_MAJOR_VERSION</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">pydantic.v1</span> <span class="kn">import</span> <span class="n">BaseModel</span> <span class="k">as</span> <span class="n">BaseModelV1</span>  <span class="c1"># pydantic: ignore</span>
+
+        <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">BaseModelV1</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">_create_subset_model_v1</span><span class="p">(</span>
+                <span class="n">name</span><span class="p">,</span>
+                <span class="n">model</span><span class="p">,</span>
+                <span class="n">field_names</span><span class="p">,</span>
+                <span class="n">descriptions</span><span class="o">=</span><span class="n">descriptions</span><span class="p">,</span>
+                <span class="n">fn_description</span><span class="o">=</span><span class="n">fn_description</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_create_subset_model_v2</span><span class="p">(</span>
+                <span class="n">name</span><span class="p">,</span>
+                <span class="n">model</span><span class="p">,</span>
+                <span class="n">field_names</span><span class="p">,</span>
+                <span class="n">descriptions</span><span class="o">=</span><span class="n">descriptions</span><span class="p">,</span>
+                <span class="n">fn_description</span><span class="o">=</span><span class="n">fn_description</span><span class="p">,</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unsupported pydantic version: </span><span class="si">{</span><span class="n">PYDANTIC_MAJOR_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
 </pre></div>
 
             </div>
@@ -304,7 +471,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 18, 2024.
+                                on Jul 19, 2024.
                 </footer>
             </div>
         </div>
