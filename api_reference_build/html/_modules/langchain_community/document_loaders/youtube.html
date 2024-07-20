@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_community.document_loaders.youtube &mdash; 🦜🔗 LangChain 0.2.9</title>
+        <title>langchain_community.document_loaders.youtube &mdash; 🦜🔗 LangChain 0.2.10</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_community/document_loaders/youtube.html"/>
@@ -137,6 +137,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../ollama_api_reference.html">ollama</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../openai_api_reference.html">openai</a>
         </li>
         <li class="nav-item">
@@ -189,6 +192,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../mongodb_api_reference.html">mongodb</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nomic_api_reference.html">nomic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../ollama_api_reference.html">ollama</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
@@ -239,6 +243,7 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Generator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">parse_qs</span><span class="p">,</span> <span class="n">urlparse</span>
+<span class="kn">from</span> <span class="nn">xml.etree.ElementTree</span> <span class="kn">import</span> <span class="n">ParseError</span>  <span class="c1"># OK: trusted-source</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">root_validator</span>
@@ -260,6 +265,8 @@
 <span class="sd">    As the google api expects credentials you need to set up a google account and</span>
 <span class="sd">    register your Service. &quot;https://developers.google.com/docs/api/quickstart/python&quot;</span>
 
+<span class="sd">    *Security Note*: Note that parsing of the transcripts relies on the standard</span>
+<span class="sd">        xml library but the input is viewed as trusted in this case.</span>
 
 
 <span class="sd">    Example:</span>
@@ -669,6 +676,14 @@
         <span class="n">channel_id</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">][</span><span class="s2">&quot;channelId&quot;</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">channel_id</span>
 
+    <span class="k">def</span> <span class="nf">_get_uploads_playlist_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">youtube_client</span><span class="o">.</span><span class="n">channels</span><span class="p">()</span><span class="o">.</span><span class="n">list</span><span class="p">(</span>
+            <span class="n">part</span><span class="o">=</span><span class="s2">&quot;contentDetails&quot;</span><span class="p">,</span>
+            <span class="nb">id</span><span class="o">=</span><span class="n">channel_id</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;contentDetails&quot;</span><span class="p">][</span><span class="s2">&quot;relatedPlaylists&quot;</span><span class="p">][</span><span class="s2">&quot;uploads&quot;</span><span class="p">]</span>
+
     <span class="k">def</span> <span class="nf">_get_document_for_channel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">youtube_transcript_api</span> <span class="kn">import</span> <span class="p">(</span>
@@ -684,10 +699,11 @@
             <span class="p">)</span>
 
         <span class="n">channel_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_channel_id</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">youtube_client</span><span class="o">.</span><span class="n">search</span><span class="p">()</span><span class="o">.</span><span class="n">list</span><span class="p">(</span>
+        <span class="n">uploads_playlist_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_uploads_playlist_id</span><span class="p">(</span><span class="n">channel_id</span><span class="p">)</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">youtube_client</span><span class="o">.</span><span class="n">playlistItems</span><span class="p">()</span><span class="o">.</span><span class="n">list</span><span class="p">(</span>
             <span class="n">part</span><span class="o">=</span><span class="s2">&quot;id,snippet&quot;</span><span class="p">,</span>
-            <span class="n">channelId</span><span class="o">=</span><span class="n">channel_id</span><span class="p">,</span>
-            <span class="n">maxResults</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>  <span class="c1"># adjust this value to retrieve more or fewer videos</span>
+            <span class="n">playlistId</span><span class="o">=</span><span class="n">uploads_playlist_id</span><span class="p">,</span>
+            <span class="n">maxResults</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">video_ids</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">while</span> <span class="n">request</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -695,23 +711,20 @@
 
             <span class="c1"># Add each video ID to the list</span>
             <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">]:</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;videoId&quot;</span><span class="p">):</span>
-                    <span class="k">continue</span>
-                <span class="n">meta_data</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;videoId&quot;</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">][</span><span class="s2">&quot;videoId&quot;</span><span class="p">]}</span>
+                <span class="n">video_id</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="s2">&quot;snippet&quot;</span><span class="p">][</span><span class="s2">&quot;resourceId&quot;</span><span class="p">][</span><span class="s2">&quot;videoId&quot;</span><span class="p">]</span>
+                <span class="n">meta_data</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;videoId&quot;</span><span class="p">:</span> <span class="n">video_id</span><span class="p">}</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_video_info</span><span class="p">:</span>
                     <span class="n">item</span><span class="p">[</span><span class="s2">&quot;snippet&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;thumbnails&quot;</span><span class="p">)</span>
                     <span class="n">meta_data</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;snippet&quot;</span><span class="p">])</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">page_content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_transcripe_for_video_id</span><span class="p">(</span>
-                        <span class="n">item</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">][</span><span class="s2">&quot;videoId&quot;</span><span class="p">]</span>
-                    <span class="p">)</span>
+                    <span class="n">page_content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_transcripe_for_video_id</span><span class="p">(</span><span class="n">video_id</span><span class="p">)</span>
                     <span class="n">video_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                         <span class="n">Document</span><span class="p">(</span>
                             <span class="n">page_content</span><span class="o">=</span><span class="n">page_content</span><span class="p">,</span>
                             <span class="n">metadata</span><span class="o">=</span><span class="n">meta_data</span><span class="p">,</span>
                         <span class="p">)</span>
                     <span class="p">)</span>
-                <span class="k">except</span> <span class="p">(</span><span class="n">TranscriptsDisabled</span><span class="p">,</span> <span class="n">NoTranscriptFound</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">except</span> <span class="p">(</span><span class="n">TranscriptsDisabled</span><span class="p">,</span> <span class="n">NoTranscriptFound</span><span class="p">,</span> <span class="n">ParseError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">continue_on_failure</span><span class="p">:</span>
                         <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                             <span class="s2">&quot;Error fetching transscript &quot;</span>
@@ -747,7 +760,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 19, 2024.
+                                on Jul 20, 2024.
                 </footer>
             </div>
         </div>

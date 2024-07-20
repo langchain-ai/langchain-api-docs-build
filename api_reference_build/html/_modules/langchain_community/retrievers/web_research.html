@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_community.retrievers.web_research &mdash; 🦜🔗 LangChain 0.2.9</title>
+        <title>langchain_community.retrievers.web_research &mdash; 🦜🔗 LangChain 0.2.10</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_community/retrievers/web_research.html"/>
@@ -137,6 +137,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../ollama_api_reference.html">ollama</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../openai_api_reference.html">openai</a>
         </li>
         <li class="nav-item">
@@ -189,6 +192,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../mongodb_api_reference.html">mongodb</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nomic_api_reference.html">nomic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../ollama_api_reference.html">ollama</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
@@ -232,7 +236,7 @@
   <h1>Source code for langchain_community.retrievers.web_research</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">re</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">from</span> <span class="nn">langchain.chains</span> <span class="kn">import</span> <span class="n">LLMChain</span>
 <span class="kn">from</span> <span class="nn">langchain.chains.prompt_selector</span> <span class="kn">import</span> <span class="n">ConditionalPromptSelector</span>
@@ -312,6 +316,35 @@
         <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Whether to use the http_proxy/https_proxy env variables or &quot;</span>
         <span class="s2">&quot;check .netrc for proxy configuration&quot;</span><span class="p">,</span>
     <span class="p">)</span>
+
+    <span class="n">allow_dangerous_requests</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A flag to force users to acknowledge the risks of SSRF attacks when using </span>
+<span class="sd">    this retriever.</span>
+<span class="sd">    </span>
+<span class="sd">    Users should set this flag to `True` if they have taken the necessary precautions</span>
+<span class="sd">    to prevent SSRF attacks when using this retriever.</span>
+<span class="sd">    </span>
+<span class="sd">    For example, users can run the requests through a properly configured</span>
+<span class="sd">    proxy and prevent the crawler from accidentally crawling internal resources.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the retriever.&quot;&quot;&quot;</span>
+        <span class="n">allow_dangerous_requests</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;allow_dangerous_requests&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">allow_dangerous_requests</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;WebResearchRetriever crawls URLs surfaced through &quot;</span>
+                <span class="s2">&quot;the provided search engine. It is possible that some of those URLs &quot;</span>
+                <span class="s2">&quot;will end up pointing to machines residing on an internal network, &quot;</span>
+                <span class="s2">&quot;leading&quot;</span>
+                <span class="s2">&quot;to an SSRF (Server-Side Request Forgery) attack. &quot;</span>
+                <span class="s2">&quot;To protect yourself against that risk, you can run the requests &quot;</span>
+                <span class="s2">&quot;through a proxy and prevent the crawler from accidentally crawling &quot;</span>
+                <span class="s2">&quot;internal resources.&quot;</span>
+                <span class="s2">&quot;If&#39;ve taken the necessary precautions, you can set &quot;</span>
+                <span class="s2">&quot;`allow_dangerous_requests` to `True`.&quot;</span>
+            <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="WebResearchRetriever.from_llm"><a class="viewcode-back" href="../../../retrievers/langchain_community.retrievers.web_research.WebResearchRetriever.html#langchain_community.retrievers.web_research.WebResearchRetriever.from_llm">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_llm</span><span class="p">(</span>
@@ -472,7 +505,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 19, 2024.
+                                on Jul 20, 2024.
                 </footer>
             </div>
         </div>

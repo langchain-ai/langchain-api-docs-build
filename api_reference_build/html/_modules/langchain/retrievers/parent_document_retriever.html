@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain.retrievers.parent_document_retriever &mdash; 🦜🔗 LangChain 0.2.9</title>
+        <title>langchain.retrievers.parent_document_retriever &mdash; 🦜🔗 LangChain 0.2.10</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain/retrievers/parent_document_retriever.html"/>
@@ -137,6 +137,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../ollama_api_reference.html">ollama</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../openai_api_reference.html">openai</a>
         </li>
         <li class="nav-item">
@@ -189,6 +192,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../mongodb_api_reference.html">mongodb</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nomic_api_reference.html">nomic</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../nvidia_ai_endpoints_api_reference.html">nvidia-ai-endpoints</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../ollama_api_reference.html">ollama</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../openai_api_reference.html">openai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../pinecone_api_reference.html">pinecone</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../postgres_api_reference.html">postgres</a>
@@ -231,7 +235,7 @@
                 
   <h1>Source code for langchain.retrievers.parent_document_retriever</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">uuid</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_text_splitters</span> <span class="kn">import</span> <span class="n">TextSplitter</span>
@@ -301,27 +305,12 @@
 <span class="sd">        metadata.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="ParentDocumentRetriever.add_documents"><a class="viewcode-back" href="../../../retrievers/langchain.retrievers.parent_document_retriever.ParentDocumentRetriever.html#langchain.retrievers.parent_document_retriever.ParentDocumentRetriever.add_documents">[docs]</a>    <span class="k">def</span> <span class="nf">add_documents</span><span class="p">(</span>
+    <span class="k">def</span> <span class="nf">_split_docs_for_adding</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
         <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">add_to_docstore</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Adds documents to the docstore and vectorstores.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            documents: List of documents to add</span>
-<span class="sd">            ids: Optional list of ids for documents. If provided should be the same</span>
-<span class="sd">                length as the list of documents. Can be provided if parent documents</span>
-<span class="sd">                are already in the document store and you don&#39;t want to re-add</span>
-<span class="sd">                to the docstore. If not provided, random UUIDs will be used as</span>
-<span class="sd">                ids.</span>
-<span class="sd">            add_to_docstore: Boolean of whether to add documents to docstore.</span>
-<span class="sd">                This can be false if and only if `ids` are provided. You may want</span>
-<span class="sd">                to set this to False if the documents are already in the docstore</span>
-<span class="sd">                and you don&#39;t want to re-add them.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Document</span><span class="p">]]]:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_splitter</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">documents</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_splitter</span><span class="o">.</span><span class="n">split_documents</span><span class="p">(</span><span class="n">documents</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -352,9 +341,46 @@
                 <span class="n">_doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">id_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_id</span>
             <span class="n">docs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">sub_docs</span><span class="p">)</span>
             <span class="n">full_docs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_id</span><span class="p">,</span> <span class="n">doc</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">docs</span><span class="p">,</span> <span class="n">full_docs</span>
+
+<div class="viewcode-block" id="ParentDocumentRetriever.add_documents"><a class="viewcode-back" href="../../../retrievers/langchain.retrievers.parent_document_retriever.ParentDocumentRetriever.html#langchain.retrievers.parent_document_retriever.ParentDocumentRetriever.add_documents">[docs]</a>    <span class="k">def</span> <span class="nf">add_documents</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">add_to_docstore</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Adds documents to the docstore and vectorstores.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            documents: List of documents to add</span>
+<span class="sd">            ids: Optional list of ids for documents. If provided should be the same</span>
+<span class="sd">                length as the list of documents. Can be provided if parent documents</span>
+<span class="sd">                are already in the document store and you don&#39;t want to re-add</span>
+<span class="sd">                to the docstore. If not provided, random UUIDs will be used as</span>
+<span class="sd">                ids.</span>
+<span class="sd">            add_to_docstore: Boolean of whether to add documents to docstore.</span>
+<span class="sd">                This can be false if and only if `ids` are provided. You may want</span>
+<span class="sd">                to set this to False if the documents are already in the docstore</span>
+<span class="sd">                and you don&#39;t want to re-add them.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">docs</span><span class="p">,</span> <span class="n">full_docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_split_docs_for_adding</span><span class="p">(</span><span class="n">documents</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">add_to_docstore</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">add_documents</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">add_to_docstore</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">docstore</span><span class="o">.</span><span class="n">mset</span><span class="p">(</span><span class="n">full_docs</span><span class="p">)</span></div></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">docstore</span><span class="o">.</span><span class="n">mset</span><span class="p">(</span><span class="n">full_docs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ParentDocumentRetriever.aadd_documents"><a class="viewcode-back" href="../../../retrievers/langchain.retrievers.parent_document_retriever.ParentDocumentRetriever.html#langchain.retrievers.parent_document_retriever.ParentDocumentRetriever.aadd_documents">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aadd_documents</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">add_to_docstore</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">docs</span><span class="p">,</span> <span class="n">full_docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_split_docs_for_adding</span><span class="p">(</span><span class="n">documents</span><span class="p">,</span> <span class="n">ids</span><span class="p">,</span> <span class="n">add_to_docstore</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">aadd_documents</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">add_to_docstore</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">docstore</span><span class="o">.</span><span class="n">amset</span><span class="p">(</span><span class="n">full_docs</span><span class="p">)</span></div></div>
 </pre></div>
 
             </div>
@@ -363,7 +389,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 19, 2024.
+                                on Jul 20, 2024.
                 </footer>
             </div>
         </div>
