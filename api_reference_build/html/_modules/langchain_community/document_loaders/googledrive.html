@@ -243,7 +243,6 @@
 <span class="c1"># 4. For service accounts visit</span>
 <span class="c1">#   https://cloud.google.com/iam/docs/service-accounts-create</span>
 
-<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
 
@@ -344,7 +343,13 @@
         <span class="k">return</span> <span class="n">v</span>
 
     <span class="k">def</span> <span class="nf">_load_credentials</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load credentials.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Load credentials.</span>
+<span class="sd">        The order of loading credentials:</span>
+<span class="sd">        1. Service account key if file exists</span>
+<span class="sd">        2. Token path (for OAuth Client) if file exists</span>
+<span class="sd">        3. Credentials path (for OAuth Client) if file exists</span>
+<span class="sd">        4. Default credentials. if no credentials found, raise DefaultCredentialsError</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Adapted from https://developers.google.com/drive/api/v3/quickstart/python</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">google.auth</span> <span class="kn">import</span> <span class="n">default</span>
@@ -362,30 +367,31 @@
             <span class="p">)</span>
 
         <span class="n">creds</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># From service account</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">service_account_key</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
             <span class="k">return</span> <span class="n">service_account</span><span class="o">.</span><span class="n">Credentials</span><span class="o">.</span><span class="n">from_service_account_file</span><span class="p">(</span>
                 <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">service_account_key</span><span class="p">),</span> <span class="n">scopes</span><span class="o">=</span><span class="n">SCOPES</span>
             <span class="p">)</span>
 
+        <span class="c1"># From Oauth Client</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">token_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
             <span class="n">creds</span> <span class="o">=</span> <span class="n">Credentials</span><span class="o">.</span><span class="n">from_authorized_user_file</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_path</span><span class="p">),</span> <span class="n">SCOPES</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">creds</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">creds</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">creds</span> <span class="ow">and</span> <span class="n">creds</span><span class="o">.</span><span class="n">expired</span> <span class="ow">and</span> <span class="n">creds</span><span class="o">.</span><span class="n">refresh_token</span><span class="p">:</span>
                 <span class="n">creds</span><span class="o">.</span><span class="n">refresh</span><span class="p">(</span><span class="n">Request</span><span class="p">())</span>
-            <span class="k">elif</span> <span class="s2">&quot;GOOGLE_APPLICATION_CREDENTIALS&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">:</span>
-                <span class="n">creds</span><span class="p">,</span> <span class="n">project</span> <span class="o">=</span> <span class="n">default</span><span class="p">()</span>
-                <span class="n">creds</span> <span class="o">=</span> <span class="n">creds</span><span class="o">.</span><span class="n">with_scopes</span><span class="p">(</span><span class="n">SCOPES</span><span class="p">)</span>
-                <span class="c1"># no need to write to file</span>
-                <span class="k">if</span> <span class="n">creds</span><span class="p">:</span>
-                    <span class="k">return</span> <span class="n">creds</span>
-            <span class="k">else</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">credentials_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
                 <span class="n">flow</span> <span class="o">=</span> <span class="n">InstalledAppFlow</span><span class="o">.</span><span class="n">from_client_secrets_file</span><span class="p">(</span>
                     <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">credentials_path</span><span class="p">),</span> <span class="n">SCOPES</span>
                 <span class="p">)</span>
                 <span class="n">creds</span> <span class="o">=</span> <span class="n">flow</span><span class="o">.</span><span class="n">run_local_server</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">token</span><span class="p">:</span>
-                <span class="n">token</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">creds</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">creds</span><span class="p">:</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">token_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">token</span><span class="p">:</span>
+                    <span class="n">token</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">creds</span><span class="o">.</span><span class="n">to_json</span><span class="p">())</span>
+
+        <span class="c1"># From Application Default Credentials</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">creds</span><span class="p">:</span>
+            <span class="n">creds</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">default</span><span class="p">(</span><span class="n">scopes</span><span class="o">=</span><span class="n">SCOPES</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">creds</span>
 
@@ -608,7 +614,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 22, 2024.
+                                on Jul 23, 2024.
                 </footer>
             </div>
         </div>
