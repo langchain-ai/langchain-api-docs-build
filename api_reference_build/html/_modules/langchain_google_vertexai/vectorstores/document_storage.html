@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_google_vertexai.vectorstores.document_storage &mdash; 🦜🔗 LangChain 0.2.10</title>
+        <title>langchain_google_vertexai.vectorstores.document_storage &mdash; 🦜🔗 LangChain 0.2.11</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_google_vertexai/vectorstores/document_storage.html"/>
@@ -236,15 +236,33 @@
   <h1>Source code for langchain_google_vertexai.vectorstores.document_storage</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TYPE_CHECKING</span><span class="p">,</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">Tuple</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
 
+<span class="kn">from</span> <span class="nn">google.api_core.exceptions</span> <span class="kn">import</span> <span class="n">NotFound</span>
 <span class="kn">from</span> <span class="nn">google.cloud</span> <span class="kn">import</span> <span class="n">storage</span>  <span class="c1"># type: ignore[attr-defined, unused-ignore]</span>
+<span class="kn">from</span> <span class="nn">google.cloud.storage</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore[attr-defined, unused-ignore, import-untyped]</span>
+    <span class="n">Blob</span><span class="p">,</span>
+    <span class="n">transfer_manager</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.stores</span> <span class="kn">import</span> <span class="n">BaseStore</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">google.cloud</span> <span class="kn">import</span> <span class="n">datastore</span>  <span class="c1"># type: ignore[attr-defined, unused-ignore]</span>
+
+<span class="n">GCS_MAX_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">100</span>
 
 
 <div class="viewcode-block" id="DocumentStorage"><a class="viewcode-back" href="../../../vectorstores/langchain_google_vertexai.vectorstores.document_storage.DocumentStorage.html#langchain_google_vertexai.vectorstores.document_storage.DocumentStorage">[docs]</a><span class="k">class</span> <span class="nc">DocumentStorage</span><span class="p">(</span><span class="n">BaseStore</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Document</span><span class="p">]):</span>
@@ -258,7 +276,11 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="GCSDocumentStorage.__init__"><a class="viewcode-back" href="../../../vectorstores/langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.html#langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">bucket</span><span class="p">:</span> <span class="n">storage</span><span class="o">.</span><span class="n">Bucket</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;documents&quot;</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">bucket</span><span class="p">:</span> <span class="n">storage</span><span class="o">.</span><span class="n">Bucket</span><span class="p">,</span>
+        <span class="n">prefix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;documents&quot;</span><span class="p">,</span>
+        <span class="n">threaded</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">n_threads</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Constructor.</span>
 <span class="sd">        Args:</span>
@@ -267,7 +289,25 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_bucket</span> <span class="o">=</span> <span class="n">bucket</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_prefix</span> <span class="o">=</span> <span class="n">prefix</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prefix</span> <span class="o">=</span> <span class="n">prefix</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_threaded</span> <span class="o">=</span> <span class="n">threaded</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_threads</span> <span class="o">=</span> <span class="n">n_threads</span>
+        <span class="k">if</span> <span class="n">threaded</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">n_threads</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_threads</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">50</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;n_threads must be a valid integer,&quot;</span>
+                    <span class="s2">&quot; greater than 0 and lower than or equal to 50&quot;</span>
+                <span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_prepare_doc_for_bulk_upload</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Document</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">io</span><span class="o">.</span><span class="n">IOBase</span><span class="p">,</span> <span class="n">Blob</span><span class="p">]:</span>
+        <span class="n">document_json</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">dict</span><span class="p">()</span>
+        <span class="n">document_text</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">document_json</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+        <span class="n">doc_contents</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">document_text</span><span class="p">)</span>
+        <span class="n">blob_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_blob_name</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">blob</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bucket</span><span class="o">.</span><span class="n">blob</span><span class="p">(</span><span class="n">blob_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">doc_contents</span><span class="p">,</span> <span class="n">blob</span>
 
 <div class="viewcode-block" id="GCSDocumentStorage.mset"><a class="viewcode-back" href="../../../vectorstores/langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.html#langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.mset">[docs]</a>    <span class="k">def</span> <span class="nf">mset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key_value_pairs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Document</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Stores a series of documents using each keys</span>
@@ -275,8 +315,44 @@
 <span class="sd">        Args:</span>
 <span class="sd">            key_value_pairs (Sequence[Tuple[K, V]]): A sequence of key-value pairs.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">key_value_pairs</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_set_one</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_threaded</span><span class="p">:</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="n">transfer_manager</span><span class="o">.</span><span class="n">upload_many</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_doc_for_bulk_upload</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">key_value_pairs</span>
+                <span class="p">],</span>
+                <span class="n">skip_if_exists</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">upload_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">deadline</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">raise_exception</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">worker_type</span><span class="o">=</span><span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_threads</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+                <span class="c1"># The results list is either `None` or an exception for each filename in</span>
+                <span class="c1"># the input list, in order.</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="n">result</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">key_value_pairs</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_set_one</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_convert_bytes_to_doc</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">doc</span><span class="p">:</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">NotFound</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">elif</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">doc</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">raw_doc</span> <span class="o">=</span> <span class="n">doc</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">raw_doc</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+            <span class="n">data_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Document</span><span class="p">(</span><span class="o">**</span><span class="n">data_json</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                <span class="s2">&quot;Unexpected result type when batch getting multiple files from GCS&quot;</span>
+            <span class="p">)</span>
 
 <div class="viewcode-block" id="GCSDocumentStorage.mget"><a class="viewcode-back" href="../../../vectorstores/langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.html#langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.mget">[docs]</a>    <span class="k">def</span> <span class="nf">mget</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Document</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Gets a batch of documents by id.</span>
@@ -289,7 +365,29 @@
 <span class="sd">            List of documents. If the key id is not found for any id record returns a</span>
 <span class="sd">                None instead.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_one</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">]</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_threaded</span><span class="p">:</span>
+            <span class="n">download_docs</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_bucket</span><span class="o">.</span><span class="n">blob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_blob_name</span><span class="p">(</span><span class="n">key</span><span class="p">)),</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">())</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span>
+            <span class="p">]</span>
+            <span class="n">download_results</span> <span class="o">=</span> <span class="n">transfer_manager</span><span class="o">.</span><span class="n">download_many</span><span class="p">(</span>
+                <span class="n">download_docs</span><span class="p">,</span>
+                <span class="n">skip_if_exists</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">download_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">deadline</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                <span class="n">raise_exception</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">worker_type</span><span class="o">=</span><span class="s2">&quot;thread&quot;</span><span class="p">,</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_threads</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">download_results</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">NotFound</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="n">result</span>
+            <span class="k">return</span> <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_convert_bytes_to_doc</span><span class="p">(</span><span class="n">doc</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">result</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">download_docs</span><span class="p">,</span> <span class="n">download_results</span><span class="p">)</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_one</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">]</span></div>
 
 <div class="viewcode-block" id="GCSDocumentStorage.mdelete"><a class="viewcode-back" href="../../../vectorstores/langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.html#langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.mdelete">[docs]</a>    <span class="k">def</span> <span class="nf">mdelete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Deletes a batch of documents by id.</span>
@@ -297,8 +395,11 @@
 <span class="sd">        Args:</span>
 <span class="sd">            keys: List of ids for the text.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keys</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_delete_one</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">),</span> <span class="n">GCS_MAX_BATCH_SIZE</span><span class="p">):</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">keys</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">GCS_MAX_BATCH_SIZE</span><span class="p">]</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bucket</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">batch</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">batch</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_delete_one</span><span class="p">(</span><span class="n">key</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="GCSDocumentStorage.yield_keys"><a class="viewcode-back" href="../../../vectorstores/langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.html#langchain_google_vertexai.vectorstores.document_storage.GCSDocumentStorage.yield_keys">[docs]</a>    <span class="k">def</span> <span class="nf">yield_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Yields the keys present in the storage.</span>
@@ -470,7 +571,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 23, 2024.
+                                on Jul 24, 2024.
                 </footer>
             </div>
         </div>

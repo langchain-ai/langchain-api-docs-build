@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_nvidia_ai_endpoints.chat_models &mdash; 🦜🔗 LangChain 0.2.10</title>
+        <title>langchain_nvidia_ai_endpoints.chat_models &mdash; 🦜🔗 LangChain 0.2.11</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_nvidia_ai_endpoints/chat_models.html"/>
@@ -244,6 +244,7 @@
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">urllib.parse</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Any</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
@@ -251,7 +252,6 @@
     <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Literal</span><span class="p">,</span>
-    <span class="n">Mapping</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Type</span><span class="p">,</span>
@@ -259,15 +259,16 @@
 <span class="p">)</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">from</span> <span class="nn">langchain_community.adapters.openai</span> <span class="kn">import</span> <span class="n">convert_message_to_dict</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">BaseChatModel</span><span class="p">,</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AIMessage</span><span class="p">,</span>
+    <span class="n">AIMessageChunk</span><span class="p">,</span>
     <span class="n">BaseMessage</span><span class="p">,</span>
-    <span class="n">ChatMessage</span><span class="p">,</span>
-    <span class="n">ChatMessageChunk</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ChatGeneration</span><span class="p">,</span>
@@ -277,6 +278,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PrivateAttr</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
 
 <span class="kn">from</span> <span class="nn">langchain_nvidia_ai_endpoints._common</span> <span class="kn">import</span> <span class="n">_NVIDIAClient</span>
 <span class="kn">from</span> <span class="nn">langchain_nvidia_ai_endpoints._statics</span> <span class="kn">import</span> <span class="n">Model</span>
@@ -350,6 +352,53 @@
             <span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unable to process the provided image source: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_nv_vlm_adjust_input</span><span class="p">(</span><span class="n">message_dict</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The NVIDIA VLM API input message.content:</span>
+<span class="sd">        {</span>
+<span class="sd">            &quot;role&quot;: &quot;user&quot;,</span>
+<span class="sd">            &quot;content&quot;: [</span>
+<span class="sd">                ...,</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;type&quot;: &quot;image_url&quot;,</span>
+<span class="sd">                    &quot;image_url&quot;: &quot;{data}&quot;</span>
+<span class="sd">                },</span>
+<span class="sd">                ...</span>
+<span class="sd">            ]</span>
+<span class="sd">        }</span>
+<span class="sd">    where OpenAI VLM API input message.content:</span>
+<span class="sd">        {</span>
+<span class="sd">            &quot;role&quot;: &quot;user&quot;,</span>
+<span class="sd">            &quot;content&quot;: [</span>
+<span class="sd">                ...,</span>
+<span class="sd">                {</span>
+<span class="sd">                    &quot;type&quot;: &quot;image_url&quot;,</span>
+<span class="sd">                    &quot;image_url&quot;: {</span>
+<span class="sd">                        &quot;url&quot;: &quot;{url | data}&quot;</span>
+<span class="sd">                    }</span>
+<span class="sd">                },</span>
+<span class="sd">                ...</span>
+<span class="sd">            ]</span>
+<span class="sd">        }</span>
+
+<span class="sd">    This function converts the OpenAI VLM API input message to</span>
+<span class="sd">    NVIDIA VLM API input message, in place.</span>
+
+<span class="sd">    In the process, it accepts a url or file and converts them to</span>
+<span class="sd">    data urls.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">content</span> <span class="o">:=</span> <span class="n">message_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;image_url&quot;</span> <span class="ow">in</span> <span class="n">part</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="nb">isinstance</span><span class="p">(</span><span class="n">part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">],</span> <span class="nb">dict</span><span class="p">)</span>
+                        <span class="ow">and</span> <span class="s2">&quot;url&quot;</span> <span class="ow">in</span> <span class="n">part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">]</span>
+                    <span class="p">):</span>
+                        <span class="n">part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_url_to_b64_string</span><span class="p">(</span><span class="n">part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">][</span><span class="s2">&quot;url&quot;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">message_dict</span>
 
 
 <div class="viewcode-block" id="ChatNVIDIA"><a class="viewcode-back" href="../../chat_models/langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.html#langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA">[docs]</a><span class="k">class</span> <span class="nc">ChatNVIDIA</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">):</span>
@@ -445,13 +494,19 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChatResult</span><span class="p">:</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_custom_preprocess</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_nv_vlm_adjust_input</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="p">[</span><span class="n">convert_message_to_dict</span><span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">]</span>
+        <span class="p">]</span>
         <span class="n">payload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_payload</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get_req</span><span class="p">(</span><span class="n">payload</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
         <span class="n">responses</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">postprocess</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_set_callback_out</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">)</span>
-        <span class="n">message</span> <span class="o">=</span> <span class="n">ChatMessage</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_custom_postprocess</span><span class="p">(</span><span class="n">responses</span><span class="p">))</span>
-        <span class="n">generation</span> <span class="o">=</span> <span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">)</span>
+        <span class="n">parsed_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_custom_postprocess</span><span class="p">(</span><span class="n">responses</span><span class="p">,</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="c1"># for pre 0.2 compatibility w/ ChatMessage</span>
+        <span class="c1"># ChatMessage had a role property that was not present in AIMessage</span>
+        <span class="n">parsed_response</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">})</span>
+        <span class="n">generation</span> <span class="o">=</span> <span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="o">**</span><span class="n">parsed_response</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span><span class="n">generations</span><span class="o">=</span><span class="p">[</span><span class="n">generation</span><span class="p">],</span> <span class="n">llm_output</span><span class="o">=</span><span class="n">responses</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span>
@@ -462,13 +517,21 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Allows streaming to model!&quot;&quot;&quot;</span>
-        <span class="n">inputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_custom_preprocess</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+        <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_nv_vlm_adjust_input</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="p">[</span><span class="n">convert_message_to_dict</span><span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">]</span>
+        <span class="p">]</span>
         <span class="n">payload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_payload</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="n">inputs</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">response</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get_req_stream</span><span class="p">(</span><span class="n">payload</span><span class="o">=</span><span class="n">payload</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_set_callback_out</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">run_manager</span><span class="p">)</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                <span class="n">message</span><span class="o">=</span><span class="n">ChatMessageChunk</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_custom_postprocess</span><span class="p">(</span><span class="n">response</span><span class="p">))</span>
-            <span class="p">)</span>
+            <span class="n">parsed_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_custom_postprocess</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="n">streaming</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="c1"># for pre 0.2 compatibility w/ ChatMessageChunk</span>
+            <span class="c1"># ChatMessageChunk had a role property that was not</span>
+            <span class="c1"># present in AIMessageChunk</span>
+            <span class="c1"># unfortunately, AIMessageChunk does not have extensible propery</span>
+            <span class="c1"># parsed_response.update({&quot;role&quot;: &quot;assistant&quot;})</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="n">AIMessageChunk</span><span class="p">(</span><span class="o">**</span><span class="n">parsed_response</span><span class="p">)</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
                 <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
             <span class="k">yield</span> <span class="n">chunk</span>
@@ -484,55 +547,9 @@
                 <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">cb</span><span class="p">,</span> <span class="s2">&quot;llm_output&quot;</span><span class="p">):</span>
                     <span class="n">cb</span><span class="o">.</span><span class="n">llm_output</span> <span class="o">=</span> <span class="n">result</span>
 
-    <span class="k">def</span> <span class="nf">_custom_preprocess</span><span class="p">(</span>  <span class="c1"># todo: remove</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">msg_list</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
-        <span class="k">def</span> <span class="nf">_preprocess_msg</span><span class="p">(</span><span class="n">msg</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">):</span>
-                <span class="n">role_convert</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;ai&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;human&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">}</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">ChatMessage</span><span class="p">):</span>
-                    <span class="n">role</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">role</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">role</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">type</span>
-                <span class="n">role</span> <span class="o">=</span> <span class="n">role_convert</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">role</span><span class="p">,</span> <span class="n">role</span><span class="p">)</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_content</span><span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-                <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">}</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid message: </span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="s2"> of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="p">[</span><span class="n">_preprocess_msg</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">msg_list</span><span class="p">]</span>
-
-    <span class="k">def</span> <span class="nf">_process_content</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">content</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">content</span>
-        <span class="n">string_array</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">content</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">string_array</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">part</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
-                <span class="c1"># OpenAI Format</span>
-                <span class="k">if</span> <span class="s2">&quot;type&quot;</span> <span class="ow">in</span> <span class="n">part</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">part</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
-                        <span class="n">string_array</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">part</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]))</span>
-                    <span class="k">elif</span> <span class="n">part</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;image_url&quot;</span><span class="p">:</span>
-                        <span class="n">img_url</span> <span class="o">=</span> <span class="n">part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">]</span>
-                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">img_url</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-                            <span class="k">if</span> <span class="s2">&quot;url&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">img_url</span><span class="p">:</span>
-                                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                                    <span class="sa">f</span><span class="s2">&quot;Unrecognized message image format: </span><span class="si">{</span><span class="n">img_url</span><span class="si">}</span><span class="s2">&quot;</span>
-                                <span class="p">)</span>
-                            <span class="n">img_url</span> <span class="o">=</span> <span class="n">img_url</span><span class="p">[</span><span class="s2">&quot;url&quot;</span><span class="p">]</span>
-                        <span class="n">b64_string</span> <span class="o">=</span> <span class="n">_url_to_b64_string</span><span class="p">(</span><span class="n">img_url</span><span class="p">)</span>
-                        <span class="n">string_array</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;&lt;img src=&quot;</span><span class="si">{</span><span class="n">b64_string</span><span class="si">}</span><span class="s1">&quot; /&gt;&#39;</span><span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Unrecognized message part type: </span><span class="si">{</span><span class="n">part</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unrecognized message part format: </span><span class="si">{</span><span class="n">part</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">string_array</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_custom_postprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>  <span class="c1"># todo: remove</span>
+    <span class="k">def</span> <span class="nf">_custom_postprocess</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">streaming</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>  <span class="c1"># todo: remove</span>
         <span class="n">kw_left</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">out_dict</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">kw_left</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">,</span> <span class="s2">&quot;assistant&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
@@ -542,10 +559,44 @@
             <span class="s2">&quot;additional_kwargs&quot;</span><span class="p">:</span> <span class="p">{},</span>
             <span class="s2">&quot;response_metadata&quot;</span><span class="p">:</span> <span class="p">{},</span>
         <span class="p">}</span>
-        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">kw_left</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
-            <span class="k">if</span> <span class="s2">&quot;tool&quot;</span> <span class="ow">in</span> <span class="n">k</span><span class="p">:</span>
-                <span class="n">out_dict</span><span class="p">[</span><span class="s2">&quot;additional_kwargs&quot;</span><span class="p">][</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw_left</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
-        <span class="n">out_dict</span><span class="p">[</span><span class="s2">&quot;response_metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw_left</span>
+        <span class="c1"># &quot;tool_calls&quot; is set for invoke and stream responses</span>
+        <span class="k">if</span> <span class="n">tool_calls</span> <span class="o">:=</span> <span class="n">kw_left</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">tool_calls</span><span class="p">,</span> <span class="nb">list</span>
+            <span class="p">),</span> <span class="s2">&quot;invalid response from server: tool_calls must be a list&quot;</span>
+            <span class="c1"># todo: break this into post-processing for invoke and stream</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">streaming</span><span class="p">:</span>
+                <span class="n">out_dict</span><span class="p">[</span><span class="s2">&quot;additional_kwargs&quot;</span><span class="p">][</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_calls</span>
+            <span class="k">elif</span> <span class="n">streaming</span><span class="p">:</span>
+                <span class="n">out_dict</span><span class="p">[</span><span class="s2">&quot;tool_call_chunks&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+                    <span class="c1"># todo: the nim api does not return the function index</span>
+                    <span class="c1">#       for tool calls in stream responses. this is</span>
+                    <span class="c1">#       an issue that needs to be resolved server-side.</span>
+                    <span class="c1">#       the only reason we can skip this for now</span>
+                    <span class="c1">#       is because the nim endpoint returns only full</span>
+                    <span class="c1">#       tool calls, no deltas.</span>
+                    <span class="c1"># assert &quot;index&quot; in tool_call, (</span>
+                    <span class="c1">#     &quot;invalid response from server: &quot;</span>
+                    <span class="c1">#     &quot;tool_call must have an &#39;index&#39; key&quot;</span>
+                    <span class="c1"># )</span>
+                    <span class="k">assert</span> <span class="s2">&quot;function&quot;</span> <span class="ow">in</span> <span class="n">tool_call</span><span class="p">,</span> <span class="p">(</span>
+                        <span class="s2">&quot;invalid response from server: &quot;</span>
+                        <span class="s2">&quot;tool_call must have a &#39;function&#39; key&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">out_dict</span><span class="p">[</span><span class="s2">&quot;tool_call_chunks&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span>
+                            <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+                            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+                            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+                            <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+                        <span class="p">}</span>
+                    <span class="p">)</span>
+        <span class="c1"># we only create the response_metadata from the last message in a stream.</span>
+        <span class="c1"># if we do it for all messages, we&#39;ll end up with things like</span>
+        <span class="c1"># &quot;model_name&quot; = &quot;mode-xyz&quot; * # messages.</span>
+        <span class="k">if</span> <span class="s2">&quot;finish_reason&quot;</span> <span class="ow">in</span> <span class="n">kw_left</span><span class="p">:</span>
+            <span class="n">out_dict</span><span class="p">[</span><span class="s2">&quot;response_metadata&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kw_left</span>
         <span class="k">return</span> <span class="n">out_dict</span>
 
     <span class="c1">######################################################################################</span>
@@ -563,7 +614,9 @@
                 <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">role</span><span class="o">=</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">content</span><span class="o">=</span><span class="n">msg</span><span class="p">))</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Message </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2"> has no content&quot;</span><span class="p">)</span>
+                    <span class="c1"># content=None is valid for assistant messages (tool calling)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;role&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Message </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2"> has no content.&quot;</span><span class="p">)</span>
                 <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown message received: </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2"> of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -601,13 +654,88 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="s2">&quot;Not implemented, awaiting server-side function-recieving API&quot;</span>
-            <span class="s2">&quot; Consider following open-source LLM agent spec techniques:&quot;</span>
-            <span class="s2">&quot; https://huggingface.co/blog/open-source-llms-as-agents&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Bind tools to the model.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tools (list): A list of tools to bind to the model.</span>
+<span class="sd">            tool_choice (Optional[Union[dict,</span>
+<span class="sd">                                        str,</span>
+<span class="sd">                                        Literal[&quot;auto&quot;, &quot;none&quot;, &quot;any&quot;, &quot;required&quot;],</span>
+<span class="sd">                                        bool]]):</span>
+<span class="sd">               Control tool choice.</span>
+<span class="sd">                 &quot;any&quot; and &quot;required&quot; - force a tool call.</span>
+<span class="sd">                 &quot;auto&quot; - let the model decide.</span>
+<span class="sd">                 &quot;none&quot; - force no tool call.</span>
+<span class="sd">                 string or dict - force a specific tool call.</span>
+<span class="sd">                 bool - if True, force a tool call; if False, force no tool call.</span>
+<span class="sd">               Defaults to passing no value.</span>
+<span class="sd">            **kwargs: Additional keyword arguments.</span>
+
+<span class="sd">        see https://python.langchain.com/v0.1/docs/modules/model_io/chat/function_calling/#request-forcing-a-tool-call</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># check if the model supports tools, warn if it does not</span>
+        <span class="n">known_good</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># todo: we need to store model: Model in this class</span>
+        <span class="c1">#       instead of model: str (= Model.id)</span>
+        <span class="c1">#  this should be: if not self.model.supports_tools: warnings.warn...</span>
+        <span class="n">candidates</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">model</span> <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_models</span> <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>  <span class="c1"># user must have specified the model themselves</span>
+            <span class="n">known_good</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Multiple models with the same id&quot;</span>
+            <span class="n">known_good</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">supports_tools</span> <span class="ow">is</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">known_good</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Model &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&#39; is not known to support tools. &quot;</span>
+                <span class="s2">&quot;Your tool binding may fail at inference time.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">tool_name</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="n">tool_choice</span> <span class="o">=</span> <span class="s2">&quot;required&quot;</span> <span class="k">if</span> <span class="n">tool_choice</span> <span class="k">else</span> <span class="s2">&quot;none&quot;</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="c1"># LangChain documents &quot;any&quot; as an option, server API uses &quot;required&quot;</span>
+            <span class="k">if</span> <span class="n">tool_choice</span> <span class="o">==</span> <span class="s2">&quot;any&quot;</span><span class="p">:</span>
+                <span class="n">tool_choice</span> <span class="o">=</span> <span class="s2">&quot;required&quot;</span>
+            <span class="c1"># if a string that&#39;s not &quot;auto&quot;, &quot;none&quot;, or &quot;required&quot;</span>
+            <span class="c1"># then it must be a tool name</span>
+            <span class="k">if</span> <span class="n">tool_choice</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">]:</span>
+                <span class="n">tool_name</span> <span class="o">=</span> <span class="n">tool_choice</span>
+                <span class="n">tool_choice</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_choice</span><span class="p">},</span>
+                <span class="p">}</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="c1"># if a dict, it must be a tool choice dict, e.g.</span>
+            <span class="c1">#  {&quot;type&quot;: &quot;function&quot;, &quot;function&quot;: {&quot;name&quot;: &quot;my_tool&quot;}}</span>
+            <span class="k">if</span> <span class="s2">&quot;type&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tool_choice</span><span class="p">:</span>
+                <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function&quot;</span>
+            <span class="k">if</span> <span class="s2">&quot;function&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tool_choice</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Tool choice dict must have a &#39;function&#39; key&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;name&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Tool choice function dict must have a &#39;name&#39; key&quot;</span><span class="p">)</span>
+            <span class="n">tool_name</span> <span class="o">=</span> <span class="n">tool_choice</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+
+        <span class="c1"># check that the specified tool is in the tools list</span>
+        <span class="n">tool_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">tool_name</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="n">tool</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">tool_name</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tool_dicts</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Tool choice &#39;</span><span class="si">{</span><span class="n">tool_name</span><span class="si">}</span><span class="s2">&#39; not found in the tools list&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span>
+            <span class="n">tools</span><span class="o">=</span><span class="n">tool_dicts</span><span class="p">,</span>
+            <span class="n">tool_choice</span><span class="o">=</span><span class="n">tool_choice</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 <div class="viewcode-block" id="ChatNVIDIA.bind_functions"><a class="viewcode-back" href="../../chat_models/langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.html#langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.bind_functions">[docs]</a>    <span class="k">def</span> <span class="nf">bind_functions</span><span class="p">(</span>
@@ -616,11 +744,7 @@
         <span class="n">function_call</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="s2">&quot;Not implemented, awaiting server-side function-recieving API&quot;</span>
-            <span class="s2">&quot; Consider following open-source LLM agent spec techniques:&quot;</span>
-            <span class="s2">&quot; https://huggingface.co/blog/open-source-llms-as-agents&quot;</span>
-        <span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Not implemented, use `bind_tools` instead.&quot;</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="ChatNVIDIA.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.html#langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -643,7 +767,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 23, 2024.
+                                on Jul 24, 2024.
                 </footer>
             </div>
         </div>
