@@ -161,6 +161,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../unstructured_api_reference.html">unstructured</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item">
@@ -200,6 +203,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../qdrant_api_reference.html">qdrant</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../unstructured_api_reference.html">unstructured</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../weaviate_api_reference.html">weaviate</a>
           </div>
@@ -248,7 +252,6 @@
     <span class="n">TypedDict</span><span class="p">,</span>
     <span class="n">TypeVar</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
-    <span class="n">cast</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.chat_models.ollama</span> <span class="kn">import</span> <span class="n">ChatOllama</span>
@@ -260,10 +263,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AIMessage</span><span class="p">,</span>
     <span class="n">BaseMessage</span><span class="p">,</span>
-    <span class="n">HumanMessage</span><span class="p">,</span>
-    <span class="n">SystemMessage</span><span class="p">,</span>
     <span class="n">ToolCall</span><span class="p">,</span>
-    <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.json</span> <span class="kn">import</span> <span class="n">JsonOutputParser</span>
@@ -518,59 +518,6 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">parser_chain</span></div>
 
-    <span class="k">def</span> <span class="nf">_convert_messages_to_ollama_messages</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]]:</span>
-        <span class="n">ollama_messages</span><span class="p">:</span> <span class="n">List</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">:</span>
-            <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
-                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;user&quot;</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
-                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;assistant&quot;</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
-                <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;system&quot;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Received unsupported message type for Ollama.&quot;</span><span class="p">)</span>
-
-            <span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
-            <span class="n">images</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                <span class="n">content</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">content_part</span> <span class="ow">in</span> <span class="n">cast</span><span class="p">(</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">):</span>
-                    <span class="k">if</span> <span class="n">content_part</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;text&quot;</span><span class="p">:</span>
-                        <span class="n">content</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="n">content_part</span><span class="p">[</span><span class="s1">&#39;text&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="k">elif</span> <span class="n">content_part</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;image_url&quot;</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">content_part</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;image_url&quot;</span><span class="p">),</span> <span class="nb">str</span><span class="p">):</span>
-                            <span class="n">image_url_components</span> <span class="o">=</span> <span class="n">content_part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
-                            <span class="c1"># Support data:image/jpeg;base64,&lt;image&gt; format</span>
-                            <span class="c1"># and base64 strings</span>
-                            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">image_url_components</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-                                <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_url_components</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-                            <span class="k">else</span><span class="p">:</span>
-                                <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_url_components</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                        <span class="k">else</span><span class="p">:</span>
-                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                                <span class="s2">&quot;Only string image_url content parts are supported.&quot;</span>
-                            <span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="s2">&quot;Unsupported message content type. &quot;</span>
-                            <span class="s2">&quot;Must either have type &#39;text&#39; or type &#39;image_url&#39; &quot;</span>
-                            <span class="s2">&quot;with a string &#39;image_url&#39; field.&quot;</span>
-                        <span class="p">)</span>
-
-            <span class="n">ollama_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="p">{</span>
-                    <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
-                    <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">images</span><span class="p">,</span>
-                <span class="p">}</span>
-            <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">ollama_messages</span>
-
     <span class="k">def</span> <span class="nf">_generate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
@@ -757,7 +704,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 24, 2024.
+                                on Jul 25, 2024.
                 </footer>
             </div>
         </div>

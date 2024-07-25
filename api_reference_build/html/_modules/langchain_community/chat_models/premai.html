@@ -161,6 +161,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../together_api_reference.html">together</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../unstructured_api_reference.html">unstructured</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item">
@@ -200,6 +203,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../qdrant_api_reference.html">qdrant</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../../unstructured_api_reference.html">unstructured</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../voyageai_api_reference.html">voyageai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../../weaviate_api_reference.html">weaviate</a>
           </div>
@@ -248,6 +252,7 @@
     <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">Union</span><span class="p">,</span>
@@ -256,6 +261,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="n">BaseChatModel</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.llms</span> <span class="kn">import</span> <span class="n">create_base_retry_decorator</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
@@ -269,6 +275,7 @@
     <span class="n">HumanMessageChunk</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
     <span class="n">SystemMessageChunk</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="p">(</span>
@@ -277,7 +284,10 @@
     <span class="n">Field</span><span class="p">,</span>
     <span class="n">SecretStr</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
+<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span><span class="p">,</span> <span class="n">pre_init</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">premai.api.chat_completions.v1_chat_completions_create</span> <span class="kn">import</span> <span class="p">(</span>
@@ -286,6 +296,19 @@
     <span class="kn">from</span> <span class="nn">premai.models.chat_completion_response</span> <span class="kn">import</span> <span class="n">ChatCompletionResponse</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">TOOL_PROMPT_HEADER</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">Given the set of tools you used and the response, provide the final answer</span><span class="se">\n</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">INTERMEDIATE_TOOL_RESULT_TEMPLATE</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="si">{json}</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">SINGLE_TOOL_PROMPT_TEMPLATE</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">tool id: </span><span class="si">{tool_id}</span>
+<span class="s2">tool_response: </span><span class="si">{tool_response}</span>
+<span class="s2">&quot;&quot;&quot;</span>
 
 
 <div class="viewcode-block" id="ChatPremAPIError"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.premai.ChatPremAPIError.html#langchain_community.chat_models.premai.ChatPremAPIError">[docs]</a><span class="k">class</span> <span class="nc">ChatPremAPIError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
@@ -327,8 +350,22 @@
             <span class="k">raise</span> <span class="n">ChatPremAPIError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ChatResponse must have a content: </span><span class="si">{</span><span class="n">content</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;assistant&quot;</span><span class="p">:</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="n">choice</span><span class="o">.</span><span class="n">message</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">tool_calls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tools</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">tools</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                        <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;arguments&quot;</span><span class="p">],</span>
+                    <span class="p">}</span>
+                    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span>
+                <span class="p">]</span>
             <span class="n">generations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">ChatGeneration</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">))</span>
+                <span class="n">ChatGeneration</span><span class="p">(</span>
+                    <span class="n">text</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span> <span class="n">tool_calls</span><span class="o">=</span><span class="n">tools</span><span class="p">)</span>
+                <span class="p">)</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">role</span> <span class="o">==</span> <span class="s2">&quot;user&quot;</span><span class="p">:</span>
             <span class="n">generations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
@@ -392,41 +429,65 @@
     <span class="n">system_prompt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">examples_and_messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="k">if</span> <span class="n">template_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">input_msg</span> <span class="ow">in</span> <span class="n">input_messages</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
-                <span class="n">system_prompt</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">input_msg</span> <span class="ow">in</span> <span class="n">input_messages</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
+            <span class="n">system_prompt</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">template_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)}</span>
+                <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
+                <span class="n">params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
                 <span class="k">assert</span> <span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;When using prompt template there should be id associated &quot;</span><span class="p">,</span>
                     <span class="s2">&quot;with each HumanMessage&quot;</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="n">params</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">id</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-
-        <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;template_id&quot;</span><span class="p">:</span> <span class="n">template_id</span><span class="p">,</span> <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span><span class="p">}</span>
-        <span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">input_msg</span> <span class="ow">in</span> <span class="n">input_messages</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
                 <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)}</span>
+                    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;template_id&quot;</span><span class="p">:</span> <span class="n">template_id</span><span class="p">,</span> <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="n">params</span><span class="p">}</span>
                 <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">input_msg</span> <span class="ow">in</span> <span class="n">input_messages</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
-                <span class="n">system_prompt</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
-                <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)}</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">tool_calls</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">)}</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">ChatPremAPIError</span><span class="p">(</span><span class="s2">&quot;No such role explicitly exists&quot;</span><span class="p">)</span>
+                <span class="n">ai_msg_to_json</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                    <span class="s2">&quot;response_metadata&quot;</span><span class="p">:</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">,</span>
+                    <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">,</span>
+                <span class="p">}</span>
+                <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">INTERMEDIATE_TOOL_RESULT_TEMPLATE</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="n">json</span><span class="o">=</span><span class="n">ai_msg_to_json</span><span class="p">,</span>
+                        <span class="p">),</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+            <span class="k">pass</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ChatPremAPIError</span><span class="p">(</span><span class="s2">&quot;No such role explicitly exists&quot;</span><span class="p">)</span>
+
+    <span class="c1"># do a seperate search for tool calls</span>
+    <span class="n">tool_prompt</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">input_msg</span> <span class="ow">in</span> <span class="n">input_messages</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_msg</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+            <span class="n">tool_id</span> <span class="o">=</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">tool_call_id</span>
+            <span class="n">tool_result</span> <span class="o">=</span> <span class="n">input_msg</span><span class="o">.</span><span class="n">content</span>
+            <span class="n">tool_prompt</span> <span class="o">+=</span> <span class="n">SINGLE_TOOL_PROMPT_TEMPLATE</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">tool_id</span><span class="o">=</span><span class="n">tool_id</span><span class="p">,</span> <span class="n">tool_response</span><span class="o">=</span><span class="n">tool_result</span>
+            <span class="p">)</span>
+    <span class="k">if</span> <span class="n">tool_prompt</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
+        <span class="n">prompt</span> <span class="o">=</span> <span class="n">TOOL_PROMPT_HEADER</span>
+        <span class="n">prompt</span> <span class="o">+=</span> <span class="n">tool_prompt</span>
+        <span class="n">examples_and_messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">prompt</span><span class="p">})</span>
+
     <span class="k">return</span> <span class="n">system_prompt</span><span class="p">,</span> <span class="n">examples_and_messages</span>
 
 
@@ -525,7 +586,6 @@
     <span class="k">def</span> <span class="nf">_get_all_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="n">kwargs_to_ignore</span> <span class="o">=</span> <span class="p">[</span>
             <span class="s2">&quot;top_p&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;tools&quot;</span><span class="p">,</span>
             <span class="s2">&quot;frequency_penalty&quot;</span><span class="p">,</span>
             <span class="s2">&quot;presence_penalty&quot;</span><span class="p">,</span>
             <span class="s2">&quot;logit_bias&quot;</span><span class="p">,</span>
@@ -626,7 +686,15 @@
                     <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">cg_chunk</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">cg_chunk</span><span class="p">)</span>
                 <span class="k">yield</span> <span class="n">cg_chunk</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">_</span><span class="p">:</span>
-                <span class="k">continue</span></div>
+                <span class="k">continue</span>
+
+<div class="viewcode-block" id="ChatPremAI.bind_tools"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.premai.ChatPremAI.html#langchain_community.chat_models.premai.ChatPremAI.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
+        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="create_prem_retry_decorator"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.premai.create_prem_retry_decorator.html#langchain_community.chat_models.premai.create_prem_retry_decorator">[docs]</a><span class="k">def</span> <span class="nf">create_prem_retry_decorator</span><span class="p">(</span>
@@ -701,7 +769,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 24, 2024.
+                                on Jul 25, 2024.
                 </footer>
             </div>
         </div>

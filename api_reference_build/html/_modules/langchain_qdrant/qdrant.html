@@ -161,6 +161,9 @@
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../together_api_reference.html">together</a>
         </li>
         <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../unstructured_api_reference.html">unstructured</a>
+        </li>
+        <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../../voyageai_api_reference.html">voyageai</a>
         </li>
         <li class="nav-item">
@@ -200,6 +203,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../../qdrant_api_reference.html">qdrant</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../robocorp_api_reference.html">robocorp</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../together_api_reference.html">together</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../../unstructured_api_reference.html">unstructured</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../voyageai_api_reference.html">voyageai</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../../weaviate_api_reference.html">weaviate</a>
           </div>
@@ -1186,21 +1190,9 @@
         <span class="n">collection_info</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_collection</span><span class="p">(</span><span class="n">collection_name</span><span class="o">=</span><span class="n">collection_name</span><span class="p">)</span>
         <span class="n">vector_config</span> <span class="o">=</span> <span class="n">collection_info</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">vectors</span>
 
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vector_config</span><span class="p">,</span> <span class="n">models</span><span class="o">.</span><span class="n">VectorParams</span><span class="p">)</span> <span class="ow">and</span> <span class="n">vector_name</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
-            <span class="c1"># For single/unnamed vector,</span>
-            <span class="c1"># qdrant-client returns a single VectorParams object</span>
-
-            <span class="k">raise</span> <span class="n">QdrantVectorStoreError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Existing Qdrant collection </span><span class="si">{</span><span class="n">collection_name</span><span class="si">}</span><span class="s2"> is built &quot;</span>
-                <span class="s2">&quot;with unnamed dense vector. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;If you want to reuse it, set `vector_name` to &#39;&#39;(empty string).&quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;If you want to recreate the collection, &quot;</span>
-                <span class="s2">&quot;set `force_recreate` to `True`.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vector_config</span><span class="p">,</span> <span class="n">Dict</span><span class="p">):</span>
             <span class="c1"># vector_config is a Dict[str, VectorParams]</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">vector_config</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">vector_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">vector_config</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">vector_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">vector_config</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">QdrantVectorStoreError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">&quot;Existing Qdrant collection </span><span class="si">{</span><span class="n">collection_name</span><span class="si">}</span><span class="s2"> does not &quot;</span>
                     <span class="sa">f</span><span class="s2">&quot;contain dense vector named </span><span class="si">{</span><span class="n">vector_name</span><span class="si">}</span><span class="s2">. &quot;</span>
@@ -1212,6 +1204,20 @@
 
             <span class="c1"># Get the VectorParams object for the specified vector_name</span>
             <span class="n">vector_config</span> <span class="o">=</span> <span class="n">vector_config</span><span class="p">[</span><span class="n">vector_name</span><span class="p">]</span>  <span class="c1"># type: ignore</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># vector_config is an instance of VectorParams</span>
+            <span class="c1"># Case of a collection with single/unnamed vector.</span>
+            <span class="k">if</span> <span class="n">vector_name</span> <span class="o">!=</span> <span class="s2">&quot;&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">QdrantVectorStoreError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Existing Qdrant collection </span><span class="si">{</span><span class="n">collection_name</span><span class="si">}</span><span class="s2"> is built &quot;</span>
+                    <span class="s2">&quot;with unnamed dense vector. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;If you want to reuse it, set `vector_name` to &#39;&#39;(empty string).&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;If you want to recreate the collection, &quot;</span>
+                    <span class="s2">&quot;set `force_recreate` to `True`.&quot;</span>
+                <span class="p">)</span>
+
+        <span class="k">assert</span> <span class="n">vector_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;VectorParams is None&quot;</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dense_embeddings</span><span class="p">,</span> <span class="n">Embeddings</span><span class="p">):</span>
             <span class="n">vector_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dense_embeddings</span><span class="o">.</span><span class="n">embed_documents</span><span class="p">([</span><span class="s2">&quot;dummy_text&quot;</span><span class="p">])[</span><span class="mi">0</span><span class="p">])</span>
@@ -1292,7 +1298,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 24, 2024.
+                                on Jul 25, 2024.
                 </footer>
             </div>
         </div>
