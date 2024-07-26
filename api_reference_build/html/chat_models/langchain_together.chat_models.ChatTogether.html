@@ -258,6 +258,7 @@
 <li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.openai_organization"><code class="docutils literal notranslate"><span class="pre">ChatTogether.openai_organization</span></code></a></li>
 <li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.openai_proxy"><code class="docutils literal notranslate"><span class="pre">ChatTogether.openai_proxy</span></code></a></li>
 <li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.presence_penalty"><code class="docutils literal notranslate"><span class="pre">ChatTogether.presence_penalty</span></code></a></li>
+<li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.rate_limiter"><code class="docutils literal notranslate"><span class="pre">ChatTogether.rate_limiter</span></code></a></li>
 <li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.request_timeout"><code class="docutils literal notranslate"><span class="pre">ChatTogether.request_timeout</span></code></a></li>
 <li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.seed"><code class="docutils literal notranslate"><span class="pre">ChatTogether.seed</span></code></a></li>
 <li><a class="reference internal" href="#langchain_together.chat_models.ChatTogether.stop"><code class="docutils literal notranslate"><span class="pre">ChatTogether.stop</span></code></a></li>
@@ -323,15 +324,231 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain_together.chat_models.</span></span><span class="sig-name descname"><span class="pre">ChatTogether</span></span><a class="reference internal" href="../_modules/langchain_together/chat_models.html#ChatTogether"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain_together.chat_models.ChatTogether" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain_openai.chat_models.base.BaseChatOpenAI.html#langchain_openai.chat_models.base.BaseChatOpenAI" title="langchain_openai.chat_models.base.BaseChatOpenAI"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseChatOpenAI</span></code></a></p>
 <p>ChatTogether chat model.</p>
-<p>To use, you should have the environment variable <cite>TOGETHER_API_KEY</cite>
-set with your API key or pass it as a named parameter to the constructor.</p>
-<p class="rubric">Example</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_together</span> <span class="kn">import</span> <span class="n">ChatTogether</span>
-
-
-<span class="n">model</span> <span class="o">=</span> <span class="n">ChatTogether</span><span class="p">()</span>
+<dl>
+<dt>Setup:</dt><dd><p>Install <code class="docutils literal notranslate"><span class="pre">langchain-together</span></code> and set environment variable <code class="docutils literal notranslate"><span class="pre">TOGETHER_API_KEY</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>langchain-together
+<span class="nb">export</span><span class="w"> </span><span class="nv">TOGETHER_API_KEY</span><span class="o">=</span><span class="s2">&quot;your-api-key&quot;</span>
 </pre></div>
 </div>
+</dd>
+<dt>Key init args — completion params:</dt><dd><dl class="simple">
+<dt>model: str</dt><dd><p>Name of model to use.</p>
+</dd>
+<dt>temperature: float</dt><dd><p>Sampling temperature.</p>
+</dd>
+<dt>max_tokens: Optional[int]</dt><dd><p>Max number of tokens to generate.</p>
+</dd>
+<dt>logprobs: Optional[bool]</dt><dd><p>Whether to return logprobs.</p>
+</dd>
+</dl>
+</dd>
+<dt>Key init args — client params:</dt><dd><dl class="simple">
+<dt>timeout: Union[float, Tuple[float, float], Any, None]</dt><dd><p>Timeout for requests.</p>
+</dd>
+<dt>max_retries: int</dt><dd><p>Max number of retries.</p>
+</dd>
+<dt>api_key: Optional[str]</dt><dd><p>Together API key. If not passed in will be read from env var OPENAI_API_KEY.</p>
+</dd>
+</dl>
+</dd>
+<dt>Instantiate:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langhcain_together</span> <span class="kn">import</span> <span class="n">ChatTogether</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatTogether</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;meta-llama/Llama-3-70b-chat-hf&quot;</span><span class="p">,</span>
+    <span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">max_retries</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="c1"># api_key=&quot;...&quot;,</span>
+    <span class="c1"># other params...</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>Invoke:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">messages</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span>
+        <span class="s2">&quot;system&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;You are a helpful translator. Translate the user sentence to French.&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;I love programming.&quot;</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="n">llm</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">AIMessage</span><span class="p">(</span>
+    <span class="n">content</span><span class="o">=</span><span class="s2">&quot;J&#39;adore la programmation.&quot;</span><span class="p">,</span>
+    <span class="n">response_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;token_usage&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;completion_tokens&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span> <span class="s1">&#39;prompt_tokens&#39;</span><span class="p">:</span> <span class="mi">32</span><span class="p">,</span> <span class="s1">&#39;total_tokens&#39;</span><span class="p">:</span> <span class="mi">41</span><span class="p">},</span>
+        <span class="s1">&#39;model_name&#39;</span><span class="p">:</span> <span class="s1">&#39;meta-llama/Llama-3-70b-chat-hf&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;system_fingerprint&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s1">&#39;finish_reason&#39;</span><span class="p">:</span> <span class="s1">&#39;stop&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;logprobs&#39;</span><span class="p">:</span> <span class="kc">None</span>
+    <span class="p">},</span>
+    <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-168dceca-3b8b-4283-94e3-4c739dbc1525-0&#39;</span><span class="p">,</span>
+    <span class="n">usage_metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;input_tokens&#39;</span><span class="p">:</span> <span class="mi">32</span><span class="p">,</span> <span class="s1">&#39;output_tokens&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span> <span class="s1">&#39;total_tokens&#39;</span><span class="p">:</span> <span class="mi">41</span><span class="p">})</span>
+</pre></div>
+</div>
+</dd>
+<dt>Stream:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">llm</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">messages</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">content</span><span class="o">=</span><span class="s1">&#39;J&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s2">&quot;&#39;&quot;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39;ad&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39;ore&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39; la&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39; programm&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39;ation&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39;.&#39;</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+<span class="n">content</span><span class="o">=</span><span class="s1">&#39;&#39;</span> <span class="n">response_metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;finish_reason&#39;</span><span class="p">:</span> <span class="s1">&#39;stop&#39;</span><span class="p">,</span> <span class="s1">&#39;model_name&#39;</span><span class="p">:</span> <span class="s1">&#39;meta-llama/Llama-3-70b-chat-hf&#39;</span><span class="p">}</span> <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-1bc996b5-293f-4114-96a1-e0f755c05eb9&#39;</span>
+</pre></div>
+</div>
+</dd>
+<dt>Async:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+
+<span class="c1"># stream:</span>
+<span class="c1"># async for chunk in (await llm.astream(messages))</span>
+
+<span class="c1"># batch:</span>
+<span class="c1"># await llm.abatch([messages])</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">AIMessage</span><span class="p">(</span>
+    <span class="n">content</span><span class="o">=</span><span class="s2">&quot;J&#39;adore la programmation.&quot;</span><span class="p">,</span>
+    <span class="n">response_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;token_usage&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;completion_tokens&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span> <span class="s1">&#39;prompt_tokens&#39;</span><span class="p">:</span> <span class="mi">32</span><span class="p">,</span> <span class="s1">&#39;total_tokens&#39;</span><span class="p">:</span> <span class="mi">41</span><span class="p">},</span>
+        <span class="s1">&#39;model_name&#39;</span><span class="p">:</span> <span class="s1">&#39;meta-llama/Llama-3-70b-chat-hf&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;system_fingerprint&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s1">&#39;finish_reason&#39;</span><span class="p">:</span> <span class="s1">&#39;stop&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;logprobs&#39;</span><span class="p">:</span> <span class="kc">None</span>
+    <span class="p">},</span>
+    <span class="nb">id</span><span class="o">=</span><span class="s1">&#39;run-09371a11-7f72-4c53-8e7c-9de5c238b34c-0&#39;</span><span class="p">,</span>
+    <span class="n">usage_metadata</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;input_tokens&#39;</span><span class="p">:</span> <span class="mi">32</span><span class="p">,</span> <span class="s1">&#39;output_tokens&#39;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span> <span class="s1">&#39;total_tokens&#39;</span><span class="p">:</span> <span class="mi">41</span><span class="p">})</span>
+</pre></div>
+</div>
+</dd>
+<dt>Tool calling:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+<span class="c1"># Only certain models support tool calling, check the together website to confirm compatibility</span>
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatTogether</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;mistralai/Mixtral-8x7B-Instruct-v0.1&quot;</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">GetWeather</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;Get the current weather in a given location&#39;&#39;&#39;</span>
+
+    <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="o">...</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The city and state, e.g. San Francisco, CA&quot;</span>
+    <span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">GetPopulation</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;Get the current population in a given location&#39;&#39;&#39;</span>
+
+    <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+        <span class="o">...</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;The city and state, e.g. San Francisco, CA&quot;</span>
+    <span class="p">)</span>
+
+<span class="n">llm_with_tools</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">GetWeather</span><span class="p">,</span> <span class="n">GetPopulation</span><span class="p">])</span>
+<span class="n">ai_msg</span> <span class="o">=</span> <span class="n">llm_with_tools</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+    <span class="s2">&quot;Which city is bigger: LA or NY?&quot;</span>
+<span class="p">)</span>
+<span class="n">ai_msg</span><span class="o">.</span><span class="n">tool_calls</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">[</span>
+    <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;GetPopulation&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;args&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;location&#39;</span><span class="p">:</span> <span class="s1">&#39;NY&#39;</span><span class="p">},</span>
+        <span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="s1">&#39;call_m5tstyn2004pre9bfuxvom8x&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;tool_call&#39;</span>
+    <span class="p">},</span>
+    <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;GetPopulation&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;args&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;location&#39;</span><span class="p">:</span> <span class="s1">&#39;LA&#39;</span><span class="p">},</span>
+        <span class="s1">&#39;id&#39;</span><span class="p">:</span> <span class="s1">&#39;call_0vjgq455gq1av5sp9eb1pw6a&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="s1">&#39;tool_call&#39;</span>
+    <span class="p">}</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</dd>
+<dt>Structured output:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span>
+
+
+<span class="k">class</span> <span class="nc">Joke</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;Joke to tell user.&#39;&#39;&#39;</span>
+
+    <span class="n">setup</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;The setup of the joke&quot;</span><span class="p">)</span>
+    <span class="n">punchline</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;The punchline to the joke&quot;</span><span class="p">)</span>
+    <span class="n">rating</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;How funny the joke is, from 1 to 10&quot;</span><span class="p">)</span>
+
+
+<span class="n">structured_llm</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">with_structured_output</span><span class="p">(</span><span class="n">Joke</span><span class="p">)</span>
+<span class="n">structured_llm</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="s2">&quot;Tell me a joke about cats&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">Joke</span><span class="p">(</span>
+    <span class="n">setup</span><span class="o">=</span><span class="s1">&#39;Why was the cat sitting on the computer?&#39;</span><span class="p">,</span>
+    <span class="n">punchline</span><span class="o">=</span><span class="s1">&#39;To keep an eye on the mouse!&#39;</span><span class="p">,</span>
+    <span class="n">rating</span><span class="o">=</span><span class="mi">7</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>JSON mode:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">json_llm</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">response_format</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;json_object&quot;</span><span class="p">})</span>
+<span class="n">ai_msg</span> <span class="o">=</span> <span class="n">json_llm</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+    <span class="s2">&quot;Return a JSON object with key &#39;random_ints&#39; and a value of 10 random ints in [0-99]&quot;</span>
+<span class="p">)</span>
+<span class="n">ai_msg</span><span class="o">.</span><span class="n">content</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="s1">&#39; {</span><span class="se">\\</span><span class="s1">n&quot;random_ints&quot;: [</span><span class="se">\\</span><span class="s1">n13,</span><span class="se">\\</span><span class="s1">n54,</span><span class="se">\\</span><span class="s1">n78,</span><span class="se">\\</span><span class="s1">n45,</span><span class="se">\\</span><span class="s1">n67,</span><span class="se">\\</span><span class="s1">n90,</span><span class="se">\\</span><span class="s1">n11,</span><span class="se">\\</span><span class="s1">n29,</span><span class="se">\\</span><span class="s1">n84,</span><span class="se">\\</span><span class="s1">n33</span><span class="se">\\</span><span class="s1">n]</span><span class="se">\\</span><span class="s1">n}&#39;</span>
+</pre></div>
+</div>
+</dd>
+<dt>Token usage:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ai_msg</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+<span class="n">ai_msg</span><span class="o">.</span><span class="n">usage_metadata</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="s1">&#39;input_tokens&#39;</span><span class="p">:</span> <span class="mi">37</span><span class="p">,</span> <span class="s1">&#39;output_tokens&#39;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span> <span class="s1">&#39;total_tokens&#39;</span><span class="p">:</span> <span class="mi">43</span><span class="p">}</span>
+</pre></div>
+</div>
+</dd>
+<dt>Logprobs:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">logprobs_llm</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">logprobs</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">messages</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span><span class="s2">&quot;Say Hello World! Do not return anything else.&quot;</span><span class="p">)]</span>
+<span class="n">ai_msg</span> <span class="o">=</span> <span class="n">logprobs_llm</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+<span class="n">ai_msg</span><span class="o">.</span><span class="n">response_metadata</span><span class="p">[</span><span class="s2">&quot;logprobs&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s1">&#39;content&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="s1">&#39;token_ids&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">22557</span><span class="p">,</span> <span class="mi">3304</span><span class="p">,</span> <span class="mi">28808</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="s1">&#39;tokens&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39; Hello&#39;</span><span class="p">,</span> <span class="s1">&#39; World&#39;</span><span class="p">,</span> <span class="s1">&#39;!&#39;</span><span class="p">,</span> <span class="s1">&#39;&lt;/s&gt;&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;token_logprobs&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">4.7683716e-06</span><span class="p">,</span> <span class="o">-</span><span class="mf">5.9604645e-07</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.057373047</span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd>
+<dt>Response metadata</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ai_msg</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+<span class="n">ai_msg</span><span class="o">.</span><span class="n">response_metadata</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s1">&#39;token_usage&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;completion_tokens&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="s1">&#39;prompt_tokens&#39;</span><span class="p">:</span> <span class="mi">19</span><span class="p">,</span>
+        <span class="s1">&#39;total_tokens&#39;</span><span class="p">:</span> <span class="mi">23</span>
+        <span class="p">},</span>
+    <span class="s1">&#39;model_name&#39;</span><span class="p">:</span> <span class="s1">&#39;mistralai/Mixtral-8x7B-Instruct-v0.1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;system_fingerprint&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="s1">&#39;finish_reason&#39;</span><span class="p">:</span> <span class="s1">&#39;eos&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;logprobs&#39;</span><span class="p">:</span> <span class="kc">None</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</dd>
+</dl>
 <p>Create a new model by parsing and validating input data from keyword arguments.</p>
 <p>Raises ValidationError if the input data cannot be parsed to form a valid model.</p>
 <dl class="py attribute pydantic_field">
@@ -493,6 +710,12 @@ emulator.</p>
 <dt class="sig sig-object py" id="langchain_together.chat_models.ChatTogether.presence_penalty">
 <em class="property"><span class="pre">param</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">presence_penalty</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#langchain_together.chat_models.ChatTogether.presence_penalty" title="Permalink to this definition">¶</a></dt>
 <dd><p>Penalizes repeated tokens.</p>
+</dd></dl>
+
+<dl class="py attribute pydantic_field">
+<dt class="sig sig-object py" id="langchain_together.chat_models.ChatTogether.rate_limiter">
+<em class="property"><span class="pre">param</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">rate_limiter</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../rate_limiters/langchain_core.rate_limiters.BaseRateLimiter.html#langchain_core.rate_limiters.BaseRateLimiter" title="langchain_core.rate_limiters.BaseRateLimiter"><span class="pre">BaseRateLimiter</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#langchain_together.chat_models.ChatTogether.rate_limiter" title="Permalink to this definition">¶</a></dt>
+<dd><p>An optional rate limiter to use for limiting the number of requests.</p>
 </dd></dl>
 
 <dl class="py attribute pydantic_field">
@@ -828,7 +1051,7 @@ the Runnable did not implement a native async version of invoke.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="langchain_together.chat_models.ChatTogether.as_tool">
-<span class="sig-name descname"><span class="pre">as_tool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args_schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../video_captioning/langchain_experimental.video_captioning.models.BaseModel.html#langchain_experimental.video_captioning.models.BaseModel" title="langchain_experimental.video_captioning.models.BaseModel"><span class="pre">BaseModel</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../tools/langchain_core.tools.BaseTool.html#langchain_core.tools.BaseTool" title="langchain_core.tools.BaseTool"><span class="pre">BaseTool</span></a></span></span><a class="headerlink" href="#langchain_together.chat_models.ChatTogether.as_tool" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">as_tool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args_schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../vectorstores/langchain_community.vectorstores.pgembedding.BaseModel.html#langchain_community.vectorstores.pgembedding.BaseModel" title="langchain_community.vectorstores.pgembedding.BaseModel"><span class="pre">BaseModel</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../tools/langchain_core.tools.BaseTool.html#langchain_core.tools.BaseTool" title="langchain_core.tools.BaseTool"><span class="pre">BaseTool</span></a></span></span><a class="headerlink" href="#langchain_together.chat_models.ChatTogether.as_tool" title="Permalink to this definition">¶</a></dt>
 <dd><p>[<em>Beta</em>] Create a BaseTool from a Runnable.</p>
 <p><code class="docutils literal notranslate"><span class="pre">as_tool</span></code> will instantiate a BaseTool with a name, description, and
 <code class="docutils literal notranslate"><span class="pre">args_schema</span></code> from a Runnable. Where possible, schemas are inferred
@@ -839,7 +1062,7 @@ pass <code class="docutils literal notranslate"><span class="pre">arg_types</spa
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>args_schema</strong> (<em>Optional</em><em>[</em><em>Type</em><em>[</em><a class="reference internal" href="../video_captioning/langchain_experimental.video_captioning.models.BaseModel.html#langchain_experimental.video_captioning.models.BaseModel" title="langchain_experimental.video_captioning.models.BaseModel"><em>BaseModel</em></a><em>]</em><em>]</em>) – The schema for the tool. Defaults to None.</p></li>
+<li><p><strong>args_schema</strong> (<em>Optional</em><em>[</em><em>Type</em><em>[</em><a class="reference internal" href="../vectorstores/langchain_community.vectorstores.pgembedding.BaseModel.html#langchain_community.vectorstores.pgembedding.BaseModel" title="langchain_community.vectorstores.pgembedding.BaseModel"><em>BaseModel</em></a><em>]</em><em>]</em>) – The schema for the tool. Defaults to None.</p></li>
 <li><p><strong>name</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The name of the tool. Defaults to None.</p></li>
 <li><p><strong>description</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The description of the tool. Defaults to None.</p></li>
 <li><p><strong>arg_types</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>Type</em><em>]</em><em>]</em>) – A dictionary of argument names to types. Defaults to None.</p></li>
@@ -1948,7 +2171,7 @@ where _DictOrPydantic depends on the schema:</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 25, 2024.
+                                on Jul 26, 2024.
                 </footer>
             </div>
         </div>

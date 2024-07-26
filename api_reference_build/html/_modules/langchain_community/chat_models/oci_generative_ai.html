@@ -239,10 +239,24 @@
                 
   <h1>Source code for langchain_community.chat_models.oci_generative_ai</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Mapping</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">Type</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForLLMRun</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseChatModel</span><span class="p">,</span>
     <span class="n">generate_from_stream</span><span class="p">,</span>
@@ -254,14 +268,75 @@
     <span class="n">ChatMessage</span><span class="p">,</span>
     <span class="n">HumanMessage</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
+    <span class="n">ToolCall</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">ToolCallChunk</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">JsonOutputKeyToolsParser</span><span class="p">,</span>
+    <span class="n">PydanticToolsParser</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Extra</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
+<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_function</span>
 
 <span class="kn">from</span> <span class="nn">langchain_community.llms.oci_generative_ai</span> <span class="kn">import</span> <span class="n">OCIGenAIBase</span>
 <span class="kn">from</span> <span class="nn">langchain_community.llms.utils</span> <span class="kn">import</span> <span class="n">enforce_stop_tokens</span>
 
 <span class="n">CUSTOM_ENDPOINT_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;ocid1.generativeaiendpoint&quot;</span>
+
+<span class="n">JSON_TO_PYTHON_TYPES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;string&quot;</span><span class="p">:</span> <span class="s2">&quot;str&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="s2">&quot;float&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;boolean&quot;</span><span class="p">:</span> <span class="s2">&quot;bool&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;integer&quot;</span><span class="p">:</span> <span class="s2">&quot;int&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;array&quot;</span><span class="p">:</span> <span class="s2">&quot;List&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;object&quot;</span><span class="p">:</span> <span class="s2">&quot;Dict&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">_remove_signature_from_tool_description</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Removes the `{name}{signature} - ` prefix and Args: section from tool description.</span>
+<span class="sd">    The signature is usually present for tools created with the @tool decorator,</span>
+<span class="sd">    whereas the Args: section may be present in function doc blocks.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">rf</span><span class="s2">&quot;^</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">\(.*?\) -(?:&gt; \w+? -)? &quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">description</span><span class="p">)</span>
+    <span class="n">description</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(?s)(?:\n?\n\s*?)?Args:.*$&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">description</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">description</span>
+
+
+<span class="k">def</span> <span class="nf">_format_oci_tool_calls</span><span class="p">(</span>
+    <span class="n">tool_calls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Formats a OCI GenAI API response into the tool call format used in Langchain.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">tool_calls</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">formatted_tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span><span class="p">:</span>
+        <span class="n">formatted_tool_calls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:],</span>
+                <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                    <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tool_call</span><span class="o">.</span><span class="n">parameters</span><span class="p">),</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">formatted_tool_calls</span>
+
+
+<span class="k">def</span> <span class="nf">_convert_oci_tool_call_to_langchain</span><span class="p">(</span><span class="n">tool_call</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolCall</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a OCI GenAI tool call into langchain_core.messages.ToolCall&quot;&quot;&quot;</span>
+    <span class="n">_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:]</span>
+    <span class="k">return</span> <span class="n">ToolCall</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">tool_call</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">tool_call</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="n">_id</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="Provider"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider">[docs]</a><span class="k">class</span> <span class="nc">Provider</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
@@ -275,14 +350,28 @@
 <div class="viewcode-block" id="Provider.chat_stream_to_text"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.chat_stream_to_text">[docs]</a>    <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">chat_stream_to_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span></div>
 
+<div class="viewcode-block" id="Provider.is_chat_stream_end"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.is_chat_stream_end">[docs]</a>    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">is_chat_stream_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span></div>
+
 <div class="viewcode-block" id="Provider.chat_generation_info"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.chat_generation_info">[docs]</a>    <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">chat_generation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span> <span class="o">...</span></div>
+
+<div class="viewcode-block" id="Provider.chat_stream_generation_info"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.chat_stream_generation_info">[docs]</a>    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">chat_stream_generation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span> <span class="o">...</span></div>
 
 <div class="viewcode-block" id="Provider.get_role"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.get_role">[docs]</a>    <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">get_role</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span> <span class="o">...</span></div>
 
 <div class="viewcode-block" id="Provider.messages_to_oci_params"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.messages_to_oci_params">[docs]</a>    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">messages_to_oci_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span> <span class="o">...</span></div></div>
+    <span class="k">def</span> <span class="nf">messages_to_oci_params</span><span class="p">(</span></div>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span> <span class="o">...</span>
+
+<div class="viewcode-block" id="Provider.convert_to_oci_tool"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.Provider.html#langchain_community.chat_models.oci_generative_ai.Provider.convert_to_oci_tool">[docs]</a>    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">convert_to_oci_tool</span><span class="p">(</span></div>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span> <span class="o">...</span></div>
 
 
 <div class="viewcode-block" id="CohereProvider"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider">[docs]</a><span class="k">class</span> <span class="nc">CohereProvider</span><span class="p">(</span><span class="n">Provider</span><span class="p">):</span>
@@ -292,10 +381,15 @@
         <span class="kn">from</span> <span class="nn">oci.generative_ai_inference</span> <span class="kn">import</span> <span class="n">models</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_request</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereChatRequest</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereTool</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_param</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereParameterDefinition</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_result</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereToolResult</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_call</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereToolCall</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_message</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;USER&quot;</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereUserMessage</span><span class="p">,</span>
             <span class="s2">&quot;CHATBOT&quot;</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereChatBotMessage</span><span class="p">,</span>
             <span class="s2">&quot;SYSTEM&quot;</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereSystemMessage</span><span class="p">,</span>
+            <span class="s2">&quot;TOOL&quot;</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">CohereToolMessage</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">chat_api_format</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">BaseChatRequest</span><span class="o">.</span><span class="n">API_FORMAT_COHERE</span></div>
 
@@ -303,15 +397,54 @@
         <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">text</span></div>
 
 <div class="viewcode-block" id="CohereProvider.chat_stream_to_text"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.chat_stream_to_text">[docs]</a>    <span class="k">def</span> <span class="nf">chat_stream_to_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">if</span> <span class="s2">&quot;text&quot;</span> <span class="ow">in</span> <span class="n">event_data</span> <span class="ow">and</span> <span class="s2">&quot;finishReason&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">event_data</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;text&quot;</span> <span class="ow">in</span> <span class="n">event_data</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">event_data</span><span class="p">[</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="s2">&quot;&quot;</span></div>
 
+<div class="viewcode-block" id="CohereProvider.is_chat_stream_end"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.is_chat_stream_end">[docs]</a>    <span class="k">def</span> <span class="nf">is_chat_stream_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;finishReason&quot;</span> <span class="ow">in</span> <span class="n">event_data</span></div>
+
 <div class="viewcode-block" id="CohereProvider.chat_generation_info"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.chat_generation_info">[docs]</a>    <span class="k">def</span> <span class="nf">chat_generation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">{</span>
+        <span class="n">generation_info</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;documents&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">documents</span><span class="p">,</span>
+            <span class="s2">&quot;citations&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">citations</span><span class="p">,</span>
+            <span class="s2">&quot;search_queries&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">search_queries</span><span class="p">,</span>
+            <span class="s2">&quot;is_search_required&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">is_search_required</span><span class="p">,</span>
             <span class="s2">&quot;finish_reason&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">finish_reason</span><span class="p">,</span>
-        <span class="p">}</span></div>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">:</span>
+            <span class="c1"># Only populate tool_calls when 1) present on the response and</span>
+            <span class="c1">#  2) has one or more calls.</span>
+            <span class="n">generation_info</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_format_oci_tool_calls</span><span class="p">(</span>
+                <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">tool_calls</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">generation_info</span></div>
+
+<div class="viewcode-block" id="CohereProvider.chat_stream_generation_info"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.chat_stream_generation_info">[docs]</a>    <span class="k">def</span> <span class="nf">chat_stream_generation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">generation_info</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;documents&quot;</span><span class="p">:</span> <span class="n">event_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;documents&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;citations&quot;</span><span class="p">:</span> <span class="n">event_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;citations&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;finish_reason&quot;</span><span class="p">:</span> <span class="n">event_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;finishReason&quot;</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s2">&quot;toolCalls&quot;</span> <span class="ow">in</span> <span class="n">event_data</span><span class="p">:</span>
+            <span class="n">generation_info</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">event_data</span><span class="p">[</span><span class="s2">&quot;toolCalls&quot;</span><span class="p">]:</span>
+                <span class="n">generation_info</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">{</span>
+                        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">[:],</span>
+                        <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="p">{</span>
+                            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                            <span class="s2">&quot;arguments&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">]),</span>
+                        <span class="p">},</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+
+        <span class="n">generation_info</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">generation_info</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">generation_info</span></div>
 
 <div class="viewcode-block" id="CohereProvider.get_role"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.get_role">[docs]</a>    <span class="k">def</span> <span class="nf">get_role</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
@@ -320,21 +453,154 @@
             <span class="k">return</span> <span class="s2">&quot;CHATBOT&quot;</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
             <span class="k">return</span> <span class="s2">&quot;SYSTEM&quot;</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s2">&quot;TOOL&quot;</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Got unknown type </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="CohereProvider.messages_to_oci_params"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.messages_to_oci_params">[docs]</a>    <span class="k">def</span> <span class="nf">messages_to_oci_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ChatMessage</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-        <span class="n">oci_chat_history</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_message</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">get_role</span><span class="p">(</span><span class="n">msg</span><span class="p">)](</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-        <span class="p">]</span>
+<div class="viewcode-block" id="CohereProvider.messages_to_oci_params"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.messages_to_oci_params">[docs]</a>    <span class="k">def</span> <span class="nf">messages_to_oci_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ChatMessage</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">is_force_single_step</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;is_force_single_step&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="kc">False</span>
+
+        <span class="n">oci_chat_history</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_role</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;USER&quot;</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_role</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;SYSTEM&quot;</span><span class="p">:</span>
+                <span class="n">oci_chat_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_message</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">get_role</span><span class="p">(</span><span class="n">msg</span><span class="p">)](</span><span class="n">message</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">tool_calls</span> <span class="ow">and</span> <span class="n">is_force_single_step</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_call</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span> <span class="n">parameters</span><span class="o">=</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">])</span>
+                        <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">msg</span><span class="o">.</span><span class="n">tool_calls</span>
+                    <span class="p">]</span>
+                    <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">tool_calls</span>
+                    <span class="k">else</span> <span class="kc">None</span>
+                <span class="p">)</span>
+                <span class="n">msg_content</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">content</span> <span class="k">else</span> <span class="s2">&quot; &quot;</span>
+                <span class="n">oci_chat_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_message</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">get_role</span><span class="p">(</span><span class="n">msg</span><span class="p">)](</span>
+                        <span class="n">message</span><span class="o">=</span><span class="n">msg_content</span><span class="p">,</span> <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+
+        <span class="c1"># Get the messages for the current chat turn</span>
+        <span class="n">current_chat_turn_messages</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="n">current_chat_turn_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
+                <span class="k">break</span>
+        <span class="n">current_chat_turn_messages</span> <span class="o">=</span> <span class="n">current_chat_turn_messages</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">oci_tool_results</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">current_chat_turn_messages</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+                <span class="n">tool_message</span> <span class="o">=</span> <span class="n">message</span>
+                <span class="n">previous_ai_msgs</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">message</span>
+                    <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">current_chat_turn_messages</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">)</span> <span class="ow">and</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_calls</span>
+                <span class="p">]</span>
+                <span class="k">if</span> <span class="n">previous_ai_msgs</span><span class="p">:</span>
+                    <span class="n">previous_ai_msg</span> <span class="o">=</span> <span class="n">previous_ai_msgs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">lc_tool_call</span> <span class="ow">in</span> <span class="n">previous_ai_msg</span><span class="o">.</span><span class="n">tool_calls</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">lc_tool_call</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">tool_message</span><span class="o">.</span><span class="n">tool_call_id</span><span class="p">:</span>
+                            <span class="n">tool_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_result</span><span class="p">()</span>
+                            <span class="n">tool_result</span><span class="o">.</span><span class="n">call</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_call</span><span class="p">(</span>
+                                <span class="n">name</span><span class="o">=</span><span class="n">lc_tool_call</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                                <span class="n">parameters</span><span class="o">=</span><span class="n">lc_tool_call</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">],</span>
+                            <span class="p">)</span>
+                            <span class="n">tool_result</span><span class="o">.</span><span class="n">outputs</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;output&quot;</span><span class="p">:</span> <span class="n">tool_message</span><span class="o">.</span><span class="n">content</span><span class="p">}]</span>
+                            <span class="n">oci_tool_results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tool_result</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">oci_tool_results</span><span class="p">:</span>
+            <span class="n">oci_tool_results</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">message_str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span> <span class="k">if</span> <span class="n">oci_tool_results</span> <span class="k">else</span> <span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span>
+
         <span class="n">oci_params</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">message_str</span><span class="p">,</span>
             <span class="s2">&quot;chat_history&quot;</span><span class="p">:</span> <span class="n">oci_chat_history</span><span class="p">,</span>
+            <span class="s2">&quot;tool_results&quot;</span><span class="p">:</span> <span class="n">oci_tool_results</span><span class="p">,</span>
             <span class="s2">&quot;api_format&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">chat_api_format</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="k">return</span> <span class="n">oci_params</span></div></div>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">oci_params</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span></div>
+
+<div class="viewcode-block" id="CohereProvider.convert_to_oci_tool"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.CohereProvider.html#langchain_community.chat_models.oci_generative_ai.CohereProvider.convert_to_oci_tool">[docs]</a>    <span class="k">def</span> <span class="nf">convert_to_oci_tool</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert a BaseTool instance, JSON schema dict, or BaseModel type to a OCI tool.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">description</span><span class="o">=</span><span class="n">_remove_signature_from_tool_description</span><span class="p">(</span>
+                    <span class="n">tool</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">tool</span><span class="o">.</span><span class="n">description</span>
+                <span class="p">),</span>
+                <span class="n">parameter_definitions</span><span class="o">=</span><span class="p">{</span>
+                    <span class="n">p_name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_param</span><span class="p">(</span>
+                        <span class="n">description</span><span class="o">=</span><span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="s2">&quot;description&quot;</span> <span class="ow">in</span> <span class="n">p_def</span>
+                        <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">JSON_TO_PYTHON_TYPES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">),</span> <span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+                        <span class="p">),</span>
+                        <span class="n">is_required</span><span class="o">=</span><span class="s2">&quot;default&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">p_def</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">p_name</span><span class="p">,</span> <span class="n">p_def</span> <span class="ow">in</span> <span class="n">tool</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">k</span> <span class="ow">in</span> <span class="n">tool</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Unsupported dict type. Tool must be passed in as a BaseTool instance, JSON schema dict, or BaseModel type.&quot;</span>  <span class="c1"># noqa: E501</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">),</span>
+                <span class="n">description</span><span class="o">=</span><span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
+                <span class="n">parameter_definitions</span><span class="o">=</span><span class="p">{</span>
+                    <span class="n">p_name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_param</span><span class="p">(</span>
+                        <span class="n">description</span><span class="o">=</span><span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">JSON_TO_PYTHON_TYPES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">),</span> <span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+                        <span class="p">),</span>
+                        <span class="n">is_required</span><span class="o">=</span><span class="s2">&quot;default&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">p_def</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">p_name</span><span class="p">,</span> <span class="n">p_def</span> <span class="ow">in</span> <span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">callable</span><span class="p">(</span><span class="n">tool</span><span class="p">):</span>
+            <span class="n">as_json_schema_function</span> <span class="o">=</span> <span class="n">convert_to_openai_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
+            <span class="n">parameters</span> <span class="o">=</span> <span class="n">as_json_schema_function</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;parameters&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="n">properties</span> <span class="o">=</span> <span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;properties&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">as_json_schema_function</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                <span class="n">description</span><span class="o">=</span><span class="n">as_json_schema_function</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="s2">&quot;description&quot;</span><span class="p">,</span>
+                    <span class="n">as_json_schema_function</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                <span class="p">),</span>
+                <span class="n">parameter_definitions</span><span class="o">=</span><span class="p">{</span>
+                    <span class="n">p_name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">oci_tool_param</span><span class="p">(</span>
+                        <span class="n">description</span><span class="o">=</span><span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
+                        <span class="nb">type</span><span class="o">=</span><span class="n">JSON_TO_PYTHON_TYPES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                            <span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">),</span> <span class="n">p_def</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+                        <span class="p">),</span>
+                        <span class="n">is_required</span><span class="o">=</span><span class="n">p_name</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;required&quot;</span><span class="p">,</span> <span class="p">[]),</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">p_name</span><span class="p">,</span> <span class="n">p_def</span> <span class="ow">in</span> <span class="n">properties</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported tool type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span><span class="si">}</span><span class="s2">. Tool must be passed in as a BaseTool instance, JSON schema dict, or BaseModel type.&quot;</span>  <span class="c1"># noqa: E501</span>
+            <span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="MetaProvider"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider">[docs]</a><span class="k">class</span> <span class="nc">MetaProvider</span><span class="p">(</span><span class="n">Provider</span><span class="p">):</span>
@@ -356,15 +622,20 @@
         <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span></div>
 
 <div class="viewcode-block" id="MetaProvider.chat_stream_to_text"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.chat_stream_to_text">[docs]</a>    <span class="k">def</span> <span class="nf">chat_stream_to_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="k">if</span> <span class="s2">&quot;message&quot;</span> <span class="ow">in</span> <span class="n">event_data</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">event_data</span><span class="p">[</span><span class="s2">&quot;message&quot;</span><span class="p">][</span><span class="s2">&quot;content&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="s2">&quot;&quot;</span></div>
+        <span class="k">return</span> <span class="n">event_data</span><span class="p">[</span><span class="s2">&quot;message&quot;</span><span class="p">][</span><span class="s2">&quot;content&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="MetaProvider.is_chat_stream_end"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.is_chat_stream_end">[docs]</a>    <span class="k">def</span> <span class="nf">is_chat_stream_end</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;message&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">event_data</span></div>
 
 <div class="viewcode-block" id="MetaProvider.chat_generation_info"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.chat_generation_info">[docs]</a>    <span class="k">def</span> <span class="nf">chat_generation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="s2">&quot;finish_reason&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">finish_reason</span><span class="p">,</span>
             <span class="s2">&quot;time_created&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">time_created</span><span class="p">),</span>
+        <span class="p">}</span></div>
+
+<div class="viewcode-block" id="MetaProvider.chat_stream_generation_info"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.chat_stream_generation_info">[docs]</a>    <span class="k">def</span> <span class="nf">chat_stream_generation_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;finish_reason&quot;</span><span class="p">:</span> <span class="n">event_data</span><span class="p">[</span><span class="s2">&quot;finishReason&quot;</span><span class="p">],</span>
         <span class="p">}</span></div>
 
 <div class="viewcode-block" id="MetaProvider.get_role"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.get_role">[docs]</a>    <span class="k">def</span> <span class="nf">get_role</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">BaseMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -378,7 +649,9 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Got unknown type </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MetaProvider.messages_to_oci_params"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.messages_to_oci_params">[docs]</a>    <span class="k">def</span> <span class="nf">messages_to_oci_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<div class="viewcode-block" id="MetaProvider.messages_to_oci_params"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.messages_to_oci_params">[docs]</a>    <span class="k">def</span> <span class="nf">messages_to_oci_params</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="n">oci_messages</span> <span class="o">=</span> <span class="p">[</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_message</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">get_role</span><span class="p">(</span><span class="n">msg</span><span class="p">)](</span>
                 <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">oci_chat_message_content</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">content</span><span class="p">)]</span>
@@ -391,7 +664,13 @@
             <span class="s2">&quot;top_k&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
         <span class="p">}</span>
 
-        <span class="k">return</span> <span class="n">oci_params</span></div></div>
+        <span class="k">return</span> <span class="n">oci_params</span></div>
+
+<div class="viewcode-block" id="MetaProvider.convert_to_oci_tool"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.MetaProvider.html#langchain_community.chat_models.oci_generative_ai.MetaProvider.convert_to_oci_tool">[docs]</a>    <span class="k">def</span> <span class="nf">convert_to_oci_tool</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Tools not supported for Meta models&quot;</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="ChatOCIGenAI"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.ChatOCIGenAI.html#langchain_community.chat_models.oci_generative_ai.ChatOCIGenAI">[docs]</a><span class="k">class</span> <span class="nc">ChatOCIGenAI</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">,</span> <span class="n">OCIGenAIBase</span><span class="p">):</span>
@@ -487,8 +766,8 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">messages</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span>
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
-        <span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
         <span class="n">stream</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">oci.generative_ai_inference</span> <span class="kn">import</span> <span class="n">models</span>
@@ -498,8 +777,10 @@
                 <span class="s2">&quot;Could not import oci python package. &quot;</span>
                 <span class="s2">&quot;Please make sure you have the oci package installed.&quot;</span>
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">ex</span>
-        <span class="n">oci_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">messages_to_oci_params</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
-        <span class="n">oci_params</span><span class="p">[</span><span class="s2">&quot;is_stream&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stream</span>  <span class="c1"># self.is_stream</span>
+
+        <span class="n">oci_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">messages_to_oci_params</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">oci_params</span><span class="p">[</span><span class="s2">&quot;is_stream&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stream</span>
         <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
 
         <span class="k">if</span> <span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -519,6 +800,43 @@
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">request</span>
+
+<div class="viewcode-block" id="ChatOCIGenAI.bind_tools"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.ChatOCIGenAI.html#langchain_community.chat_models.oci_generative_ai.ChatOCIGenAI.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
+        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">convert_to_oci_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="ChatOCIGenAI.with_structured_output"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.oci_generative_ai.ChatOCIGenAI.html#langchain_community.chat_models.oci_generative_ai.ChatOCIGenAI.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            schema: The output schema as a dict or a Pydantic class. If a Pydantic class</span>
+<span class="sd">                then the model output will be an object of that class. If a dict then</span>
+<span class="sd">                the model output will be a dict.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A Runnable that takes any ChatModel input and returns either a dict or</span>
+<span class="sd">            Pydantic class as output.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
+            <span class="n">output_parser</span><span class="p">:</span> <span class="n">OutputParserLike</span> <span class="o">=</span> <span class="n">PydanticToolsParser</span><span class="p">(</span>
+                <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">],</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">key_name</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">convert_to_oci_tool</span><span class="p">(</span><span class="n">schema</span><span class="p">),</span> <span class="s2">&quot;name&quot;</span><span class="p">)</span>
+            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">JsonOutputKeyToolsParser</span><span class="p">(</span>
+                <span class="n">key_name</span><span class="o">=</span><span class="n">key_name</span><span class="p">,</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">output_parser</span></div>
 
     <span class="k">def</span> <span class="nf">_generate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -553,7 +871,7 @@
             <span class="p">)</span>
             <span class="k">return</span> <span class="n">generate_from_stream</span><span class="p">(</span><span class="n">stream_iter</span><span class="p">)</span>
 
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
 
         <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">chat_response_to_text</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
@@ -570,11 +888,22 @@
             <span class="s2">&quot;content-length&quot;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;content-length&quot;</span><span class="p">],</span>
         <span class="p">}</span>
 
+        <span class="k">if</span> <span class="s2">&quot;tool_calls&quot;</span> <span class="ow">in</span> <span class="n">generation_info</span><span class="p">:</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">_convert_oci_tool_call_to_langchain</span><span class="p">(</span><span class="n">tool_call</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">chat_response</span><span class="o">.</span><span class="n">tool_calls</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tool_calls</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">message</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span>
+            <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+            <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+            <span class="n">tool_calls</span><span class="o">=</span><span class="n">tool_calls</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">ChatResult</span><span class="p">(</span>
             <span class="n">generations</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">ChatGeneration</span><span class="p">(</span>
-                    <span class="n">message</span><span class="o">=</span><span class="n">AIMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">),</span> <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span>
-                <span class="p">)</span>
+                <span class="n">ChatGeneration</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span> <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">)</span>
             <span class="p">],</span>
             <span class="n">llm_output</span><span class="o">=</span><span class="n">llm_output</span><span class="p">,</span>
         <span class="p">)</span>
@@ -586,15 +915,45 @@
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
-        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_request</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">events</span><span class="p">():</span>
-            <span class="n">delta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">chat_stream_to_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">delta</span><span class="p">))</span>
-            <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
-            <span class="k">yield</span> <span class="n">chunk</span></div>
+            <span class="n">event_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">is_chat_stream_end</span><span class="p">(</span><span class="n">event_data</span><span class="p">):</span>  <span class="c1"># still streaming</span>
+                <span class="n">delta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">chat_stream_to_text</span><span class="p">(</span><span class="n">event_data</span><span class="p">)</span>
+                <span class="n">chunk</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">delta</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
+                    <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">delta</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
+                <span class="k">yield</span> <span class="n">chunk</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># stream end</span>
+                <span class="n">generation_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">chat_stream_generation_info</span><span class="p">(</span><span class="n">event_data</span><span class="p">)</span>
+                <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">if</span> <span class="n">tool_calls</span> <span class="o">:=</span> <span class="n">generation_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">):</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_provider</span><span class="o">.</span><span class="n">chat_stream_to_text</span><span class="p">(</span><span class="n">event_data</span><span class="p">)</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
+                            <span class="n">ToolCallChunk</span><span class="p">(</span>
+                                <span class="n">name</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+                                <span class="n">args</span><span class="o">=</span><span class="n">tool_call</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
+                                <span class="nb">id</span><span class="o">=</span><span class="n">tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
+                                <span class="n">index</span><span class="o">=</span><span class="n">tool_call</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
+                            <span class="p">)</span>
+                            <span class="k">for</span> <span class="n">tool_call</span> <span class="ow">in</span> <span class="n">tool_calls</span>
+                        <span class="p">]</span>
+                    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">content</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                    <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
+                    <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+                    <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">yield</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
+                    <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
+                    <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+                <span class="p">)</span></div>
 </pre></div>
 
             </div>
@@ -603,7 +962,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 25, 2024.
+                                on Jul 26, 2024.
                 </footer>
             </div>
         </div>

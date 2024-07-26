@@ -242,6 +242,7 @@
 
 <span class="kn">import</span> <span class="nn">base64</span>
 <span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
@@ -316,6 +317,41 @@
     <span class="k">return</span>
 
 
+<span class="k">def</span> <span class="nf">_results_to_docs</span><span class="p">(</span><span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">_results_to_docs_and_scores</span><span class="p">(</span><span class="n">results</span><span class="p">)]</span>
+
+
+<span class="k">def</span> <span class="nf">_results_to_docs_and_scores</span><span class="p">(</span><span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+    <span class="n">final_res</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">responses</span><span class="p">,</span> <span class="n">blobs</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">responses</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="ow">and</span> <span class="s2">&quot;FindDescriptor&quot;</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="ow">and</span> <span class="s2">&quot;entities&quot;</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;FindDescriptor&quot;</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="n">result_entities</span> <span class="o">=</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;FindDescriptor&quot;</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span>
+            <span class="c1"># result_blobs = blobs</span>
+            <span class="k">for</span> <span class="n">ent</span> <span class="ow">in</span> <span class="n">result_entities</span><span class="p">:</span>
+                <span class="n">distance</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">ent</span><span class="p">[</span><span class="s2">&quot;_distance&quot;</span><span class="p">],</span> <span class="mi">10</span><span class="p">)</span>
+                <span class="n">txt_contents</span> <span class="o">=</span> <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">INVALID_DOC_METADATA_KEYS</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">ent</span><span class="p">:</span>
+                        <span class="k">del</span> <span class="n">ent</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+                <span class="n">props</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="n">mkey</span><span class="p">:</span> <span class="n">mval</span>
+                    <span class="k">for</span> <span class="n">mkey</span><span class="p">,</span> <span class="n">mval</span> <span class="ow">in</span> <span class="n">ent</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="n">mval</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">INVALID_METADATA_VALUE</span>
+                <span class="p">}</span>
+
+                <span class="n">final_res</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="p">(</span><span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">txt_contents</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">props</span><span class="p">),</span> <span class="n">distance</span><span class="p">)</span>
+                <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No results returned. Error while parsing results: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">final_res</span>
+
+
 <div class="viewcode-block" id="VDMS_Client"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS_Client.html#langchain_community.vectorstores.vdms.VDMS_Client">[docs]</a><span class="k">def</span> <span class="nf">VDMS_Client</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;localhost&quot;</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">55555</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">vdms</span><span class="o">.</span><span class="n">vdms</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;VDMS client for the VDMS server.</span>
 
@@ -362,7 +398,7 @@
 <span class="sd">    Example:</span>
 <span class="sd">        .. code-block:: python</span>
 
-<span class="sd">            from langchain_community.embeddings import HuggingFaceEmbeddings</span>
+<span class="sd">            from langchain_huggingface import HuggingFaceEmbeddings</span>
 <span class="sd">            from langchain_community.vectorstores.vdms import VDMS, VDMS_Client</span>
 
 <span class="sd">            vectorstore = VDMS(</span>
@@ -383,19 +419,20 @@
         <span class="n">distance_strategy</span><span class="p">:</span> <span class="n">DISTANCE_METRICS</span> <span class="o">=</span> <span class="s2">&quot;L2&quot;</span><span class="p">,</span>
         <span class="n">engine</span><span class="p">:</span> <span class="n">ENGINES</span> <span class="o">=</span> <span class="s2">&quot;FaissFlat&quot;</span><span class="p">,</span>
         <span class="n">relevance_score_fn</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">embedding_dimensions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Check required parameters</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">client</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_engine</span> <span class="o">=</span> <span class="n">engine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span> <span class="o">=</span> <span class="n">distance_strategy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">embedding</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_check_required_inputs</span><span class="p">(</span><span class="n">collection_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_required_inputs</span><span class="p">(</span><span class="n">collection_name</span><span class="p">,</span> <span class="n">embedding_dimensions</span><span class="p">)</span>
 
         <span class="c1"># Update other parameters</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">override_relevance_score_fn</span> <span class="o">=</span> <span class="n">relevance_score_fn</span>
 
         <span class="c1"># Initialize collection</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_collection_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__add_set</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_collection_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_set</span><span class="p">(</span>
             <span class="n">collection_name</span><span class="p">,</span>
             <span class="n">engine</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_engine</span><span class="p">,</span>
             <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">distance_strategy</span><span class="p">,</span>
@@ -412,6 +449,14 @@
             <span class="n">p_str</span> <span class="o">=</span> <span class="s2">&quot;Must provide `embedding` which is expected&quot;</span>
             <span class="n">p_str</span> <span class="o">+=</span> <span class="s2">&quot; to be an Embeddings object&quot;</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">p_str</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_embed_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">paths</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_video&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">embed_video</span><span class="p">(</span><span class="n">paths</span><span class="o">=</span><span class="n">paths</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Must provide `embedding` which has attribute `embed_video`&quot;</span>
+            <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_embed_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uris</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_image&quot;</span><span class="p">):</span>
@@ -465,10 +510,10 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">override_relevance_score_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;normalize_distance&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score</span><span class="p">(</span>
-            <span class="n">query</span><span class="p">,</span>
-            <span class="n">k</span><span class="p">,</span>
-            <span class="n">fetch_k</span><span class="p">,</span>
-            <span class="nb">filter</span><span class="p">,</span>
+            <span class="n">query</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -482,7 +527,7 @@
                 <span class="p">)</span>
         <span class="k">return</span> <span class="n">docs_and_rel_scores</span>
 
-    <span class="k">def</span> <span class="nf">__add</span><span class="p">(</span>
+<div class="viewcode-block" id="VDMS.add"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS.html#langchain_community.vectorstores.vdms.VDMS.add">[docs]</a>    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
@@ -513,9 +558,9 @@
 
         <span class="n">response</span><span class="p">,</span> <span class="n">response_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__run_vdms_query</span><span class="p">(</span><span class="n">all_queries</span><span class="p">,</span> <span class="n">all_blobs</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">inserted_ids</span>
+        <span class="k">return</span> <span class="n">inserted_ids</span></div>
 
-    <span class="k">def</span> <span class="nf">__add_set</span><span class="p">(</span>
+<div class="viewcode-block" id="VDMS.add_set"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS.html#langchain_community.vectorstores.vdms.VDMS.add_set">[docs]</a>    <span class="k">def</span> <span class="nf">add_set</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">engine</span><span class="p">:</span> <span class="n">ENGINES</span> <span class="o">=</span> <span class="s2">&quot;FaissFlat&quot;</span><span class="p">,</span>
@@ -534,7 +579,7 @@
         <span class="k">if</span> <span class="s2">&quot;FailedCommand&quot;</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to add collection </span><span class="si">{</span><span class="n">collection_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">collection_name</span>
+        <span class="k">return</span> <span class="n">collection_name</span></div>
 
     <span class="k">def</span> <span class="nf">__delete</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -573,6 +618,12 @@
 
         <span class="n">all_queries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="n">response</span><span class="p">,</span> <span class="n">response_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__run_vdms_query</span><span class="p">(</span><span class="n">all_queries</span><span class="p">,</span> <span class="n">all_blobs</span><span class="p">)</span>
+
+        <span class="c1"># Update/store indices after deletion</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="n">_add_descriptorset</span><span class="p">(</span>
+            <span class="s2">&quot;FindDescriptorSet&quot;</span><span class="p">,</span> <span class="n">collection_name</span><span class="p">,</span> <span class="n">storeIndex</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">responseSet</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__run_vdms_query</span><span class="p">([</span><span class="n">query</span><span class="p">],</span> <span class="n">all_blobs</span><span class="p">)</span>
         <span class="k">return</span> <span class="s2">&quot;FindDescriptor&quot;</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">__get_add_query</span><span class="p">(</span>
@@ -605,7 +656,7 @@
 
         <span class="k">if</span> <span class="n">metadata</span><span class="p">:</span>
             <span class="n">props</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">document</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">document</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">]:</span>
             <span class="n">props</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">document</span>
 
         <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">props</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
@@ -755,7 +806,7 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            uris: List of paths to the images to add to the vectorstore.</span>
-<span class="sd">            metadatas: Optional list of metadatas associated with the texts.</span>
+<span class="sd">            metadatas: Optional list of metadatas associated with the images.</span>
 <span class="sd">            ids: Optional list of unique IDs.</span>
 <span class="sd">            batch_size (int): Number of concurrent requests to send to the server.</span>
 <span class="sd">            add_path: Bool to add image path as metadata</span>
@@ -785,8 +836,64 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">_validate_vdms_properties</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metadatas</span><span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">__from</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_from</span><span class="p">(</span>
             <span class="n">texts</span><span class="o">=</span><span class="n">b64_texts</span><span class="p">,</span>
+            <span class="n">embeddings</span><span class="o">=</span><span class="n">embeddings</span><span class="p">,</span>
+            <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
+            <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">ids</span></div>
+
+<div class="viewcode-block" id="VDMS.add_videos"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS.html#langchain_community.vectorstores.vdms.VDMS.add_videos">[docs]</a>    <span class="k">def</span> <span class="nf">add_videos</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">paths</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">texts</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">add_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run videos through the embeddings and add to the vectorstore.</span>
+
+<span class="sd">        Videos are added as embeddings (AddDescriptor) instead of separate</span>
+<span class="sd">        entity (AddVideo) within VDMS to leverage similarity search capability</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            paths: List of paths to the videos to add to the vectorstore.</span>
+<span class="sd">            metadatas: Optional list of text associated with the videos.</span>
+<span class="sd">            metadatas: Optional list of metadatas associated with the videos.</span>
+<span class="sd">            ids: Optional list of unique IDs.</span>
+<span class="sd">            batch_size (int): Number of concurrent requests to send to the server.</span>
+<span class="sd">            add_path: Bool to add video path as metadata</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of ids from adding videos into the vectorstore.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">texts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;&quot;</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">add_path</span> <span class="ow">and</span> <span class="n">metadatas</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">midx</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">paths</span><span class="p">):</span>
+                <span class="n">metadatas</span><span class="p">[</span><span class="n">midx</span><span class="p">][</span><span class="s2">&quot;video_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="k">elif</span> <span class="n">add_path</span><span class="p">:</span>
+            <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+                <span class="n">metadatas</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;video_path&quot;</span><span class="p">:</span> <span class="n">path</span><span class="p">})</span>
+
+        <span class="c1"># Populate IDs</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="n">ids</span> <span class="k">if</span> <span class="n">ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+
+        <span class="c1"># Set embeddings</span>
+        <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_video</span><span class="p">(</span><span class="n">paths</span><span class="o">=</span><span class="n">paths</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">metadatas</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[{}</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_from</span><span class="p">(</span>
+            <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span>
             <span class="n">embeddings</span><span class="o">=</span><span class="n">embeddings</span><span class="p">,</span>
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
@@ -826,7 +933,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">_validate_vdms_properties</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metadatas</span><span class="p">]</span>
 
-        <span class="n">inserted_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__from</span><span class="p">(</span>
+        <span class="n">inserted_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_from</span><span class="p">(</span>
             <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span>
             <span class="n">embeddings</span><span class="o">=</span><span class="n">embeddings</span><span class="p">,</span>
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
@@ -836,7 +943,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">inserted_ids</span></div>
 
-    <span class="k">def</span> <span class="nf">__from</span><span class="p">(</span>
+<div class="viewcode-block" id="VDMS.add_from"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS.html#langchain_community.vectorstores.vdms.VDMS.add_from">[docs]</a>    <span class="k">def</span> <span class="nf">add_from</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">embeddings</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]],</span>
@@ -857,7 +964,7 @@
             <span class="k">if</span> <span class="n">metadatas</span><span class="p">:</span>
                 <span class="n">batch_metadatas</span> <span class="o">=</span> <span class="n">metadatas</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span>
 
-            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__add</span><span class="p">(</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_collection_name</span><span class="p">,</span>
                 <span class="n">embeddings</span><span class="o">=</span><span class="n">batch_embedding_vectors</span><span class="p">,</span>
                 <span class="n">texts</span><span class="o">=</span><span class="n">batch_texts</span><span class="p">,</span>
@@ -871,9 +978,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__update_properties</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_collection_name</span><span class="p">,</span> <span class="n">orig_props</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection_properties</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">inserted_ids</span>
+        <span class="k">return</span> <span class="n">inserted_ids</span></div>
 
-    <span class="k">def</span> <span class="nf">_check_required_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_check_required_inputs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">embedding_dimensions</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="c1"># Check connection to client</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">is_connected</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -896,7 +1005,29 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Must provide embedding function&quot;</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">embedding_dimension</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="s2">&quot;This is a sample sentence.&quot;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">embedding_dimensions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">embedding_dimension</span> <span class="o">=</span> <span class="n">embedding_dimensions</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_query&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">embedding_dimension</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="s2">&quot;This is a sample sentence.&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_image&quot;</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_video&quot;</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;model&quot;</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">embedding_dimension</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">token_embedding</span><span class="o">.</span><span class="n">embedding_dim</span>
+                    <span class="p">)</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">&quot;Embedding dimension needed. Please define embedding_dimensions&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Embedding dimension needed. Please define embedding_dimensions&quot;</span>
+                <span class="p">)</span>
 
         <span class="c1"># Check for properties</span>
         <span class="n">current_props</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_properties</span><span class="p">(</span><span class="n">collection_name</span><span class="p">)</span>
@@ -967,7 +1098,7 @@
         <span class="p">)</span>
         <span class="n">response</span><span class="p">,</span> <span class="n">response_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__run_vdms_query</span><span class="p">([</span><span class="n">query</span><span class="p">],</span> <span class="n">all_blobs</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">normalize</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">normalize</span> <span class="ow">and</span> <span class="n">command_str</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
             <span class="n">max_dist</span> <span class="o">=</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;_distance&quot;</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="n">response</span><span class="p">,</span> <span class="n">response_array</span><span class="p">,</span> <span class="n">max_dist</span></div>
@@ -1009,14 +1140,21 @@
                 <span class="n">results</span><span class="o">=</span><span class="n">results</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">response</span><span class="p">,</span> <span class="n">response_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__run_vdms_query</span><span class="p">([</span><span class="n">query</span><span class="p">])</span>
-            <span class="n">ids_of_interest</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">ent</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span>
-            <span class="p">]</span>
+            <span class="k">if</span> <span class="n">command_str</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">and</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;returned&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">ids_of_interest</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">ent</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span>
+                <span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="p">[],</span> <span class="p">[]</span>
 
             <span class="c1"># (2) Find top fetch_k results</span>
             <span class="n">response</span><span class="p">,</span> <span class="n">response_array</span><span class="p">,</span> <span class="n">max_dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_k_candidates</span><span class="p">(</span>
                 <span class="n">setname</span><span class="p">,</span> <span class="n">fetch_k</span><span class="p">,</span> <span class="n">results</span><span class="p">,</span> <span class="n">all_blobs</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="n">normalize_distance</span>
             <span class="p">)</span>
+            <span class="k">if</span> <span class="n">command_str</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="n">command_str</span> <span class="ow">in</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">and</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;returned&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+            <span class="p">):</span>
+                <span class="k">return</span> <span class="p">[],</span> <span class="p">[]</span>
 
             <span class="c1"># (3) Intersection of (1) &amp; (2) using ids</span>
             <span class="n">new_entities</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1032,7 +1170,7 @@
                 <span class="nb">print</span><span class="p">(</span><span class="n">p_str</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
 
         <span class="k">if</span> <span class="n">normalize_distance</span><span class="p">:</span>
-            <span class="n">max_dist</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="n">max_dist</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">max_dist</span>
+            <span class="n">max_dist</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="n">max_dist</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">]</span> <span class="k">else</span> <span class="n">max_dist</span>
             <span class="k">for</span> <span class="n">ent_idx</span><span class="p">,</span> <span class="n">ent</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">]):</span>
                 <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;_distance&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;_distance&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">max_dist</span>
                 <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">command_str</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">][</span><span class="n">ent_idx</span><span class="p">][</span><span class="s2">&quot;_distance&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ent</span><span class="p">[</span>
@@ -1186,7 +1324,7 @@
 <span class="sd">        among selected documents.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            query: Text to look up documents similar to.</span>
+<span class="sd">            query (str): Query to look up. Text or path for image or video.</span>
 <span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
 <span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
@@ -1203,7 +1341,20 @@
                 <span class="s2">&quot;For MMR search, you must specify an embedding function on&quot;</span> <span class="s2">&quot;creation.&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">embedding_vector</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="c1"># embedding_vector: List[float] = self._embed_query(query)</span>
+        <span class="n">embedding_vector</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_query&quot;</span><span class="p">):</span>
+            <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_image&quot;</span><span class="p">):</span>
+            <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_image</span><span class="p">(</span><span class="n">uris</span><span class="o">=</span><span class="p">[</span><span class="n">query</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_video&quot;</span><span class="p">):</span>
+            <span class="n">embedding_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_video</span><span class="p">(</span><span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">query</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Could not generate embedding for query &#39;</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+            <span class="n">error_msg</span> <span class="o">+=</span> <span class="s2">&quot;If using path for image or video, verify embedding model &quot;</span>
+            <span class="n">error_msg</span> <span class="o">+=</span> <span class="s2">&quot;has callable functions &#39;embed_image&#39; or &#39;embed_video&#39;.&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
         <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_by_vector</span><span class="p">(</span>
             <span class="n">embedding_vector</span><span class="p">,</span>
             <span class="n">k</span><span class="p">,</span>
@@ -1246,19 +1397,27 @@
             <span class="n">include</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;metadatas&quot;</span><span class="p">,</span> <span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="s2">&quot;distances&quot;</span><span class="p">,</span> <span class="s2">&quot;embeddings&quot;</span><span class="p">],</span>
         <span class="p">)</span>
 
-        <span class="n">embedding_list</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">_bytes2embedding</span><span class="p">(</span><span class="n">result</span><span class="p">))</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># No results returned</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">embedding_list</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">_bytes2embedding</span><span class="p">(</span><span class="n">result</span><span class="p">))</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">]</span>
 
-        <span class="n">mmr_selected</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-            <span class="n">embedding_list</span><span class="p">,</span>
-            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
-        <span class="p">)</span>
+            <span class="n">mmr_selected</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+                <span class="n">embedding_list</span><span class="p">,</span>
+                <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="p">)</span>
 
-        <span class="n">candidates</span> <span class="o">=</span> <span class="n">_results_to_docs</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+            <span class="n">candidates</span> <span class="o">=</span> <span class="n">_results_to_docs</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 
-        <span class="n">selected_results</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mmr_selected</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">selected_results</span></div>
+            <span class="n">selected_results</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">r</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mmr_selected</span>
+            <span class="p">]</span>
+            <span class="k">return</span> <span class="n">selected_results</span></div>
 
 <div class="viewcode-block" id="VDMS.max_marginal_relevance_search_with_score"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS.html#langchain_community.vectorstores.vdms.VDMS.max_marginal_relevance_search_with_score">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search_with_score</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1274,7 +1433,7 @@
 <span class="sd">        among selected documents.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            query: Text to look up documents similar to.</span>
+<span class="sd">            query (str): Query to look up. Text or path for image or video.</span>
 <span class="sd">            k: Number of Documents to return. Defaults to 4.</span>
 <span class="sd">            fetch_k: Number of Documents to fetch to pass to MMR algorithm.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
@@ -1291,7 +1450,18 @@
                 <span class="s2">&quot;For MMR search, you must specify an embedding function on&quot;</span> <span class="s2">&quot;creation.&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_query&quot;</span><span class="p">):</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_image&quot;</span><span class="p">):</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_image</span><span class="p">(</span><span class="n">uris</span><span class="o">=</span><span class="p">[</span><span class="n">query</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_video&quot;</span><span class="p">):</span>
+            <span class="n">embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_video</span><span class="p">(</span><span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">query</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">error_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Could not generate embedding for query &#39;</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+            <span class="n">error_msg</span> <span class="o">+=</span> <span class="s2">&quot;If using path for image or video, verify embedding model &quot;</span>
+            <span class="n">error_msg</span> <span class="o">+=</span> <span class="s2">&quot;has callable functions &#39;embed_image&#39; or &#39;embed_video&#39;.&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
         <span class="n">docs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_with_score_by_vector</span><span class="p">(</span>
             <span class="n">embedding</span><span class="p">,</span>
             <span class="n">k</span><span class="p">,</span>
@@ -1334,21 +1504,27 @@
             <span class="n">include</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;metadatas&quot;</span><span class="p">,</span> <span class="s2">&quot;documents&quot;</span><span class="p">,</span> <span class="s2">&quot;distances&quot;</span><span class="p">,</span> <span class="s2">&quot;embeddings&quot;</span><span class="p">],</span>
         <span class="p">)</span>
 
-        <span class="n">embedding_list</span> <span class="o">=</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">_bytes2embedding</span><span class="p">(</span><span class="n">result</span><span class="p">))</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># No results returned</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">embedding_list</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="nb">list</span><span class="p">(</span><span class="n">_bytes2embedding</span><span class="p">(</span><span class="n">result</span><span class="p">))</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">]</span>
 
-        <span class="n">mmr_selected</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
-            <span class="n">embedding_list</span><span class="p">,</span>
-            <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-            <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
-        <span class="p">)</span>
+            <span class="n">mmr_selected</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+                <span class="n">embedding_list</span><span class="p">,</span>
+                <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="p">)</span>
 
-        <span class="n">candidates</span> <span class="o">=</span> <span class="n">_results_to_docs_and_scores</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+            <span class="n">candidates</span> <span class="o">=</span> <span class="n">_results_to_docs_and_scores</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
 
-        <span class="n">selected_results</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mmr_selected</span>
-        <span class="p">]</span>
-        <span class="k">return</span> <span class="n">selected_results</span></div>
+            <span class="n">selected_results</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mmr_selected</span>
+            <span class="p">]</span>
+            <span class="k">return</span> <span class="n">selected_results</span></div>
 
 <div class="viewcode-block" id="VDMS.query_collection_embeddings"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.vdms.VDMS.html#langchain_community.vectorstores.vdms.VDMS.query_collection_embeddings">[docs]</a>    <span class="k">def</span> <span class="nf">query_collection_embeddings</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1402,7 +1578,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run similarity search with VDMS.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            query (str): Query text to search for.</span>
+<span class="sd">            query (str): Query to look up. Text or path for image or video.</span>
 <span class="sd">            k (int): Number of results to return. Defaults to 3.</span>
 <span class="sd">            fetch_k (int): Number of candidates to fetch for knn (&gt;= k).</span>
 <span class="sd">            filter (Optional[Dict[str, str]]): Filter by metadata. Defaults to None.</span>
@@ -1411,7 +1587,7 @@
 <span class="sd">            List[Document]: List of documents most similar to the query text.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score</span><span class="p">(</span>
-            <span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">fetch_k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span> <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span> <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="p">]</span></div>
 
@@ -1453,7 +1629,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Run similarity search with VDMS with distance.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            query (str): Query text to search for.</span>
+<span class="sd">            query (str): Query to look up. Text or path for image or video.</span>
 <span class="sd">            k (int): Number of results to return. Defaults to 3.</span>
 <span class="sd">            fetch_k (int): Number of candidates to fetch for knn (&gt;= k).</span>
 <span class="sd">            filter (Optional[Dict[str, str]]): Filter by metadata. Defaults to None.</span>
@@ -1466,7 +1642,18 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Must provide embedding function&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">query_embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_query&quot;</span><span class="p">):</span>
+                <span class="n">query_embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_image&quot;</span><span class="p">):</span>
+                <span class="n">query_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_image</span><span class="p">(</span><span class="n">uris</span><span class="o">=</span><span class="p">[</span><span class="n">query</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">query</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;embed_video&quot;</span><span class="p">):</span>
+                <span class="n">query_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embed_video</span><span class="p">(</span><span class="n">paths</span><span class="o">=</span><span class="p">[</span><span class="n">query</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">error_msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Could not generate embedding for query &#39;</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+                <span class="n">error_msg</span> <span class="o">+=</span> <span class="s2">&quot;If using path for image or video, verify embedding model &quot;</span>
+                <span class="n">error_msg</span> <span class="o">+=</span> <span class="s2">&quot;has callable functions &#39;embed_image&#39; or &#39;embed_video&#39;.&quot;</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
             <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_collection_embeddings</span><span class="p">(</span>
                 <span class="n">query_embeddings</span><span class="o">=</span><span class="p">[</span><span class="n">query_embedding</span><span class="p">],</span>
                 <span class="n">n_results</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
@@ -1496,10 +1683,10 @@
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List[Tuple[Document, float]]: List of documents most similar to</span>
-<span class="sd">            the query text and cosine distance in float for each.</span>
-<span class="sd">            Lower score represents more similarity.</span>
+<span class="sd">            the query text. Lower score represents more similarity.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;normalize_distance&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># kwargs[&quot;normalize_distance&quot;] = True</span>
 
         <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_collection_embeddings</span><span class="p">(</span>
             <span class="n">query_embeddings</span><span class="o">=</span><span class="p">[</span><span class="n">embedding</span><span class="p">],</span>
@@ -1546,37 +1733,6 @@
 
 
 <span class="c1"># VDMS UTILITY</span>
-
-
-<span class="k">def</span> <span class="nf">_results_to_docs</span><span class="p">(</span><span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
-    <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">_results_to_docs_and_scores</span><span class="p">(</span><span class="n">results</span><span class="p">)]</span>
-
-
-<span class="k">def</span> <span class="nf">_results_to_docs_and_scores</span><span class="p">(</span><span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
-    <span class="n">final_res</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">responses</span><span class="p">,</span> <span class="n">blobs</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="s2">&quot;FindDescriptor&quot;</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="ow">and</span> <span class="s2">&quot;entities&quot;</span> <span class="ow">in</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;FindDescriptor&quot;</span><span class="p">]</span>
-    <span class="p">):</span>
-        <span class="n">result_entities</span> <span class="o">=</span> <span class="n">responses</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;FindDescriptor&quot;</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span>
-        <span class="c1"># result_blobs = blobs</span>
-        <span class="k">for</span> <span class="n">ent</span> <span class="ow">in</span> <span class="n">result_entities</span><span class="p">:</span>
-            <span class="n">distance</span> <span class="o">=</span> <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;_distance&quot;</span><span class="p">]</span>
-            <span class="n">txt_contents</span> <span class="o">=</span> <span class="n">ent</span><span class="p">[</span><span class="s2">&quot;content&quot;</span><span class="p">]</span>
-            <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">INVALID_DOC_METADATA_KEYS</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">ent</span><span class="p">:</span>
-                    <span class="k">del</span> <span class="n">ent</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
-            <span class="n">props</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="n">mkey</span><span class="p">:</span> <span class="n">mval</span>
-                <span class="k">for</span> <span class="n">mkey</span><span class="p">,</span> <span class="n">mval</span> <span class="ow">in</span> <span class="n">ent</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-                <span class="k">if</span> <span class="n">mval</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">INVALID_METADATA_VALUE</span>
-            <span class="p">}</span>
-
-            <span class="n">final_res</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="p">(</span><span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">txt_contents</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">props</span><span class="p">),</span> <span class="n">distance</span><span class="p">)</span>
-            <span class="p">)</span>
-    <span class="k">return</span> <span class="n">final_res</span>
 
 
 <span class="k">def</span> <span class="nf">_add_descriptor</span><span class="p">(</span>
@@ -1828,7 +1984,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 25, 2024.
+                                on Jul 26, 2024.
                 </footer>
             </div>
         </div>
