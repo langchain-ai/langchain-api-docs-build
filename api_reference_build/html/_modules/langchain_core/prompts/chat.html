@@ -470,7 +470,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;variable </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">variable_name</span><span class="si">}</span><span class="s2"> should be a list of base messages, &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2"> of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
         <span class="n">value</span> <span class="o">=</span> <span class="n">convert_to_messages</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_messages</span><span class="p">:</span>
@@ -1060,11 +1060,17 @@
 
 <span class="sd">    Examples:</span>
 
+<span class="sd">        .. versionchanged:: 0.2.24</span>
+
+<span class="sd">            You can pass any Message-like formats supported by</span>
+<span class="sd">            ``ChatPromptTemplate.from_messages()`` directly to ``ChatPromptTemplate()``</span>
+<span class="sd">            init.</span>
+
 <span class="sd">        .. code-block:: python</span>
 
 <span class="sd">            from langchain_core.prompts import ChatPromptTemplate</span>
 
-<span class="sd">            template = ChatPromptTemplate.from_messages([</span>
+<span class="sd">            template = ChatPromptTemplate([</span>
 <span class="sd">                (&quot;system&quot;, &quot;You are a helpful AI bot. Your name is {name}.&quot;),</span>
 <span class="sd">                (&quot;human&quot;, &quot;Hello, how are you doing?&quot;),</span>
 <span class="sd">                (&quot;ai&quot;, &quot;I&#39;m doing well, thanks!&quot;),</span>
@@ -1095,7 +1101,7 @@
 <span class="sd">            # you can initialize the template with a MessagesPlaceholder</span>
 <span class="sd">            # either using the class directly or with the shorthand tuple syntax:</span>
 
-<span class="sd">            template = ChatPromptTemplate.from_messages([</span>
+<span class="sd">            template = ChatPromptTemplate([</span>
 <span class="sd">                (&quot;system&quot;, &quot;You are a helpful AI bot.&quot;),</span>
 <span class="sd">                # Means the template will receive an optional list of messages under</span>
 <span class="sd">                # the &quot;conversation&quot; key</span>
@@ -1137,7 +1143,7 @@
 
 <span class="sd">            from langchain_core.prompts import ChatPromptTemplate</span>
 
-<span class="sd">            template = ChatPromptTemplate.from_messages([</span>
+<span class="sd">            template = ChatPromptTemplate([</span>
 <span class="sd">                (&quot;system&quot;, &quot;You are a helpful AI bot. Your name is Carl.&quot;),</span>
 <span class="sd">                (&quot;human&quot;, &quot;{user_input}&quot;),</span>
 <span class="sd">            ])</span>
@@ -1160,6 +1166,86 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;List of messages consisting of either message prompt templates or messages.&quot;&quot;&quot;</span>
     <span class="n">validate_template</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether or not to try validating the template.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">messages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">MessageLikeRepresentation</span><span class="p">],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">template_format</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;f-string&quot;</span><span class="p">,</span> <span class="s2">&quot;mustache&quot;</span><span class="p">,</span> <span class="s2">&quot;jinja2&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;f-string&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a chat prompt template from a variety of message formats.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            messages: sequence of message representations.</span>
+<span class="sd">                  A message can be represented using the following formats:</span>
+<span class="sd">                  (1) BaseMessagePromptTemplate, (2) BaseMessage, (3) 2-tuple of</span>
+<span class="sd">                  (message type, template); e.g., (&quot;human&quot;, &quot;{user_input}&quot;),</span>
+<span class="sd">                  (4) 2-tuple of (message class, template), (4) a string which is</span>
+<span class="sd">                  shorthand for (&quot;human&quot;, template); e.g., &quot;{user_input}&quot;.</span>
+<span class="sd">            template_format: format of the template. Defaults to &quot;f-string&quot;.</span>
+<span class="sd">            input_variables: A list of the names of the variables whose values are</span>
+<span class="sd">                required as inputs to the prompt.</span>
+<span class="sd">            optional_variables: A list of the names of the variables that are optional</span>
+<span class="sd">                in the prompt.</span>
+<span class="sd">            partial_variables: A dictionary of the partial variables the prompt</span>
+<span class="sd">                template carries. Partial variables populate the template so that you</span>
+<span class="sd">                don&#39;t need to pass them in every time you call the prompt.</span>
+<span class="sd">            validate_template: Whether to validate the template.</span>
+<span class="sd">            input_types: A dictionary of the types of the variables the prompt template</span>
+<span class="sd">                expects. If not provided, all variables are assumed to be strings.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A chat prompt template.</span>
+
+<span class="sd">        Examples:</span>
+
+<span class="sd">            Instantiation from a list of message templates:</span>
+
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                template = ChatPromptTemplate([</span>
+<span class="sd">                    (&quot;human&quot;, &quot;Hello, how are you?&quot;),</span>
+<span class="sd">                    (&quot;ai&quot;, &quot;I&#39;m doing well, thanks!&quot;),</span>
+<span class="sd">                    (&quot;human&quot;, &quot;That&#39;s good to hear.&quot;),</span>
+<span class="sd">                ])</span>
+
+<span class="sd">            Instantiation from mixed message formats:</span>
+
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                template = ChatPromptTemplate([</span>
+<span class="sd">                    SystemMessage(content=&quot;hello&quot;),</span>
+<span class="sd">                    (&quot;human&quot;, &quot;Hello, how are you?&quot;),</span>
+<span class="sd">                ])</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_messages</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_convert_to_message</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">template_format</span><span class="p">)</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Automatically infer input variables from messages</span>
+        <span class="n">input_vars</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">optional_variables</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">partial_vars</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">_message</span> <span class="ow">in</span> <span class="n">_messages</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_message</span><span class="p">,</span> <span class="n">MessagesPlaceholder</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_message</span><span class="o">.</span><span class="n">optional</span><span class="p">:</span>
+                <span class="n">partial_vars</span><span class="p">[</span><span class="n">_message</span><span class="o">.</span><span class="n">variable_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">optional_variables</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">_message</span><span class="o">.</span><span class="n">variable_name</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">_message</span><span class="p">,</span> <span class="p">(</span><span class="n">BaseChatPromptTemplate</span><span class="p">,</span> <span class="n">BaseMessagePromptTemplate</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="n">input_vars</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_message</span><span class="o">.</span><span class="n">input_variables</span><span class="p">)</span>
+
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="o">**</span><span class="nb">dict</span><span class="p">(</span>
+                <span class="n">input_variables</span><span class="o">=</span><span class="nb">sorted</span><span class="p">(</span><span class="n">input_vars</span><span class="p">),</span>
+                <span class="n">optional_variables</span><span class="o">=</span><span class="nb">sorted</span><span class="p">(</span><span class="n">optional_variables</span><span class="p">),</span>
+                <span class="n">partial_variables</span><span class="o">=</span><span class="n">partial_vars</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">cast</span><span class="p">(</span><span class="n">Type</span><span class="p">[</span><span class="n">ChatPromptTemplate</span><span class="p">],</span> <span class="nb">super</span><span class="p">())</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">messages</span><span class="o">=</span><span class="n">_messages</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_lc_namespace</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
@@ -1337,29 +1423,7 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            a chat prompt template.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">_messages</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">_convert_to_message</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">template_format</span><span class="p">)</span> <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span>
-        <span class="p">]</span>
-
-        <span class="c1"># Automatically infer input variables from messages</span>
-        <span class="n">input_vars</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="n">optional_variables</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="n">partial_vars</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">_message</span> <span class="ow">in</span> <span class="n">_messages</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_message</span><span class="p">,</span> <span class="n">MessagesPlaceholder</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_message</span><span class="o">.</span><span class="n">optional</span><span class="p">:</span>
-                <span class="n">partial_vars</span><span class="p">[</span><span class="n">_message</span><span class="o">.</span><span class="n">variable_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-                <span class="n">optional_variables</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">_message</span><span class="o">.</span><span class="n">variable_name</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span>
-                <span class="n">_message</span><span class="p">,</span> <span class="p">(</span><span class="n">BaseChatPromptTemplate</span><span class="p">,</span> <span class="n">BaseMessagePromptTemplate</span><span class="p">)</span>
-            <span class="p">):</span>
-                <span class="n">input_vars</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_message</span><span class="o">.</span><span class="n">input_variables</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">input_variables</span><span class="o">=</span><span class="nb">sorted</span><span class="p">(</span><span class="n">input_vars</span><span class="p">),</span>
-            <span class="n">optional_variables</span><span class="o">=</span><span class="nb">sorted</span><span class="p">(</span><span class="n">optional_variables</span><span class="p">),</span>
-            <span class="n">messages</span><span class="o">=</span><span class="n">_messages</span><span class="p">,</span>
-            <span class="n">partial_variables</span><span class="o">=</span><span class="n">partial_vars</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">template_format</span><span class="o">=</span><span class="n">template_format</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="ChatPromptTemplate.format_messages"><a class="viewcode-back" href="../../../prompts/langchain_core.prompts.chat.ChatPromptTemplate.html#langchain.agents.schema.ChatPromptTemplate.format_messages">[docs]</a>    <span class="k">def</span> <span class="nf">format_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Format the chat template into a list of finalized messages.</span>
@@ -1640,7 +1704,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 26, 2024.
+                                on Jul 27, 2024.
                 </footer>
             </div>
         </div>

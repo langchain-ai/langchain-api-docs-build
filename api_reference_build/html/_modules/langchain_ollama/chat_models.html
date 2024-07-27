@@ -586,7 +586,7 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Message</span><span class="p">]:</span>
         <span class="n">ollama_messages</span><span class="p">:</span> <span class="n">List</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">:</span>
-            <span class="n">role</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">role</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="s2">&quot;tool&quot;</span><span class="p">]</span>
             <span class="n">tool_call_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="n">tool_calls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
@@ -623,11 +623,13 @@
                         <span class="n">image_url</span> <span class="o">=</span> <span class="kc">None</span>
                         <span class="n">temp_image_url</span> <span class="o">=</span> <span class="n">content_part</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;image_url&quot;</span><span class="p">)</span>
                         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_image_url</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-                            <span class="n">image_url</span> <span class="o">=</span> <span class="n">content_part</span><span class="p">[</span><span class="s2">&quot;image_url&quot;</span><span class="p">]</span>
-                        <span class="k">elif</span> <span class="p">(</span>
-                            <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_image_url</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;url&quot;</span> <span class="ow">in</span> <span class="n">temp_image_url</span>
-                        <span class="p">):</span>
                             <span class="n">image_url</span> <span class="o">=</span> <span class="n">temp_image_url</span>
+                        <span class="k">elif</span> <span class="p">(</span>
+                            <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_image_url</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+                            <span class="ow">and</span> <span class="s2">&quot;url&quot;</span> <span class="ow">in</span> <span class="n">temp_image_url</span>
+                            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">temp_image_url</span><span class="p">[</span><span class="s2">&quot;url&quot;</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span>
+                        <span class="p">):</span>
+                            <span class="n">image_url</span> <span class="o">=</span> <span class="n">temp_image_url</span><span class="p">[</span><span class="s2">&quot;url&quot;</span><span class="p">]</span>
                         <span class="k">else</span><span class="p">:</span>
                             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                                 <span class="s2">&quot;Only string image_url or dict with string &#39;url&#39; &quot;</span>
@@ -648,15 +650,16 @@
                             <span class="s2">&quot;Must either have type &#39;text&#39; or type &#39;image_url&#39; &quot;</span>
                             <span class="s2">&quot;with a string &#39;image_url&#39; field.&quot;</span>
                         <span class="p">)</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="c1"># Should convert to ollama.Message once role includes tool, and tool_call_id is in Message # noqa: E501</span>
+            <span class="n">msg</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
                 <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">content</span><span class="p">,</span>
                 <span class="s2">&quot;images&quot;</span><span class="p">:</span> <span class="n">images</span><span class="p">,</span>
             <span class="p">}</span>
+            <span class="k">if</span> <span class="n">tool_calls</span><span class="p">:</span>
+                <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_calls</span>  <span class="c1"># type: ignore</span>
             <span class="k">if</span> <span class="n">tool_call_id</span><span class="p">:</span>
                 <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;tool_call_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_call_id</span>
-            <span class="k">if</span> <span class="n">tool_calls</span><span class="p">:</span>
-                <span class="n">msg</span><span class="p">[</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tool_calls</span>
             <span class="n">ollama_messages</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">ollama_messages</span>
@@ -965,7 +968,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 26, 2024.
+                                on Jul 27, 2024.
                 </footer>
             </div>
         </div>
