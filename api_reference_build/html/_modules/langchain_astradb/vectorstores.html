@@ -240,6 +240,8 @@
   <h1>Source code for langchain_astradb.vectorstores</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
@@ -259,20 +261,26 @@
 <span class="p">)</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astrapy.authentication</span> <span class="kn">import</span> <span class="n">EmbeddingHeadersProvider</span><span class="p">,</span> <span class="n">TokenProvider</span>
 <span class="kn">from</span> <span class="nn">astrapy.db</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AstraDB</span> <span class="k">as</span> <span class="n">AstraDBClient</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">astrapy.db</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncAstraDB</span> <span class="k">as</span> <span class="n">AsyncAstraDBClient</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">astrapy.exceptions</span> <span class="kn">import</span> <span class="n">InsertManyException</span>
 <span class="kn">from</span> <span class="nn">astrapy.info</span> <span class="kn">import</span> <span class="n">CollectionVectorServiceOptions</span>
+<span class="kn">from</span> <span class="nn">astrapy.results</span> <span class="kn">import</span> <span class="n">UpdateResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.utils</span> <span class="kn">import</span> <span class="n">gather_with_concurrency</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils.iter</span> <span class="kn">import</span> <span class="n">batch_iterate</span>
 <span class="kn">from</span> <span class="nn">langchain_core.vectorstores</span> <span class="kn">import</span> <span class="n">VectorStore</span>
 
 <span class="kn">from</span> <span class="nn">langchain_astradb.utils.astradb</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_DOCUMENT_CHUNK_SIZE</span><span class="p">,</span>
+    <span class="n">MAX_CONCURRENT_DOCUMENT_DELETIONS</span><span class="p">,</span>
+    <span class="n">MAX_CONCURRENT_DOCUMENT_INSERTIONS</span><span class="p">,</span>
+    <span class="n">MAX_CONCURRENT_DOCUMENT_REPLACEMENTS</span><span class="p">,</span>
     <span class="n">SetupMode</span><span class="p">,</span>
     <span class="n">_AstraDBCollectionEnvironment</span><span class="p">,</span>
 <span class="p">)</span>
@@ -281,17 +289,6 @@
 <span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)</span>
 <span class="n">U</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;U&quot;</span><span class="p">)</span>
 <span class="n">DocDict</span> <span class="o">=</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>  <span class="c1"># dicts expressing entries to insert</span>
-
-<span class="c1"># Batch/concurrency default values (if parameters not provided):</span>
-<span class="c1"># Size of batches for bulk insertions:</span>
-<span class="c1">#   (20 is the max batch size for the HTTP API at the time of writing)</span>
-<span class="n">DEFAULT_BATCH_SIZE</span> <span class="o">=</span> <span class="mi">20</span>
-<span class="c1"># Number of threads to insert batches concurrently:</span>
-<span class="n">DEFAULT_BULK_INSERT_BATCH_CONCURRENCY</span> <span class="o">=</span> <span class="mi">16</span>
-<span class="c1"># Number of threads in a batch to insert pre-existing entries:</span>
-<span class="n">DEFAULT_BULK_INSERT_OVERWRITE_CONCURRENCY</span> <span class="o">=</span> <span class="mi">10</span>
-<span class="c1"># Number of threads (for deleting multiple rows concurrently):</span>
-<span class="n">DEFAULT_BULK_DELETE_CONCURRENCY</span> <span class="o">=</span> <span class="mi">20</span>
 
 <span class="c1"># indexing options when creating a collection</span>
 <span class="n">DEFAULT_INDEXING_OPTIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;allow&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;metadata&quot;</span><span class="p">]}</span>
@@ -378,8 +375,9 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">token</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">token</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TokenProvider</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">api_endpoint</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">environment</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">astra_db_client</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AstraDBClient</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">async_astra_db_client</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncAstraDBClient</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">namespace</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -396,7 +394,9 @@
         <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
             <span class="n">CollectionVectorServiceOptions</span>
         <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection_embedding_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collection_embedding_api_key</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EmbeddingHeadersProvider</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Wrapper around DataStax Astra DB for vector-store workloads.</span>
 
@@ -426,15 +426,26 @@
 <span class="sd">                `collection_vector_service_options` and</span>
 <span class="sd">                `collection_embedding_api_key` cannot be provided.</span>
 <span class="sd">            collection_name: name of the Astra DB collection to create/use.</span>
-<span class="sd">            token: API token for Astra DB usage. If not provided, the environment</span>
-<span class="sd">                variable ASTRA_DB_APPLICATION_TOKEN is inspected.</span>
+<span class="sd">            token: API token for Astra DB usage, either in the form of a string</span>
+<span class="sd">                or a subclass of `astrapy.authentication.TokenProvider`.</span>
+<span class="sd">                If not provided, the environment variable</span>
+<span class="sd">                ASTRA_DB_APPLICATION_TOKEN is inspected.</span>
 <span class="sd">            api_endpoint: full URL to the API endpoint, such as</span>
 <span class="sd">                `https://&lt;DB-ID&gt;-us-east1.apps.astra.datastax.com`. If not provided,</span>
 <span class="sd">                the environment variable ASTRA_DB_API_ENDPOINT is inspected.</span>
-<span class="sd">            astra_db_client: *alternative to token+api_endpoint*,</span>
-<span class="sd">                you can pass an already-created &#39;astrapy.db.AstraDB&#39; instance.</span>
-<span class="sd">            async_astra_db_client: *alternative to token+api_endpoint*,</span>
-<span class="sd">                you can pass an already-created &#39;astrapy.db.AsyncAstraDB&#39; instance.</span>
+<span class="sd">            environment: a string specifying the environment of the target Data API.</span>
+<span class="sd">                If omitted, defaults to &quot;prod&quot; (Astra DB production).</span>
+<span class="sd">                Other values are in `astrapy.constants.Environment` enum class.</span>
+<span class="sd">            astra_db_client:</span>
+<span class="sd">                *DEPRECATED starting from version 0.3.5.*</span>
+<span class="sd">                *Please use &#39;token&#39;, &#39;api_endpoint&#39; and optionally &#39;environment&#39;.*</span>
+<span class="sd">                you can pass an already-created &#39;astrapy.db.AstraDB&#39; instance</span>
+<span class="sd">                (alternatively to &#39;token&#39;, &#39;api_endpoint&#39; and &#39;environment&#39;).</span>
+<span class="sd">            async_astra_db_client:</span>
+<span class="sd">                *DEPRECATED starting from version 0.3.5.*</span>
+<span class="sd">                *Please use &#39;token&#39;, &#39;api_endpoint&#39; and optionally &#39;environment&#39;.*</span>
+<span class="sd">                you can pass an already-created &#39;astrapy.db.AsyncAstraDB&#39; instance</span>
+<span class="sd">                (alternatively to &#39;token&#39;, &#39;api_endpoint&#39; and &#39;environment&#39;).</span>
 <span class="sd">            namespace: namespace (aka keyspace) where the collection is created.</span>
 <span class="sd">                If not provided, the environment variable ASTRA_DB_KEYSPACE is</span>
 <span class="sd">                inspected. Defaults to the database&#39;s &quot;default namespace&quot;.</span>
@@ -442,13 +453,14 @@
 <span class="sd">                If left out, it will use Astra DB API&#39;s defaults (i.e. &quot;cosine&quot; - but,</span>
 <span class="sd">                for performance reasons, &quot;dot_product&quot; is suggested if embeddings are</span>
 <span class="sd">                normalized to one).</span>
-<span class="sd">            batch_size: Size of batches for bulk insertions.</span>
+<span class="sd">            batch_size: Size of document chunks for each individual insertion</span>
+<span class="sd">                API request. If not provided, astrapy defaults are applied.</span>
 <span class="sd">            bulk_insert_batch_concurrency: Number of threads or coroutines to insert</span>
 <span class="sd">                batches concurrently.</span>
-<span class="sd">            bulk_insert_overwrite_concurrency: Number of threads  or coroutines in a</span>
+<span class="sd">            bulk_insert_overwrite_concurrency: Number of threads or coroutines in a</span>
 <span class="sd">                batch to insert pre-existing entries.</span>
-<span class="sd">            bulk_delete_concurrency: Number of threads (for deleting multiple rows</span>
-<span class="sd">                concurrently).</span>
+<span class="sd">            bulk_delete_concurrency: Number of threads or coroutines for</span>
+<span class="sd">                multiple-entry deletes.</span>
 <span class="sd">            pre_delete_collection: whether to delete the collection before creating it.</span>
 <span class="sd">                If False and the collection already exists, the collection will be used</span>
 <span class="sd">                as is.</span>
@@ -465,8 +477,10 @@
 <span class="sd">                embeddings within Astra DB. If passing this parameter, `embedding`</span>
 <span class="sd">                cannot be provided.</span>
 <span class="sd">            collection_embedding_api_key: for usage of server-side embeddings</span>
-<span class="sd">                within Astra DB, with this parameter one can supply an API Key</span>
+<span class="sd">                within Astra DB. With this parameter one can supply an API Key</span>
 <span class="sd">                that will be passed to Astra DB with each data request.</span>
+<span class="sd">                This parameter can be either a string or a subclass of</span>
+<span class="sd">                `astrapy.authentication.EmbeddingHeadersProvider`.</span>
 <span class="sd">                This is useful when the service is configured for the collection,</span>
 <span class="sd">                but no corresponding secret is stored within</span>
 <span class="sd">                Astra&#39;s key management system.</span>
@@ -518,29 +532,29 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">collection_name</span> <span class="o">=</span> <span class="n">collection_name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">token</span> <span class="o">=</span> <span class="n">token</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_endpoint</span> <span class="o">=</span> <span class="n">api_endpoint</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">environment</span> <span class="o">=</span> <span class="n">environment</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">namespace</span> <span class="o">=</span> <span class="n">namespace</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection_vector_service_options</span> <span class="o">=</span> <span class="n">collection_vector_service_options</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection_embedding_api_key</span> <span class="o">=</span> <span class="n">collection_embedding_api_key</span>
         <span class="c1"># Concurrency settings</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="n">DEFAULT_BATCH_SIZE</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="n">DEFAULT_DOCUMENT_CHUNK_SIZE</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_batch_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">bulk_insert_batch_concurrency</span> <span class="ow">or</span> <span class="n">DEFAULT_BULK_INSERT_BATCH_CONCURRENCY</span>
+            <span class="n">bulk_insert_batch_concurrency</span> <span class="ow">or</span> <span class="n">MAX_CONCURRENT_DOCUMENT_INSERTIONS</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_overwrite_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">bulk_insert_overwrite_concurrency</span>
-            <span class="ow">or</span> <span class="n">DEFAULT_BULK_INSERT_OVERWRITE_CONCURRENCY</span>
+            <span class="n">bulk_insert_overwrite_concurrency</span> <span class="ow">or</span> <span class="n">MAX_CONCURRENT_DOCUMENT_REPLACEMENTS</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bulk_delete_concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">bulk_delete_concurrency</span> <span class="ow">or</span> <span class="n">DEFAULT_BULK_DELETE_CONCURRENCY</span>
+            <span class="n">bulk_delete_concurrency</span> <span class="ow">or</span> <span class="n">MAX_CONCURRENT_DOCUMENT_DELETIONS</span>
         <span class="p">)</span>
         <span class="c1"># &quot;vector-related&quot; settings</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">metric</span> <span class="o">=</span> <span class="n">metric</span>
-        <span class="n">embedding_dimension</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">embedding_dimension_m</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Awaitable</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">setup_mode</span> <span class="o">==</span> <span class="n">SetupMode</span><span class="o">.</span><span class="n">ASYNC</span><span class="p">:</span>
-                <span class="n">embedding_dimension</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_embedding_dimension</span><span class="p">()</span>
+                <span class="n">embedding_dimension_m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_embedding_dimension</span><span class="p">()</span>
             <span class="k">elif</span> <span class="n">setup_mode</span> <span class="o">==</span> <span class="n">SetupMode</span><span class="o">.</span><span class="n">SYNC</span> <span class="ow">or</span> <span class="n">setup_mode</span> <span class="o">==</span> <span class="n">SetupMode</span><span class="o">.</span><span class="n">OFF</span><span class="p">:</span>
-                <span class="n">embedding_dimension</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_embedding_dimension</span><span class="p">()</span>
+                <span class="n">embedding_dimension_m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_embedding_dimension</span><span class="p">()</span>
 
         <span class="c1"># indexing policy setting</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">indexing_policy</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_metadata_indexing_policy</span><span class="p">(</span>
@@ -551,24 +565,21 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span> <span class="o">=</span> <span class="n">_AstraDBCollectionEnvironment</span><span class="p">(</span>
             <span class="n">collection_name</span><span class="o">=</span><span class="n">collection_name</span><span class="p">,</span>
-            <span class="n">token</span><span class="o">=</span><span class="n">token</span><span class="p">,</span>
-            <span class="n">api_endpoint</span><span class="o">=</span><span class="n">api_endpoint</span><span class="p">,</span>
+            <span class="n">token</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">token</span><span class="p">,</span>
+            <span class="n">api_endpoint</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">api_endpoint</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="p">,</span>
             <span class="n">astra_db_client</span><span class="o">=</span><span class="n">astra_db_client</span><span class="p">,</span>
             <span class="n">async_astra_db_client</span><span class="o">=</span><span class="n">async_astra_db_client</span><span class="p">,</span>
-            <span class="n">namespace</span><span class="o">=</span><span class="n">namespace</span><span class="p">,</span>
+            <span class="n">namespace</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">namespace</span><span class="p">,</span>
             <span class="n">setup_mode</span><span class="o">=</span><span class="n">setup_mode</span><span class="p">,</span>
             <span class="n">pre_delete_collection</span><span class="o">=</span><span class="n">pre_delete_collection</span><span class="p">,</span>
-            <span class="n">embedding_dimension</span><span class="o">=</span><span class="n">embedding_dimension</span><span class="p">,</span>
-            <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
+            <span class="n">embedding_dimension</span><span class="o">=</span><span class="n">embedding_dimension_m</span><span class="p">,</span>
+            <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metric</span><span class="p">,</span>
             <span class="n">requested_indexing_policy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">indexing_policy</span><span class="p">,</span>
             <span class="n">default_indexing_policy</span><span class="o">=</span><span class="n">DEFAULT_INDEXING_OPTIONS</span><span class="p">,</span>
-            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
-            <span class="n">collection_embedding_api_key</span><span class="o">=</span><span class="n">collection_embedding_api_key</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">astra_db</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">astra_db</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">async_astra_db</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_astra_db</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">collection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span></div>
+            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
+            <span class="n">collection_embedding_api_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collection_embedding_api_key</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_get_embedding_dimension</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -611,12 +622,12 @@
 <div class="viewcode-block" id="AstraDBVectorStore.clear"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Empty the collection of all its stored entries.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">ensure_db_setup</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">delete_many</span><span class="p">({})</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">delete_many</span><span class="p">({})</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.aclear"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.aclear">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aclear</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Empty the collection of all its stored entries.&quot;&quot;&quot;</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">aensure_db_setup</span><span class="p">()</span>
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">delete_many</span><span class="p">({})</span></div>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">delete_many</span><span class="p">({})</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.delete_by_document_id"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.delete_by_document_id">[docs]</a>    <span class="k">def</span> <span class="nf">delete_by_document_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">document_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -630,10 +641,8 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">ensure_db_setup</span><span class="p">()</span>
         <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-        <span class="n">deletion_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">delete_one</span><span class="p">(</span><span class="n">document_id</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">((</span><span class="n">deletion_response</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;deletedCount&quot;</span><span class="p">,</span> <span class="mi">0</span>
-        <span class="p">)</span> <span class="o">==</span> <span class="mi">1</span></div>
+        <span class="n">deletion_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">delete_one</span><span class="p">({</span><span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">document_id</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">deletion_response</span><span class="o">.</span><span class="n">deleted_count</span> <span class="o">==</span> <span class="mi">1</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.adelete_by_document_id"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.adelete_by_document_id">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">adelete_by_document_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">document_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -646,10 +655,10 @@
 <span class="sd">            True if a document has indeed been deleted, False if ID not found.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">aensure_db_setup</span><span class="p">()</span>
-        <span class="n">deletion_response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">delete_one</span><span class="p">(</span><span class="n">document_id</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">((</span><span class="n">deletion_response</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;status&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-            <span class="s2">&quot;deletedCount&quot;</span><span class="p">,</span> <span class="mi">0</span>
-        <span class="p">)</span> <span class="o">==</span> <span class="mi">1</span></div>
+        <span class="n">deletion_response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">delete_one</span><span class="p">(</span>
+            <span class="p">{</span><span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">document_id</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">deletion_response</span><span class="o">.</span><span class="n">deleted_count</span> <span class="o">==</span> <span class="mi">1</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.delete"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.delete">[docs]</a>    <span class="k">def</span> <span class="nf">delete</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -662,10 +671,10 @@
 <span class="sd">        Args:</span>
 <span class="sd">            ids: List of ids to delete.</span>
 <span class="sd">            concurrency: max number of threads issuing single-doc delete requests.</span>
-<span class="sd">                Defaults to instance-level setting.</span>
+<span class="sd">                Defaults to vector-store overall setting.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            True if deletion is successful, False otherwise.</span>
+<span class="sd">            True if deletion is (entirely) successful, False otherwise.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
@@ -698,11 +707,11 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            ids: List of ids to delete.</span>
-<span class="sd">            concurrency: max concurrency of single-doc delete requests.</span>
-<span class="sd">                Defaults to instance-level setting.</span>
+<span class="sd">            concurrency: max number of simultaneous coroutines for single-doc</span>
+<span class="sd">                delete requests. Defaults to vector-store overall setting.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            True if deletion is successful, False otherwise.</span>
+<span class="sd">            True if deletion is (entirely) successful, False otherwise.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
@@ -714,9 +723,10 @@
         <span class="k">if</span> <span class="n">ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No ids provided to delete.&quot;</span><span class="p">)</span>
 
+        <span class="n">_max_workers</span> <span class="o">=</span> <span class="n">concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_delete_concurrency</span>
         <span class="k">return</span> <span class="nb">all</span><span class="p">(</span>
             <span class="k">await</span> <span class="n">gather_with_concurrency</span><span class="p">(</span>
-                <span class="n">concurrency</span><span class="p">,</span> <span class="o">*</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">adelete_by_document_id</span><span class="p">(</span><span class="n">doc_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">doc_id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">]</span>
+                <span class="n">_max_workers</span><span class="p">,</span> <span class="o">*</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">adelete_by_document_id</span><span class="p">(</span><span class="n">doc_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">doc_id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">]</span>
             <span class="p">)</span>
         <span class="p">)</span></div>
 
@@ -728,9 +738,7 @@
 <span class="sd">        Use with caution.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">ensure_db_setup</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">astra_db</span><span class="o">.</span><span class="n">delete_collection</span><span class="p">(</span>
-            <span class="n">collection_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collection_name</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">drop</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.adelete_collection"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.adelete_collection">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">adelete_collection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -740,9 +748,7 @@
 <span class="sd">        Use with caution.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">aensure_db_setup</span><span class="p">()</span>
-        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_astra_db</span><span class="o">.</span><span class="n">delete_collection</span><span class="p">(</span>
-            <span class="n">collection_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">collection_name</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">drop</span><span class="p">()</span></div>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_get_documents_to_insert</span><span class="p">(</span>
@@ -858,16 +864,15 @@
 <span class="sd">            texts: Texts to add to the vectorstore.</span>
 <span class="sd">            metadatas: Optional list of metadatas.</span>
 <span class="sd">            ids: Optional list of ids.</span>
-<span class="sd">            batch_size: Number of documents in each API call.</span>
-<span class="sd">                Check the underlying Astra DB HTTP API specs for the max value</span>
-<span class="sd">                (20 at the time of writing this). If not provided, defaults</span>
-<span class="sd">                to the instance-level setting.</span>
+<span class="sd">            batch_size: Size of document chunks for each individual insertion</span>
+<span class="sd">                API request. If not provided, defaults to the vector-store</span>
+<span class="sd">                overall defaults (which in turn falls to astrapy defaults).</span>
 <span class="sd">            batch_concurrency: number of threads to process</span>
-<span class="sd">                insertion batches concurrently. Defaults to instance-level</span>
-<span class="sd">                setting if not provided.</span>
-<span class="sd">            overwrite_concurrency:  number of threads to process</span>
-<span class="sd">                pre-existing documents in each batch (which require individual</span>
-<span class="sd">                API calls). Defaults to instance-level setting if not provided.</span>
+<span class="sd">                insertion batches concurrently. Defaults to the vector-store</span>
+<span class="sd">                overall setting if not provided.</span>
+<span class="sd">            overwrite_concurrency: number of threads to process</span>
+<span class="sd">                pre-existing documents in each batch. Defaults to the vector-store</span>
+<span class="sd">                overall setting if not provided.</span>
 
 <span class="sd">        Note:</span>
 <span class="sd">            There are constraints on the allowed field names</span>
@@ -899,47 +904,66 @@
                 <span class="n">texts</span><span class="p">,</span> <span class="n">embedding_vectors</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="n">ids</span>
             <span class="p">)</span>
 
-        <span class="k">def</span> <span class="nf">_handle_batch</span><span class="p">(</span><span class="n">document_batch</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">DocDict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-            <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-            <span class="n">im_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">insert_many</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
-                <span class="n">documents</span><span class="o">=</span><span class="n">document_batch</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;ordered&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
-                <span class="n">partial_failures_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># perform an AstraPy insert_many, catching exceptions for overwriting docs</span>
+        <span class="n">ids_to_replace</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+        <span class="n">inserted_ids</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">insert_many_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">insert_many</span><span class="p">(</span>
+                <span class="n">documents_to_insert</span><span class="p">,</span>
+                <span class="n">ordered</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">concurrency</span><span class="o">=</span><span class="n">batch_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_batch_concurrency</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">batch_inserted</span><span class="p">,</span> <span class="n">missing_from_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_missing_from_batch</span><span class="p">(</span>
-                <span class="n">document_batch</span><span class="p">,</span> <span class="n">im_result</span>
-            <span class="p">)</span>
+            <span class="n">ids_to_replace</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">inserted_ids</span> <span class="o">=</span> <span class="n">insert_many_result</span><span class="o">.</span><span class="n">inserted_ids</span>
+        <span class="k">except</span> <span class="n">InsertManyException</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">inserted_ids</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">partial_result</span><span class="o">.</span><span class="n">inserted_ids</span>
+            <span class="n">inserted_ids_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">inserted_ids</span><span class="p">)</span>
+            <span class="n">ids_to_replace</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">document</span> <span class="ow">in</span> <span class="n">documents_to_insert</span>
+                <span class="k">if</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">inserted_ids_set</span>
+            <span class="p">]</span>
 
-            <span class="k">def</span> <span class="nf">_handle_missing_document</span><span class="p">(</span><span class="n">missing_document</span><span class="p">:</span> <span class="n">DocDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-                <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-                <span class="n">replacement_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">find_one_and_replace</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
-                    <span class="nb">filter</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">missing_document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]},</span>
-                    <span class="n">replacement</span><span class="o">=</span><span class="n">missing_document</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">return</span> <span class="n">replacement_result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;document&quot;</span><span class="p">][</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
+        <span class="c1"># if necessary, replace docs for the non-inserted ids</span>
+        <span class="k">if</span> <span class="n">ids_to_replace</span><span class="p">:</span>
+            <span class="n">documents_to_replace</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">document</span>
+                <span class="k">for</span> <span class="n">document</span> <span class="ow">in</span> <span class="n">documents_to_insert</span>
+                <span class="k">if</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">ids_to_replace</span>
+            <span class="p">]</span>
 
-            <span class="n">_u_max_workers</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_max_workers</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">overwrite_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_overwrite_concurrency</span>
             <span class="p">)</span>
-            <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">_u_max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">tpe2</span><span class="p">:</span>
-                <span class="n">batch_replaced</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
-                    <span class="n">tpe2</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
-                        <span class="n">_handle_missing_document</span><span class="p">,</span>
-                        <span class="n">missing_from_batch</span><span class="p">,</span>
+            <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="n">_max_workers</span><span class="p">,</span>
+            <span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+
+                <span class="k">def</span> <span class="nf">_replace_document</span><span class="p">(</span>
+                    <span class="n">document</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+                <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">UpdateResult</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+                    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">replace_one</span><span class="p">(</span>
+                        <span class="p">{</span><span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]},</span>
+                        <span class="n">document</span><span class="p">,</span>
+                    <span class="p">),</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
+
+                <span class="n">replace_results</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+                    <span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+                        <span class="n">_replace_document</span><span class="p">,</span>
+                        <span class="n">documents_to_replace</span><span class="p">,</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
-            <span class="k">return</span> <span class="n">batch_inserted</span> <span class="o">+</span> <span class="n">batch_replaced</span>
 
-        <span class="n">_b_max_workers</span> <span class="o">=</span> <span class="n">batch_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_batch_concurrency</span>
-        <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">_b_max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">tpe</span><span class="p">:</span>
-            <span class="n">all_ids_nested</span> <span class="o">=</span> <span class="n">tpe</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
-                <span class="n">_handle_batch</span><span class="p">,</span>
-                <span class="n">batch_iterate</span><span class="p">(</span>
-                    <span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-                    <span class="n">documents_to_insert</span><span class="p">,</span>
-                <span class="p">),</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">iid</span> <span class="k">for</span> <span class="n">id_list</span> <span class="ow">in</span> <span class="n">all_ids_nested</span> <span class="k">for</span> <span class="n">iid</span> <span class="ow">in</span> <span class="n">id_list</span><span class="p">]</span></div>
+            <span class="n">replaced_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">r_res</span><span class="o">.</span><span class="n">update_info</span><span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r_res</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">replace_results</span><span class="p">)</span>
+            <span class="n">inserted_ids</span> <span class="o">+=</span> <span class="p">[</span><span class="n">replaced_id</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">replaced_id</span> <span class="ow">in</span> <span class="n">replace_results</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">replaced_count</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids_to_replace</span><span class="p">):</span>
+                <span class="n">missing</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids_to_replace</span><span class="p">)</span> <span class="o">-</span> <span class="n">replaced_count</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;AstraDBVectorStore.add_texts could not insert all requested &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;documents (</span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2"> failed replace_one calls)&quot;</span>
+                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">inserted_ids</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.aadd_texts"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.aadd_texts">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aadd_texts</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -961,16 +985,15 @@
 <span class="sd">            texts: Texts to add to the vectorstore.</span>
 <span class="sd">            metadatas: Optional list of metadatas.</span>
 <span class="sd">            ids: Optional list of ids.</span>
-<span class="sd">            batch_size: Number of documents in each API call.</span>
-<span class="sd">                Check the underlying Astra DB HTTP API specs for the max value</span>
-<span class="sd">                (20 at the time of writing this). If not provided, defaults</span>
-<span class="sd">                to the instance-level setting.</span>
-<span class="sd">            batch_concurrency: number of threads to process</span>
-<span class="sd">                insertion batches concurrently. Defaults to instance-level</span>
-<span class="sd">                setting if not provided.</span>
-<span class="sd">            overwrite_concurrency:  number of threads to process</span>
-<span class="sd">                pre-existing documents in each batch (which require individual</span>
-<span class="sd">                API calls). Defaults to instance-level setting if not provided.</span>
+<span class="sd">            batch_size: Size of document chunks for each individual insertion</span>
+<span class="sd">                API request. If not provided, defaults to the vector-store</span>
+<span class="sd">                overall defaults (which in turn falls to astrapy defaults).</span>
+<span class="sd">            batch_concurrency: number of simultaneous coroutines to process</span>
+<span class="sd">                insertion batches concurrently. Defaults to the vector-store</span>
+<span class="sd">                overall setting if not provided.</span>
+<span class="sd">            overwrite_concurrency: number of simultaneous coroutines to process</span>
+<span class="sd">                pre-existing documents in each batch. Defaults to the vector-store</span>
+<span class="sd">                overall setting if not provided.</span>
 
 <span class="sd">        Note:</span>
 <span class="sd">            There are constraints on the allowed field names</span>
@@ -1002,47 +1025,67 @@
                 <span class="n">texts</span><span class="p">,</span> <span class="n">embedding_vectors</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="n">ids</span>
             <span class="p">)</span>
 
-        <span class="k">async</span> <span class="k">def</span> <span class="nf">_handle_batch</span><span class="p">(</span><span class="n">document_batch</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">DocDict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-            <span class="c1"># self.async_collection is not None here for sure</span>
-            <span class="n">im_result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">insert_many</span><span class="p">(</span>
-                <span class="n">documents</span><span class="o">=</span><span class="n">document_batch</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;ordered&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
-                <span class="n">partial_failures_allowed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># perform an AstraPy insert_many, catching exceptions for overwriting docs</span>
+        <span class="n">ids_to_replace</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+        <span class="n">inserted_ids</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">insert_many_result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">insert_many</span><span class="p">(</span>
+                <span class="n">documents_to_insert</span><span class="p">,</span>
+                <span class="n">ordered</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">concurrency</span><span class="o">=</span><span class="n">batch_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_batch_concurrency</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="n">batch_inserted</span><span class="p">,</span> <span class="n">missing_from_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_missing_from_batch</span><span class="p">(</span>
-                <span class="n">document_batch</span><span class="p">,</span> <span class="n">im_result</span>
+            <span class="n">ids_to_replace</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">inserted_ids</span> <span class="o">=</span> <span class="n">insert_many_result</span><span class="o">.</span><span class="n">inserted_ids</span>
+        <span class="k">except</span> <span class="n">InsertManyException</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">inserted_ids</span> <span class="o">=</span> <span class="n">err</span><span class="o">.</span><span class="n">partial_result</span><span class="o">.</span><span class="n">inserted_ids</span>
+            <span class="n">inserted_ids_set</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">inserted_ids</span><span class="p">)</span>
+            <span class="n">ids_to_replace</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">document</span> <span class="ow">in</span> <span class="n">documents_to_insert</span>
+                <span class="k">if</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">inserted_ids_set</span>
+            <span class="p">]</span>
+
+        <span class="c1"># if necessary, replace docs for the non-inserted ids</span>
+        <span class="k">if</span> <span class="n">ids_to_replace</span><span class="p">:</span>
+            <span class="n">documents_to_replace</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">document</span>
+                <span class="k">for</span> <span class="n">document</span> <span class="ow">in</span> <span class="n">documents_to_insert</span>
+                <span class="k">if</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">ids_to_replace</span>
+            <span class="p">]</span>
+
+            <span class="n">sem</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Semaphore</span><span class="p">(</span>
+                <span class="n">overwrite_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_overwrite_concurrency</span><span class="p">,</span>
             <span class="p">)</span>
 
-            <span class="k">async</span> <span class="k">def</span> <span class="nf">_handle_missing_document</span><span class="p">(</span><span class="n">missing_document</span><span class="p">:</span> <span class="n">DocDict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-                <span class="c1"># self.async_collection is not None here for sure</span>
-                <span class="n">replacement_result</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">find_one_and_replace</span><span class="p">(</span>
-                    <span class="nb">filter</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">missing_document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]},</span>
-                    <span class="n">replacement</span><span class="o">=</span><span class="n">missing_document</span><span class="p">,</span>
+            <span class="n">_async_collection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span>
+
+            <span class="k">async</span> <span class="k">def</span> <span class="nf">_replace_document</span><span class="p">(</span>
+                <span class="n">document</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+            <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">UpdateResult</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">sem</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="k">await</span> <span class="n">_async_collection</span><span class="o">.</span><span class="n">replace_one</span><span class="p">(</span>
+                        <span class="p">{</span><span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]},</span>
+                        <span class="n">document</span><span class="p">,</span>
+                    <span class="p">),</span> <span class="n">document</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
+
+            <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="n">_replace_document</span><span class="p">(</span><span class="n">document</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">document</span> <span class="ow">in</span> <span class="n">documents_to_replace</span>
+            <span class="p">]</span>
+
+            <span class="n">replace_results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">tasks</span><span class="p">,</span> <span class="n">return_exceptions</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="n">replaced_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">r_res</span><span class="o">.</span><span class="n">update_info</span><span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">r_res</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">replace_results</span><span class="p">)</span>
+            <span class="n">inserted_ids</span> <span class="o">+=</span> <span class="p">[</span><span class="n">replaced_id</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">replaced_id</span> <span class="ow">in</span> <span class="n">replace_results</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">replaced_count</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids_to_replace</span><span class="p">):</span>
+                <span class="n">missing</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids_to_replace</span><span class="p">)</span> <span class="o">-</span> <span class="n">replaced_count</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;AstraDBVectorStore.add_texts could not insert all requested &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;documents (</span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2"> failed replace_one calls)&quot;</span>
                 <span class="p">)</span>
-                <span class="k">return</span> <span class="n">replacement_result</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="s2">&quot;document&quot;</span><span class="p">][</span><span class="s2">&quot;_id&quot;</span><span class="p">]</span>
-
-            <span class="n">_u_max_workers</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">overwrite_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_overwrite_concurrency</span>
-            <span class="p">)</span>
-            <span class="n">batch_replaced</span> <span class="o">=</span> <span class="k">await</span> <span class="n">gather_with_concurrency</span><span class="p">(</span>
-                <span class="n">_u_max_workers</span><span class="p">,</span>
-                <span class="o">*</span><span class="p">[</span><span class="n">_handle_missing_document</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">missing_from_batch</span><span class="p">],</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">batch_inserted</span> <span class="o">+</span> <span class="n">batch_replaced</span>
-
-        <span class="n">_b_max_workers</span> <span class="o">=</span> <span class="n">batch_concurrency</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">bulk_insert_batch_concurrency</span>
-        <span class="n">all_ids_nested</span> <span class="o">=</span> <span class="k">await</span> <span class="n">gather_with_concurrency</span><span class="p">(</span>
-            <span class="n">_b_max_workers</span><span class="p">,</span>
-            <span class="o">*</span><span class="p">[</span>
-                <span class="n">_handle_batch</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">batch_iterate</span><span class="p">(</span>
-                    <span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-                    <span class="n">documents_to_insert</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="p">],</span>
-        <span class="p">)</span>
-
-        <span class="k">return</span> <span class="p">[</span><span class="n">iid</span> <span class="k">for</span> <span class="n">id_list</span> <span class="ow">in</span> <span class="n">all_ids_nested</span> <span class="k">for</span> <span class="n">iid</span> <span class="ow">in</span> <span class="n">id_list</span><span class="p">]</span></div>
+        <span class="k">return</span> <span class="n">inserted_ids</span></div>
 
 <div class="viewcode-block" id="AstraDBVectorStore.similarity_search_with_score_id_by_vector"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.similarity_search_with_score_id_by_vector">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score_id_by_vector</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1064,16 +1107,16 @@
         <span class="n">metadata_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
         <span class="c1">#</span>
         <span class="n">hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
-            <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span>
                 <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span> <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
                 <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
                 <span class="p">},</span>
+                <span class="n">limit</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">include_similarity</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
             <span class="p">)</span>
         <span class="p">)</span>
         <span class="c1">#</span>
@@ -1117,15 +1160,16 @@
                 <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;$similarity&quot;</span><span class="p">],</span>
                 <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">],</span>
             <span class="p">)</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span>
                 <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span> <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
                 <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
                 <span class="p">},</span>
+                <span class="n">limit</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">include_similarity</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">},</span>
             <span class="p">)</span>
         <span class="p">]</span></div>
 
@@ -1143,16 +1187,16 @@
         <span class="n">metadata_parameter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_filter_to_metadata</span><span class="p">(</span><span class="nb">filter</span><span class="p">)</span>
         <span class="c1">#</span>
         <span class="n">hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
-            <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span>
                 <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span> <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
                 <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
                 <span class="p">},</span>
+                <span class="n">limit</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">include_similarity</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
             <span class="p">)</span>
         <span class="p">)</span>
         <span class="c1">#</span>
@@ -1192,15 +1236,16 @@
                 <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;$similarity&quot;</span><span class="p">],</span>
                 <span class="n">hit</span><span class="p">[</span><span class="s2">&quot;_id&quot;</span><span class="p">],</span>
             <span class="p">)</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span>
                 <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span> <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
                 <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
                 <span class="p">},</span>
+                <span class="n">limit</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                <span class="n">include_similarity</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">sort</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="n">query</span><span class="p">},</span>
             <span class="p">)</span>
         <span class="p">]</span>
 
@@ -1532,36 +1577,22 @@
         <span class="n">metadata_parameter</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
-        <span class="n">query_vector_l</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
-
-        <span class="k">def</span> <span class="nf">_response_setter</span><span class="p">(</span>
-            <span class="n">resp</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-            <span class="n">qvl</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">,</span>
-        <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">qvl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">resp</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">][</span><span class="s2">&quot;sortVector&quot;</span><span class="p">]</span>
-
-        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
-            <span class="c1"># self.collection is not None (by _ensure_astra_db_client)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>  <span class="c1"># type: ignore[union-attr]</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">fetch_k</span><span class="p">,</span>
-                    <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-                    <span class="s2">&quot;includeSortVector&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-                <span class="p">},</span>
-                <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="p">},</span>
-                <span class="n">raw_response_callback</span><span class="o">=</span><span class="n">_response_setter</span><span class="p">,</span>
-            <span class="p">)</span>
+        <span class="n">prefetch_cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+            <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">include_similarity</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">include_sort_vector</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">query_vector</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="c1"># the callback has surely filled query_vector:</span>
+        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">prefetch_cursor</span><span class="p">)</span>
+        <span class="n">query_vector</span> <span class="o">=</span> <span class="n">prefetch_cursor</span><span class="o">.</span><span class="n">get_sort_vector</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_mmr_hits</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">query_vector</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
@@ -1579,36 +1610,22 @@
         <span class="n">metadata_parameter</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
-        <span class="n">query_vector_l</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
-
-        <span class="k">def</span> <span class="nf">_response_setter</span><span class="p">(</span>
-            <span class="n">resp</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-            <span class="n">qvl</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">,</span>
-        <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">qvl</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">resp</span><span class="p">[</span><span class="s2">&quot;status&quot;</span><span class="p">][</span><span class="s2">&quot;sortVector&quot;</span><span class="p">]</span>
-
-        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">hit</span>
-            <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">paginated_find</span><span class="p">(</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
-                <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span>
-                <span class="n">options</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">fetch_k</span><span class="p">,</span>
-                    <span class="s2">&quot;includeSimilarity&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-                    <span class="s2">&quot;includeSortVector&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-                <span class="p">},</span>
-                <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                    <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-                <span class="p">},</span>
-                <span class="n">raw_response_callback</span><span class="o">=</span><span class="n">_response_setter</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="p">]</span>
-        <span class="c1"># the callback has surely filled query_vector:</span>
-        <span class="n">query_vector</span> <span class="o">=</span> <span class="n">query_vector_l</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prefetch_cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">astra_env</span><span class="o">.</span><span class="n">async_collection</span><span class="o">.</span><span class="n">find</span><span class="p">(</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="n">metadata_parameter</span><span class="p">,</span>
+            <span class="n">projection</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;_id&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;metadata&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;$vector&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="s2">&quot;$vectorize&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">limit</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
+            <span class="n">include_similarity</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">include_sort_vector</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">sort</span><span class="o">=</span><span class="n">sort</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">prefetch_hits</span> <span class="o">=</span> <span class="p">[</span><span class="n">hit</span> <span class="k">async</span> <span class="k">for</span> <span class="n">hit</span> <span class="ow">in</span> <span class="n">prefetch_cursor</span><span class="p">]</span>
+        <span class="n">query_vector</span> <span class="o">=</span> <span class="k">await</span> <span class="n">prefetch_cursor</span><span class="o">.</span><span class="n">get_sort_vector</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_mmr_hits</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">query_vector</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
@@ -1819,62 +1836,26 @@
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">_from_kwargs</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">AstraDBVectorStore</span><span class="p">],</span>
-        <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-            <span class="n">CollectionVectorServiceOptions</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AstraDBVectorStore</span><span class="p">:</span>
-        <span class="n">known_kwargs</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;collection_name&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;token&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;api_endpoint&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;astra_db_client&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;async_astra_db_client&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;namespace&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;metric&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;batch_size&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;bulk_insert_batch_concurrency&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;bulk_insert_overwrite_concurrency&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;bulk_delete_concurrency&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;batch_concurrency&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;overwrite_concurrency&quot;</span><span class="p">,</span>
-        <span class="p">}</span>
+        <span class="n">_args</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">AstraDBVectorStore</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span><span class="o">.</span><span class="n">args</span>
+        <span class="n">_kwargs</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">AstraDBVectorStore</span><span class="o">.</span><span class="fm">__init__</span><span class="p">)</span><span class="o">.</span><span class="n">kwonlyargs</span>
+        <span class="n">known_kwarg_keys</span> <span class="o">=</span> <span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">_args</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">_kwargs</span><span class="p">))</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;self&quot;</span><span class="p">}</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">unknown_kwargs</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">known_kwargs</span>
-            <span class="k">if</span> <span class="n">unknown_kwargs</span><span class="p">:</span>
+            <span class="n">unknown_kwarg_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">known_kwarg_keys</span>
+            <span class="k">if</span> <span class="n">unknown_kwarg_keys</span><span class="p">:</span>
                 <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                    <span class="s2">&quot;Method &#39;from_texts&#39; of AstraDBVectorStore vector store &quot;</span>
-                    <span class="s2">&quot;invoked with unsupported arguments &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown_kwargs</span><span class="p">))</span><span class="si">}</span><span class="s2">), &quot;</span>
-                    <span class="s2">&quot;which will be ignored.&quot;</span>
+                    <span class="p">(</span>
+                        <span class="s2">&quot;Method &#39;from_texts/afrom_texts&#39; of AstraDBVectorStore &quot;</span>
+                        <span class="s2">&quot;vector store invoked with unsupported arguments &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unknown_kwarg_keys</span><span class="p">))</span><span class="si">}</span><span class="s2">), &quot;</span>
+                        <span class="s2">&quot;which will be ignored.&quot;</span>
+                    <span class="p">),</span>
+                    <span class="ne">UserWarning</span><span class="p">,</span>
                 <span class="p">)</span>
 
-        <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;collection_name&quot;</span><span class="p">]</span>
-        <span class="n">token</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;token&quot;</span><span class="p">)</span>
-        <span class="n">api_endpoint</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;api_endpoint&quot;</span><span class="p">)</span>
-        <span class="n">astra_db_client</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;astra_db_client&quot;</span><span class="p">)</span>
-        <span class="n">async_astra_db_client</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;async_astra_db_client&quot;</span><span class="p">)</span>
-        <span class="n">namespace</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;namespace&quot;</span><span class="p">)</span>
-        <span class="n">metric</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;metric&quot;</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
-            <span class="n">collection_name</span><span class="o">=</span><span class="n">collection_name</span><span class="p">,</span>
-            <span class="n">token</span><span class="o">=</span><span class="n">token</span><span class="p">,</span>
-            <span class="n">api_endpoint</span><span class="o">=</span><span class="n">api_endpoint</span><span class="p">,</span>
-            <span class="n">astra_db_client</span><span class="o">=</span><span class="n">astra_db_client</span><span class="p">,</span>
-            <span class="n">async_astra_db_client</span><span class="o">=</span><span class="n">async_astra_db_client</span><span class="p">,</span>
-            <span class="n">namespace</span><span class="o">=</span><span class="n">namespace</span><span class="p">,</span>
-            <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">),</span>
-            <span class="n">bulk_insert_batch_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;bulk_insert_batch_concurrency&quot;</span><span class="p">),</span>
-            <span class="n">bulk_insert_overwrite_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                <span class="s2">&quot;bulk_insert_overwrite_concurrency&quot;</span>
-            <span class="p">),</span>
-            <span class="n">bulk_delete_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;bulk_delete_concurrency&quot;</span><span class="p">),</span>
-            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="n">known_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">known_kwarg_keys</span><span class="p">}</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">known_kwargs</span><span class="p">)</span>
 
 <div class="viewcode-block" id="AstraDBVectorStore.from_texts"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore.from_texts">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_texts</span><span class="p">(</span>
@@ -1883,9 +1864,6 @@
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-            <span class="n">CollectionVectorServiceOptions</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AstraDBVectorStore</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an Astra DB vectorstore from raw texts.</span>
@@ -1893,14 +1871,8 @@
 <span class="sd">        Args:</span>
 <span class="sd">            texts: the texts to insert.</span>
 <span class="sd">            embedding: the embedding function to use in the store.</span>
-<span class="sd">                This enables client-side embedding functions or calls to external</span>
-<span class="sd">                embedding providers. Only one of `embedding` or</span>
-<span class="sd">                `collection_vector_service_options` can be provided.</span>
 <span class="sd">            metadatas: metadata dicts for the texts.</span>
 <span class="sd">            ids: ids to associate to the texts.</span>
-<span class="sd">            collection_vector_service_options: specifies the use of server-side</span>
-<span class="sd">                embeddings within Astra DB. Only one of `embedding` or</span>
-<span class="sd">                `collection_vector_service_options` can be provided.</span>
 <span class="sd">            **kwargs: you can pass any argument that you would</span>
 <span class="sd">                to :meth:`~add_texts` and/or to the &#39;AstraDBVectorStore&#39; constructor</span>
 <span class="sd">                (see these methods for details). These arguments will be</span>
@@ -1909,18 +1881,22 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            an `AstraDBVectorStore` vectorstore.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_add_texts_inspection</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">AstraDBVectorStore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">)</span>
+        <span class="n">_method_args</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">set</span><span class="p">(</span><span class="n">_add_texts_inspection</span><span class="o">.</span><span class="n">kwonlyargs</span><span class="p">)</span>
+            <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">_add_texts_inspection</span><span class="o">.</span><span class="n">kwonlyargs</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="s2">&quot;texts&quot;</span><span class="p">,</span> <span class="s2">&quot;metadatas&quot;</span><span class="p">,</span> <span class="s2">&quot;ids&quot;</span><span class="p">}</span>
+        <span class="n">_init_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_method_args</span><span class="p">}</span>
+        <span class="n">_method_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_method_args</span><span class="p">}</span>
         <span class="n">astra_db_store</span> <span class="o">=</span> <span class="n">AstraDBVectorStore</span><span class="o">.</span><span class="n">_from_kwargs</span><span class="p">(</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
-            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">_init_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">astra_db_store</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
             <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">),</span>
-            <span class="n">batch_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;batch_concurrency&quot;</span><span class="p">),</span>
-            <span class="n">overwrite_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;overwrite_concurrency&quot;</span><span class="p">),</span>
+            <span class="o">**</span><span class="n">_method_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">astra_db_store</span></div>
 
@@ -1931,41 +1907,38 @@
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-            <span class="n">CollectionVectorServiceOptions</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AstraDBVectorStore</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an Astra DB vectorstore from raw texts.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            texts: the texts to insert.</span>
-<span class="sd">            embedding: the embedding function to use in the store.</span>
 <span class="sd">            metadatas: metadata dicts for the texts.</span>
 <span class="sd">            ids: ids to associate to the texts.</span>
-<span class="sd">            collection_vector_service_options: specifies the use of server-side</span>
-<span class="sd">                embeddings within Astra DB. Only one of `embedding` or</span>
-<span class="sd">                `collection_vector_service_options` can be provided.</span>
 <span class="sd">            **kwargs: you can pass any argument that you would</span>
-<span class="sd">                to :meth:`~add_texts` and/or to the &#39;AstraDBVectorStore&#39; constructor</span>
+<span class="sd">                to :meth:`~aadd_texts` and/or to the &#39;AstraDBVectorStore&#39; constructor</span>
 <span class="sd">                (see these methods for details). These arguments will be</span>
 <span class="sd">                routed to the respective methods as they are.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            an `AstraDBVectorStore` vectorstore.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_aadd_texts_inspection</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">AstraDBVectorStore</span><span class="o">.</span><span class="n">aadd_texts</span><span class="p">)</span>
+        <span class="n">_method_args</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">set</span><span class="p">(</span><span class="n">_aadd_texts_inspection</span><span class="o">.</span><span class="n">kwonlyargs</span><span class="p">)</span>
+            <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">_aadd_texts_inspection</span><span class="o">.</span><span class="n">kwonlyargs</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">-</span> <span class="p">{</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="s2">&quot;texts&quot;</span><span class="p">,</span> <span class="s2">&quot;metadatas&quot;</span><span class="p">,</span> <span class="s2">&quot;ids&quot;</span><span class="p">}</span>
+        <span class="n">_init_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_method_args</span><span class="p">}</span>
+        <span class="n">_method_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">_method_args</span><span class="p">}</span>
         <span class="n">astra_db_store</span> <span class="o">=</span> <span class="n">AstraDBVectorStore</span><span class="o">.</span><span class="n">_from_kwargs</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="p">,</span>
-            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">_init_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">await</span> <span class="n">astra_db_store</span><span class="o">.</span><span class="n">aadd_texts</span><span class="p">(</span>
             <span class="n">texts</span><span class="o">=</span><span class="n">texts</span><span class="p">,</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
             <span class="n">ids</span><span class="o">=</span><span class="n">ids</span><span class="p">,</span>
-            <span class="n">batch_size</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;batch_size&quot;</span><span class="p">),</span>
-            <span class="n">batch_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;batch_concurrency&quot;</span><span class="p">),</span>
-            <span class="n">overwrite_concurrency</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;overwrite_concurrency&quot;</span><span class="p">),</span>
+            <span class="o">**</span><span class="n">_method_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">astra_db_store</span></div>
 
@@ -1974,9 +1947,6 @@
         <span class="bp">cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">AstraDBVectorStore</span><span class="p">],</span>
         <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-            <span class="n">CollectionVectorServiceOptions</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AstraDBVectorStore</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an Astra DB vectorstore from a document list.</span>
@@ -1995,7 +1965,6 @@
             <span class="n">texts</span><span class="p">,</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
-            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
 
@@ -2004,9 +1973,6 @@
         <span class="bp">cls</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">AstraDBVectorStore</span><span class="p">],</span>
         <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection_vector_service_options</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
-            <span class="n">CollectionVectorServiceOptions</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AstraDBVectorStore</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an Astra DB vectorstore from a document list.</span>
@@ -2025,7 +1991,6 @@
             <span class="n">texts</span><span class="p">,</span>
             <span class="n">embedding</span><span class="o">=</span><span class="n">embedding</span><span class="p">,</span>
             <span class="n">metadatas</span><span class="o">=</span><span class="n">metadatas</span><span class="p">,</span>
-            <span class="n">collection_vector_service_options</span><span class="o">=</span><span class="n">collection_vector_service_options</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 </pre></div>
