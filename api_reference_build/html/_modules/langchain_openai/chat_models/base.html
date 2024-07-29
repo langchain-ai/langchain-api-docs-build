@@ -663,10 +663,19 @@
             <span class="s2">&quot;default_headers&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_headers&quot;</span><span class="p">],</span>
             <span class="s2">&quot;default_query&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;default_query&quot;</span><span class="p">],</span>
         <span class="p">}</span>
-
-        <span class="n">openai_proxy</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="n">openai_proxy</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">]</span>
+            <span class="n">http_client</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]</span>
+            <span class="n">http_async_client</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot specify &#39;openai_proxy&#39; if one of &quot;</span>
+                <span class="s2">&quot;&#39;http_client&#39;/&#39;http_async_client&#39; is already specified. Received:</span><span class="se">\n</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">openai_proxy</span><span class="si">=}</span><span class="se">\n</span><span class="si">{</span><span class="n">http_client</span><span class="si">=}</span><span class="se">\n</span><span class="si">{</span><span class="n">http_async_client</span><span class="si">=}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;client&quot;</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">openai_proxy</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="kn">import</span> <span class="nn">httpx</span>
                 <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
@@ -674,13 +683,13 @@
                         <span class="s2">&quot;Could not import httpx python package. &quot;</span>
                         <span class="s2">&quot;Please install it with `pip install httpx`.&quot;</span>
                     <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">proxy</span><span class="o">=</span><span class="n">openai_proxy</span><span class="p">)</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="n">proxy</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">])</span>
             <span class="n">sync_specific</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;http_client&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_client&quot;</span><span class="p">]}</span>
             <span class="n">values</span><span class="p">[</span><span class="s2">&quot;client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">OpenAI</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">client_params</span><span class="p">,</span> <span class="o">**</span><span class="n">sync_specific</span>
             <span class="p">)</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;async_client&quot;</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">openai_proxy</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]:</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="kn">import</span> <span class="nn">httpx</span>
                 <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
@@ -688,7 +697,9 @@
                         <span class="s2">&quot;Could not import httpx python package. &quot;</span>
                         <span class="s2">&quot;Please install it with `pip install httpx`.&quot;</span>
                     <span class="p">)</span> <span class="kn">from</span> <span class="nn">e</span>
-                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span><span class="n">proxy</span><span class="o">=</span><span class="n">openai_proxy</span><span class="p">)</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span>
+                    <span class="n">proxy</span><span class="o">=</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;openai_proxy&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
             <span class="n">async_specific</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;http_client&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;http_async_client&quot;</span><span class="p">]}</span>
             <span class="n">values</span><span class="p">[</span><span class="s2">&quot;async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">AsyncOpenAI</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">client_params</span><span class="p">,</span> <span class="o">**</span><span class="n">async_specific</span>
@@ -2111,7 +2122,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 28, 2024.
+                                on Jul 29, 2024.
                 </footer>
             </div>
         </div>

@@ -360,6 +360,7 @@
     <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">filter_args</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">include_injected</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the arguments from a function&#39;s signature.&quot;&quot;&quot;</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">inferred_model</span><span class="o">.</span><span class="n">schema</span><span class="p">()[</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
@@ -367,7 +368,9 @@
     <span class="k">return</span> <span class="p">{</span>
         <span class="n">k</span><span class="p">:</span> <span class="n">schema</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">param</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">valid_keys</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
-        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">filter_args</span> <span class="ow">and</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">param</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="s2">&quot;cls&quot;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">filter_args</span>
+        <span class="ow">and</span> <span class="p">(</span><span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">param</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;self&quot;</span><span class="p">,</span> <span class="s2">&quot;cls&quot;</span><span class="p">))</span>
+        <span class="ow">and</span> <span class="p">(</span><span class="n">include_injected</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_is_injected_arg_type</span><span class="p">(</span><span class="n">param</span><span class="o">.</span><span class="n">annotation</span><span class="p">))</span>
     <span class="p">}</span>
 
 
@@ -487,6 +490,7 @@
     <span class="n">filter_args</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">parse_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">error_on_invalid_docstring</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">include_injected</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a pydantic schema from a function&#39;s signature.</span>
 
@@ -500,6 +504,9 @@
 <span class="sd">        error_on_invalid_docstring: if ``parse_docstring`` is provided, configure</span>
 <span class="sd">            whether to raise ValueError on invalid Google Style docstrings.</span>
 <span class="sd">            Defaults to False.</span>
+<span class="sd">        include_injected: Whether to include injected arguments in the schema.</span>
+<span class="sd">            Defaults to True, since we want to include them in the schema</span>
+<span class="sd">            when *validating* tool inputs.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A pydantic model with the same arguments as the function.</span>
@@ -517,7 +524,9 @@
         <span class="n">error_on_invalid_docstring</span><span class="o">=</span><span class="n">error_on_invalid_docstring</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="c1"># Pydantic adds placeholder virtual fields we need to strip</span>
-    <span class="n">valid_properties</span> <span class="o">=</span> <span class="n">_get_filtered_args</span><span class="p">(</span><span class="n">inferred_model</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">filter_args</span><span class="o">=</span><span class="n">filter_args</span><span class="p">)</span>
+    <span class="n">valid_properties</span> <span class="o">=</span> <span class="n">_get_filtered_args</span><span class="p">(</span>
+        <span class="n">inferred_model</span><span class="p">,</span> <span class="n">func</span><span class="p">,</span> <span class="n">filter_args</span><span class="o">=</span><span class="n">filter_args</span><span class="p">,</span> <span class="n">include_injected</span><span class="o">=</span><span class="n">include_injected</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">_create_subset_model</span><span class="p">(</span>
         <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">Schema&quot;</span><span class="p">,</span>
         <span class="n">inferred_model</span><span class="p">,</span>
@@ -1903,7 +1912,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 28, 2024.
+                                on Jul 29, 2024.
                 </footer>
             </div>
         </div>
