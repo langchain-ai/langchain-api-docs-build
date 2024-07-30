@@ -243,12 +243,25 @@
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">asynccontextmanager</span><span class="p">,</span> <span class="n">contextmanager</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">AsyncIterator</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Any</span><span class="p">,</span>
+    <span class="n">AsyncIterator</span><span class="p">,</span>
+    <span class="n">Callable</span><span class="p">,</span>
+    <span class="n">Dict</span><span class="p">,</span>
+    <span class="n">Iterator</span><span class="p">,</span>
+    <span class="n">List</span><span class="p">,</span>
+    <span class="n">Optional</span><span class="p">,</span>
+    <span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">Type</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models.chat_models</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseChatModel</span><span class="p">,</span>
     <span class="n">agenerate_from_stream</span><span class="p">,</span>
@@ -263,10 +276,19 @@
     <span class="n">ChatMessageChunk</span><span class="p">,</span>
     <span class="n">HumanMessage</span><span class="p">,</span>
     <span class="n">SystemMessage</span><span class="p">,</span>
+    <span class="n">ToolMessage</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">JsonOutputKeyToolsParser</span><span class="p">,</span>
+    <span class="n">PydanticToolsParser</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">ChatGenerationChunk</span><span class="p">,</span> <span class="n">ChatResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">SecretStr</span><span class="p">,</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span><span class="p">,</span> <span class="n">RunnableMap</span><span class="p">,</span> <span class="n">RunnablePassthrough</span>
+<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">convert_to_secret_str</span><span class="p">,</span> <span class="n">get_from_dict_or_env</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -317,9 +339,20 @@
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">HumanMessage</span><span class="p">):</span>
         <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">AIMessage</span><span class="p">):</span>
-        <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">}</span>
+        <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+            <span class="s2">&quot;tool_calls&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">),</span>
+        <span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">SystemMessage</span><span class="p">):</span>
         <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">ToolMessage</span><span class="p">):</span>
+        <span class="n">message_dict</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;tool&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+            <span class="s2">&quot;tool_call_id&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">tool_call_id</span><span class="p">,</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">message</span><span class="o">.</span><span class="n">name</span> <span class="ow">or</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
+        <span class="p">}</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Got unknown type &#39;</span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&#39;.&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">message_dict</span>
@@ -470,6 +503,70 @@
 <span class="sd">                id=&#39;run-c263b6f1-1736-4ece-a895-055c26b3436f-0&#39;</span>
 <span class="sd">            )</span>
 
+<span class="sd">    Tool calling:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+
+<span class="sd">            class GetWeather(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Get the current weather in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                location: str = Field(</span>
+<span class="sd">                    ..., description=&quot;The city and state, e.g. San Francisco, CA&quot;</span>
+<span class="sd">                )</span>
+
+
+<span class="sd">            class GetPopulation(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Get the current population in a given location&#39;&#39;&#39;</span>
+
+<span class="sd">                location: str = Field(</span>
+<span class="sd">                    ..., description=&quot;The city and state, e.g. San Francisco, CA&quot;</span>
+<span class="sd">                )</span>
+
+<span class="sd">            chat_with_tools = chat.bind_tools([GetWeather, GetPopulation])</span>
+<span class="sd">            ai_msg = chat_with_tools.invoke(</span>
+<span class="sd">                &quot;Which city is hotter today and which is bigger: LA or NY?&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            ai_msg.tool_calls</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [</span>
+<span class="sd">                {</span>
+<span class="sd">                    &#39;name&#39;: &#39;GetWeather&#39;,</span>
+<span class="sd">                    &#39;args&#39;: {&#39;location&#39;: &#39;LA&#39;},</span>
+<span class="sd">                    &#39;id&#39;: &#39;call_function_2140449382&#39;,</span>
+<span class="sd">                    &#39;type&#39;: &#39;tool_call&#39;</span>
+<span class="sd">                }</span>
+<span class="sd">            ]</span>
+
+<span class="sd">    Structured output:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from typing import Optional</span>
+
+<span class="sd">            from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
+
+<span class="sd">            class Joke(BaseModel):</span>
+<span class="sd">                &#39;&#39;&#39;Joke to tell user.&#39;&#39;&#39;</span>
+<span class="sd">                setup: str = Field(description=&quot;The setup of the joke&quot;)</span>
+<span class="sd">                punchline: str = Field(description=&quot;The punchline to the joke&quot;)</span>
+<span class="sd">                rating: Optional[int] = Field(description=&quot;How funny the joke is, from 1 to 10&quot;)</span>
+
+
+<span class="sd">            structured_chat = chat.with_structured_output(Joke)</span>
+<span class="sd">            structured_chat.invoke(&quot;Tell me a joke about cats&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            Joke(</span>
+<span class="sd">                setup=&#39;Why do cats have nine lives?&#39;,</span>
+<span class="sd">                punchline=&#39;Because they are so cute and cuddly!&#39;,</span>
+<span class="sd">                rating=None</span>
+<span class="sd">            )</span>
+
 <span class="sd">    Response metadata</span>
 <span class="sd">        .. code-block:: python</span>
 
@@ -482,7 +579,7 @@
 <span class="sd">             &#39;model_name&#39;: &#39;abab6.5-chat&#39;,</span>
 <span class="sd">             &#39;finish_reason&#39;: &#39;stop&#39;}</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501conj</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_identifying_params</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -582,11 +679,25 @@
         <span class="n">message_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="n">_convert_message_to_dict</span><span class="p">(</span><span class="n">m</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">messages</span><span class="p">]</span>
         <span class="n">payload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_default_params</span>
         <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">message_dicts</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reformat_function_parameters</span><span class="p">(</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tools&quot;</span><span class="p">,</span> <span class="p">{}))</span>
         <span class="n">payload</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">is_stream</span><span class="p">:</span>
             <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;stream&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="k">return</span> <span class="n">payload</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_reformat_function_parameters</span><span class="p">(</span><span class="n">tools_arg</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reformat the function parameters to strings.&quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">tool_arg</span> <span class="ow">in</span> <span class="n">tools_arg</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">tool_arg</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;function&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">tool_arg</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;parameters&quot;</span><span class="p">],</span> <span class="nb">str</span>
+            <span class="p">):</span>
+                <span class="n">tool_arg</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;parameters&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
+                    <span class="n">tool_arg</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;parameters&quot;</span><span class="p">]</span>
+                <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_generate</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -760,7 +871,158 @@
                     <span class="k">yield</span> <span class="n">chunk</span>
 
                     <span class="k">if</span> <span class="n">finish_reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="k">break</span></div>
+                        <span class="k">break</span>
+
+<div class="viewcode-block" id="MiniMaxChat.bind_tools"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.minimax.MiniMaxChat.html#langchain_community.chat_models.minimax.MiniMaxChat.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind tool-like objects to this chat model.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tools: A list of tool definitions to bind to this chat model.</span>
+<span class="sd">                Can be a dictionary, pydantic model, callable, or BaseTool. Pydantic</span>
+<span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
+<span class="sd">                their schema dictionary representation.</span>
+<span class="sd">            **kwargs: Any additional parameters to pass to the</span>
+<span class="sd">                :class: `~langchain.runnable.Runnable` constructor.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">tools</span><span class="o">=</span><span class="n">formatted_tools</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MiniMaxChat.with_structured_output"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.minimax.MiniMaxChat.html#langchain_community.chat_models.minimax.MiniMaxChat.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]],</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">include_raw</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            schema: The output schema as a dict or a Pydantic class. If a Pydantic class</span>
+<span class="sd">                then the model output will be an object of that class. If a dict then</span>
+<span class="sd">                the model output will be a dict. With a Pydantic class the returned</span>
+<span class="sd">                attributes will be validated, whereas with a dict they will not be. If</span>
+<span class="sd">                `method` is &quot;function_calling&quot; and `schema` is a dict, then the dict</span>
+<span class="sd">                must match the OpenAI function-calling spec.</span>
+<span class="sd">            include_raw: If False then only the parsed structured output is returned. If</span>
+<span class="sd">                an error occurs during model output parsing it will be raised. If True</span>
+<span class="sd">                then both the raw model response (a BaseMessage) and the parsed model</span>
+<span class="sd">                response will be returned. If an error occurs during output parsing it</span>
+<span class="sd">                will be caught and returned as well. The final output is always a dict</span>
+<span class="sd">                with keys &quot;raw&quot;, &quot;parsed&quot;, and &quot;parsing_error&quot;.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A Runnable that takes any ChatModel input and returns as output:</span>
+
+<span class="sd">                If include_raw is True then a dict with keys:</span>
+<span class="sd">                    raw: BaseMessage</span>
+<span class="sd">                    parsed: Optional[_DictOrPydantic]</span>
+<span class="sd">                    parsing_error: Optional[BaseException]</span>
+
+<span class="sd">                If include_raw is False then just _DictOrPydantic is returned,</span>
+<span class="sd">                where _DictOrPydantic depends on the schema:</span>
+
+<span class="sd">                If schema is a Pydantic class then _DictOrPydantic is the Pydantic</span>
+<span class="sd">                    class.</span>
+
+<span class="sd">                If schema is a dict then _DictOrPydantic is a dict.</span>
+
+<span class="sd">        Example: Function-calling, Pydantic schema (method=&quot;function_calling&quot;, include_raw=False):</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.chat_models import MiniMaxChat</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
+
+<span class="sd">                class AnswerWithJustification(BaseModel):</span>
+<span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+<span class="sd">                    answer: str</span>
+<span class="sd">                    justification: str</span>
+
+<span class="sd">                llm = MiniMaxChat()</span>
+<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification)</span>
+
+<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+
+<span class="sd">                # -&gt; AnswerWithJustification(</span>
+<span class="sd">                #     answer=&#39;A pound of bricks and a pound of feathers weigh the same.&#39;,</span>
+<span class="sd">                #     justification=&#39;The weight of the feathers is much less dense than the weight of the bricks, but since both weigh one pound, they weigh the same.&#39;</span>
+<span class="sd">                # )</span>
+
+<span class="sd">        Example: Function-calling, Pydantic schema (method=&quot;function_calling&quot;, include_raw=True):</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.chat_models import MiniMaxChat</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
+
+<span class="sd">                class AnswerWithJustification(BaseModel):</span>
+<span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+<span class="sd">                    answer: str</span>
+<span class="sd">                    justification: str</span>
+
+<span class="sd">                llm = MiniMaxChat()</span>
+<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification, include_raw=True)</span>
+
+<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+
+<span class="sd">                # -&gt; {</span>
+<span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;&#39;, additional_kwargs={&#39;tool_calls&#39;: [{&#39;id&#39;: &#39;call_function_8953642285&#39;, &#39;type&#39;: &#39;function&#39;, &#39;function&#39;: {&#39;name&#39;: &#39;AnswerWithJustification&#39;, &#39;arguments&#39;: &#39;{&quot;answer&quot;: &quot;A pound of bricks and a pound of feathers weigh the same.&quot;, &quot;justification&quot;: &quot;The weight of the feathers is much less dense than the weight of the bricks, but since both weigh one pound, they weigh the same.&quot;}&#39;}}]}, response_metadata={&#39;token_usage&#39;: {&#39;total_tokens&#39;: 257}, &#39;model_name&#39;: &#39;abab6.5-chat&#39;, &#39;finish_reason&#39;: &#39;tool_calls&#39;}, id=&#39;run-d897e037-2796-49f5-847e-f9f69dd390db-0&#39;, tool_calls=[{&#39;name&#39;: &#39;AnswerWithJustification&#39;, &#39;args&#39;: {&#39;answer&#39;: &#39;A pound of bricks and a pound of feathers weigh the same.&#39;, &#39;justification&#39;: &#39;The weight of the feathers is much less dense than the weight of the bricks, but since both weigh one pound, they weigh the same.&#39;}, &#39;id&#39;: &#39;call_function_8953642285&#39;, &#39;type&#39;: &#39;tool_call&#39;}]),</span>
+<span class="sd">                #     &#39;parsed&#39;: AnswerWithJustification(answer=&#39;A pound of bricks and a pound of feathers weigh the same.&#39;, justification=&#39;The weight of the feathers is much less dense than the weight of the bricks, but since both weigh one pound, they weigh the same.&#39;),</span>
+<span class="sd">                #     &#39;parsing_error&#39;: None</span>
+<span class="sd">                # }</span>
+
+<span class="sd">        Example: Function-calling, dict schema (method=&quot;function_calling&quot;, include_raw=False):</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_community.chat_models import MiniMaxChat</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
+<span class="sd">                from langchain_core.utils.function_calling import convert_to_openai_tool</span>
+
+<span class="sd">                class AnswerWithJustification(BaseModel):</span>
+<span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+<span class="sd">                    answer: str</span>
+<span class="sd">                    justification: str</span>
+
+<span class="sd">                dict_schema = convert_to_openai_tool(AnswerWithJustification)</span>
+<span class="sd">                llm = MiniMaxChat()</span>
+<span class="sd">                structured_llm = llm.with_structured_output(dict_schema)</span>
+
+<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+
+<span class="sd">                # -&gt; {</span>
+<span class="sd">                #     &#39;answer&#39;: &#39;A pound of bricks and a pound of feathers both weigh the same, which is a pound.&#39;,</span>
+<span class="sd">                #     &#39;justification&#39;: &#39;The difference is that bricks are much denser than feathers, so a pound of bricks will take up much less space than a pound of feathers.&#39;</span>
+<span class="sd">                # }</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received unsupported arguments </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">is_pydantic_schema</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">)</span>
+        <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">([</span><span class="n">schema</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">is_pydantic_schema</span><span class="p">:</span>
+            <span class="n">output_parser</span><span class="p">:</span> <span class="n">OutputParserLike</span> <span class="o">=</span> <span class="n">PydanticToolsParser</span><span class="p">(</span>
+                <span class="n">tools</span><span class="o">=</span><span class="p">[</span><span class="n">schema</span><span class="p">],</span>  <span class="c1"># type: ignore[list-item]</span>
+                <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># type: ignore[list-item]</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">key_name</span> <span class="o">=</span> <span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">schema</span><span class="p">)[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">JsonOutputKeyToolsParser</span><span class="p">(</span>
+                <span class="n">key_name</span><span class="o">=</span><span class="n">key_name</span><span class="p">,</span> <span class="n">first_tool_only</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">include_raw</span><span class="p">:</span>
+            <span class="n">parser_assign</span> <span class="o">=</span> <span class="n">RunnablePassthrough</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span>
+                <span class="n">parsed</span><span class="o">=</span><span class="n">itemgetter</span><span class="p">(</span><span class="s2">&quot;raw&quot;</span><span class="p">)</span> <span class="o">|</span> <span class="n">output_parser</span><span class="p">,</span> <span class="n">parsing_error</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">parser_none</span> <span class="o">=</span> <span class="n">RunnablePassthrough</span><span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">parsed</span><span class="o">=</span><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">parser_with_fallback</span> <span class="o">=</span> <span class="n">parser_assign</span><span class="o">.</span><span class="n">with_fallbacks</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">parser_none</span><span class="p">],</span> <span class="n">exception_key</span><span class="o">=</span><span class="s2">&quot;parsing_error&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">RunnableMap</span><span class="p">(</span><span class="n">raw</span><span class="o">=</span><span class="n">llm</span><span class="p">)</span> <span class="o">|</span> <span class="n">parser_with_fallback</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">output_parser</span></div></div>
 </pre></div>
 
             </div>
@@ -769,7 +1031,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 29, 2024.
+                                on Jul 30, 2024.
                 </footer>
             </div>
         </div>
