@@ -238,12 +238,16 @@
             <div class="sk-page-content container-fluid body px-md-3" role="main">
                 
   <h1>Source code for langchain_community.embeddings.fastembed</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span>
+<span></span><span class="kn">import</span> <span class="nn">importlib</span>
+<span class="kn">import</span> <span class="nn">importlib.metadata</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Extra</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">pre_init</span>
+
+<span class="n">MIN_VERSION</span> <span class="o">=</span> <span class="s2">&quot;0.2.0&quot;</span>
 
 
 <div class="viewcode-block" id="FastEmbedEmbeddings"><a class="viewcode-back" href="../../../embeddings/langchain_community.embeddings.fastembed.FastEmbedEmbeddings.html#langchain_community.embeddings.fastembed.FastEmbedEmbeddings">[docs]</a><span class="k">class</span> <span class="nc">FastEmbedEmbeddings</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">,</span> <span class="n">Embeddings</span><span class="p">):</span>
@@ -288,12 +292,24 @@
 <span class="sd">    The available options are: &quot;default&quot; and &quot;passage&quot;</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Batch size for encoding. Higher values will use more memory, but be faster.</span>
+<span class="sd">    Defaults to 256.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">parallel</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;If `&gt;1`, parallel encoding is used, recommended for encoding of large datasets.</span>
+<span class="sd">    If `0`, use all available cores.</span>
+<span class="sd">    If `None`, don&#39;t use data-parallel processing, use default onnxruntime threading.</span>
+<span class="sd">    Defaults to `None`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="n">_model</span><span class="p">:</span> <span class="n">Any</span>  <span class="c1"># : :meta private:</span>
 
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
 
-        <span class="n">extra</span> <span class="o">=</span> <span class="n">Extra</span><span class="o">.</span><span class="n">forbid</span>
+        <span class="n">extra</span> <span class="o">=</span> <span class="n">Extra</span><span class="o">.</span><span class="n">allow</span>
 
     <span class="nd">@pre_init</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
@@ -304,31 +320,25 @@
         <span class="n">threads</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;threads&quot;</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="c1"># &gt;= v0.2.0</span>
-            <span class="kn">from</span> <span class="nn">fastembed</span> <span class="kn">import</span> <span class="n">TextEmbedding</span>
+            <span class="n">fastembed</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;fastembed&quot;</span><span class="p">)</span>
 
-            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_model&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">TextEmbedding</span><span class="p">(</span>
-                <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
-                <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">,</span>
-                <span class="n">cache_dir</span><span class="o">=</span><span class="n">cache_dir</span><span class="p">,</span>
-                <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
+        <span class="k">except</span> <span class="ne">ModuleNotFoundError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;Could not import &#39;fastembed&#39; Python package. &quot;</span>
+                <span class="s2">&quot;Please install it with `pip install fastembed`.&quot;</span>
             <span class="p">)</span>
-        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">ie</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="c1"># &lt; v0.2.0</span>
-                <span class="kn">from</span> <span class="nn">fastembed.embedding</span> <span class="kn">import</span> <span class="n">FlagEmbedding</span>
 
-                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_model&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">FlagEmbedding</span><span class="p">(</span>
-                    <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
-                    <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">,</span>
-                    <span class="n">cache_dir</span><span class="o">=</span><span class="n">cache_dir</span><span class="p">,</span>
-                    <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-                    <span class="s2">&quot;Could not import &#39;fastembed&#39; Python package. &quot;</span>
-                    <span class="s2">&quot;Please install it with `pip install fastembed`.&quot;</span>
-                <span class="p">)</span> <span class="kn">from</span> <span class="nn">ie</span>
+        <span class="k">if</span> <span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="s2">&quot;fastembed&quot;</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">MIN_VERSION</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s1">&#39;FastEmbedEmbeddings requires `pip install -U &quot;fastembed&gt;=0.2.0&quot;`.&#39;</span>
+            <span class="p">)</span>
+
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;_model&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fastembed</span><span class="o">.</span><span class="n">TextEmbedding</span><span class="p">(</span>
+            <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">,</span>
+            <span class="n">cache_dir</span><span class="o">=</span><span class="n">cache_dir</span><span class="p">,</span>
+            <span class="n">threads</span><span class="o">=</span><span class="n">threads</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
 <div class="viewcode-block" id="FastEmbedEmbeddings.embed_documents"><a class="viewcode-back" href="../../../embeddings/langchain_community.embeddings.fastembed.FastEmbedEmbeddings.html#langchain_community.embeddings.fastembed.FastEmbedEmbeddings.embed_documents">[docs]</a>    <span class="k">def</span> <span class="nf">embed_documents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
@@ -342,9 +352,13 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">embeddings</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">doc_embed_type</span> <span class="o">==</span> <span class="s2">&quot;passage&quot;</span><span class="p">:</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">passage_embed</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">passage_embed</span><span class="p">(</span>
+                <span class="n">texts</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">parallel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parallel</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">texts</span><span class="p">)</span>
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span>
+                <span class="n">texts</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">parallel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parallel</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">e</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">embeddings</span><span class="p">]</span></div>
 
 <div class="viewcode-block" id="FastEmbedEmbeddings.embed_query"><a class="viewcode-back" href="../../../embeddings/langchain_community.embeddings.fastembed.FastEmbedEmbeddings.html#langchain_community.embeddings.fastembed.FastEmbedEmbeddings.embed_query">[docs]</a>    <span class="k">def</span> <span class="nf">embed_query</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
@@ -356,7 +370,11 @@
 <span class="sd">        Returns:</span>
 <span class="sd">            Embeddings for the text.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">query_embeddings</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">query_embed</span><span class="p">(</span><span class="n">text</span><span class="p">))</span>
+        <span class="n">query_embeddings</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">query_embed</span><span class="p">(</span>
+                <span class="n">text</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">parallel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">parallel</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">query_embeddings</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span></div></div>
 </pre></div>
 
@@ -366,7 +384,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 30, 2024.
+                                on Jul 31, 2024.
                 </footer>
             </div>
         </div>

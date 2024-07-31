@@ -248,7 +248,7 @@
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">http</span> <span class="kn">import</span> <span class="n">HTTPStatus</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span> <span class="nn">requests</span>  <span class="c1"># type: ignore</span>
 <span class="kn">from</span> <span class="nn">langchain.chains.base</span> <span class="kn">import</span> <span class="n">Chain</span>
@@ -277,6 +277,7 @@
     <span class="n">CLASSIFIER_URL</span><span class="p">,</span>
     <span class="n">PEBBLO_CLOUD_URL</span><span class="p">,</span>
     <span class="n">PLUGIN_VERSION</span><span class="p">,</span>
+    <span class="n">PROMPT_GOV_URL</span><span class="p">,</span>
     <span class="n">PROMPT_URL</span><span class="p">,</span>
     <span class="n">get_runtime</span><span class="p">,</span>
 <span class="p">)</span>
@@ -319,6 +320,8 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Flag to check if discover payload has been sent.&quot;&quot;&quot;</span>
     <span class="n">_prompt_sent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1">#: :meta private:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Flag to check if prompt payload has been sent.&quot;&quot;&quot;</span>
+    <span class="n">enable_prompt_gov</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1">#: :meta private:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Flag to check if prompt governance is enabled or not&quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">_call</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -342,6 +345,8 @@
         <span class="n">question</span> <span class="o">=</span> <span class="n">inputs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">input_key</span><span class="p">]</span>
         <span class="n">auth_context</span> <span class="o">=</span> <span class="n">inputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">auth_context_key</span><span class="p">,</span> <span class="p">{})</span>
         <span class="n">semantic_context</span> <span class="o">=</span> <span class="n">inputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">semantic_context_key</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">prompt_entities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_prompt_validity</span><span class="p">(</span><span class="n">question</span><span class="p">)</span>
+
         <span class="n">accepts_run_manager</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">&quot;run_manager&quot;</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_docs</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
         <span class="p">)</span>
@@ -373,7 +378,12 @@
                 <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">docs</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">Document</span><span class="p">)</span>
             <span class="p">],</span>
-            <span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">question</span><span class="p">},</span>
+            <span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">question</span><span class="p">,</span>
+                <span class="s2">&quot;entities&quot;</span><span class="p">:</span> <span class="n">prompt_entities</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;entities&quot;</span><span class="p">,</span> <span class="p">{}),</span>
+                <span class="s2">&quot;entityCount&quot;</span><span class="p">:</span> <span class="n">prompt_entities</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;entityCount&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                <span class="s2">&quot;prompt_gov_enabled&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">enable_prompt_gov</span><span class="p">,</span>
+            <span class="p">},</span>
             <span class="s2">&quot;response&quot;</span><span class="p">:</span> <span class="p">{</span>
                 <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">answer</span><span class="p">,</span>
             <span class="p">},</span>
@@ -384,6 +394,7 @@
             <span class="k">else</span> <span class="p">[],</span>
             <span class="s2">&quot;classifier_location&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier_location</span><span class="p">,</span>
         <span class="p">}</span>
+
         <span class="n">qa_payload</span> <span class="o">=</span> <span class="n">Qa</span><span class="p">(</span><span class="o">**</span><span class="n">qa</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_send_prompt</span><span class="p">(</span><span class="n">qa_payload</span><span class="p">)</span>
 
@@ -415,6 +426,9 @@
         <span class="n">accepts_run_manager</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">&quot;run_manager&quot;</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_aget_docs</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
         <span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">prompt_entities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_prompt_validity</span><span class="p">(</span><span class="n">question</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">accepts_run_manager</span><span class="p">:</span>
             <span class="n">docs</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aget_docs</span><span class="p">(</span>
                 <span class="n">question</span><span class="p">,</span> <span class="n">auth_context</span><span class="p">,</span> <span class="n">semantic_context</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">_run_manager</span>
@@ -753,6 +767,66 @@
             <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;API key is missing for sending prompt to Pebblo cloud.&quot;</span><span class="p">)</span>
             <span class="k">raise</span> <span class="ne">NameError</span><span class="p">(</span><span class="s2">&quot;API key is missing for sending prompt to Pebblo cloud.&quot;</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_check_prompt_validity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">question</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check the validity of the given prompt using a remote classification service.</span>
+
+<span class="sd">        This method sends a prompt to a remote classifier service and return entities</span>
+<span class="sd">        present in prompt or not.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            question (str): The prompt question to be validated.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if the prompt is valid (does not contain deny list entities),</span>
+<span class="sd">            False otherwise.</span>
+<span class="sd">            dict: The entities present in the prompt</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">headers</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">prompt_payload</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;prompt&quot;</span><span class="p">:</span> <span class="n">question</span><span class="p">}</span>
+        <span class="n">is_valid_prompt</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">prompt_gov_api_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">classifier_url</span><span class="si">}{</span><span class="n">PROMPT_GOV_URL</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">prompt_entities</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;entities&quot;</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">&quot;entityCount&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">classifier_location</span> <span class="o">==</span> <span class="s2">&quot;local&quot;</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">pebblo_resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                    <span class="n">prompt_gov_api_url</span><span class="p">,</span>
+                    <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">,</span>
+                    <span class="n">json</span><span class="o">=</span><span class="n">prompt_payload</span><span class="p">,</span>
+                    <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;prompt-payload: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">prompt_payload</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s2">&quot;send_prompt[local]: request url </span><span class="si">%s</span><span class="s2">, body </span><span class="si">%s</span><span class="s2"> len </span><span class="si">%s</span><span class="se">\</span>
+<span class="s2">                        response status </span><span class="si">%s</span><span class="s2"> body </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span><span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span>
+                        <span class="nb">len</span><span class="p">(</span>
+                            <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">if</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">body</span> <span class="k">else</span> <span class="p">[]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="nb">str</span><span class="p">(</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">status_code</span><span class="p">),</span>
+                    <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">(),</span>
+                <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;pebblo_resp.json() </span><span class="si">{</span><span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">prompt_entities</span><span class="p">[</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;entities&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                <span class="n">prompt_entities</span><span class="p">[</span><span class="s2">&quot;entityCount&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pebblo_resp</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                    <span class="s2">&quot;entityCount&quot;</span><span class="p">,</span> <span class="mi">0</span>
+                <span class="p">)</span>
+
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to reach pebblo server.&quot;</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;An Exception caught in _send_discover: local </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">is_valid_prompt</span><span class="p">,</span> <span class="n">prompt_entities</span>
+
 <div class="viewcode-block" id="PebbloRetrievalQA.get_chain_details"><a class="viewcode-back" href="../../../../chains/langchain_community.chains.pebblo_retrieval.base.PebbloRetrievalQA.html#langchain_community.chains.pebblo_retrieval.base.PebbloRetrievalQA.get_chain_details">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">get_chain_details</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">llm</span><span class="p">:</span> <span class="n">BaseLanguageModel</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># type: ignore</span>
         <span class="n">llm_dict</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="vm">__dict__</span>
@@ -788,7 +862,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 30, 2024.
+                                on Jul 31, 2024.
                 </footer>
             </div>
         </div>

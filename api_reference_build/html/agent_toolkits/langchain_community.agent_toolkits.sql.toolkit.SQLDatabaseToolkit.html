@@ -257,13 +257,58 @@
 <dt class="sig sig-object py" id="langchain_community.agent_toolkits.sql.toolkit.SQLDatabaseToolkit">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain_community.agent_toolkits.sql.toolkit.</span></span><span class="sig-name descname"><span class="pre">SQLDatabaseToolkit</span></span><a class="reference internal" href="../_modules/langchain_community/agent_toolkits/sql/toolkit.html#SQLDatabaseToolkit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain_community.agent_toolkits.sql.toolkit.SQLDatabaseToolkit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="../tools/langchain_core.tools.BaseToolkit.html#langchain_core.tools.BaseToolkit" title="langchain_core.tools.BaseToolkit"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseToolkit</span></code></a></p>
-<p>Toolkit for interacting with SQL databases.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>db</strong> – SQLDatabase. The SQL database.</p></li>
-<li><p><strong>llm</strong> – BaseLanguageModel. The language model.</p></li>
-</ul>
+<p>SQLDatabaseToolkit for interacting with SQL databases.</p>
+<dl>
+<dt>Setup:</dt><dd><p>Install <code class="docutils literal notranslate"><span class="pre">langchain-community</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>langchain-community
+</pre></div>
+</div>
+</dd>
+<dt>Key init args:</dt><dd><dl class="simple">
+<dt>db: SQLDatabase</dt><dd><p>The SQL database.</p>
+</dd>
+<dt>llm: BaseLanguageModel</dt><dd><p>The language model (for use with QuerySQLCheckerTool)</p>
+</dd>
+</dl>
+</dd>
+<dt>Instantiate:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_community.agent_toolkits.sql.toolkit</span> <span class="kn">import</span> <span class="n">SQLDatabaseToolkit</span>
+<span class="kn">from</span> <span class="nn">langchain_community.utilities.sql_database</span> <span class="kn">import</span> <span class="n">SQLDatabase</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+
+<span class="n">db</span> <span class="o">=</span> <span class="n">SQLDatabase</span><span class="o">.</span><span class="n">from_uri</span><span class="p">(</span><span class="s2">&quot;sqlite:///Chinook.db&quot;</span><span class="p">)</span>
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">toolkit</span> <span class="o">=</span> <span class="n">SQLDatabaseToolkit</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="n">db</span><span class="p">,</span> <span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>Tools:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">toolkit</span><span class="o">.</span><span class="n">get_tools</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>Use within an agent:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain</span> <span class="kn">import</span> <span class="n">hub</span>
+<span class="kn">from</span> <span class="nn">langgraph.prebuilt</span> <span class="kn">import</span> <span class="n">create_react_agent</span>
+
+<span class="c1"># Pull prompt (or define your own)</span>
+<span class="n">prompt_template</span> <span class="o">=</span> <span class="n">hub</span><span class="o">.</span><span class="n">pull</span><span class="p">(</span><span class="s2">&quot;langchain-ai/sql-agent-system-prompt&quot;</span><span class="p">)</span>
+<span class="n">system_message</span> <span class="o">=</span> <span class="n">prompt_template</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="s2">&quot;SQLite&quot;</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+
+<span class="c1"># Create agent</span>
+<span class="n">agent_executor</span> <span class="o">=</span> <span class="n">create_react_agent</span><span class="p">(</span>
+    <span class="n">llm</span><span class="p">,</span> <span class="n">toolkit</span><span class="o">.</span><span class="n">get_tools</span><span class="p">(),</span> <span class="n">state_modifier</span><span class="o">=</span><span class="n">system_message</span>
+<span class="p">)</span>
+
+<span class="c1"># Query agent</span>
+<span class="n">example_query</span> <span class="o">=</span> <span class="s2">&quot;Which country&#39;s customers spent the most?&quot;</span>
+
+<span class="n">events</span> <span class="o">=</span> <span class="n">agent_executor</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[(</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">example_query</span><span class="p">)]},</span>
+    <span class="n">stream_mode</span><span class="o">=</span><span class="s2">&quot;values&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+    <span class="n">event</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pretty_print</span><span class="p">()</span>
+</pre></div>
+</div>
 </dd>
 </dl>
 <p>Create a new model by parsing and validating input data from keyword arguments.</p>
@@ -323,7 +368,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 30, 2024.
+                                on Jul 31, 2024.
                 </footer>
             </div>
         </div>

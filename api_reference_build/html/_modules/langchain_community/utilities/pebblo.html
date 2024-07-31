@@ -244,7 +244,7 @@
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pathlib</span>
 <span class="kn">import</span> <span class="nn">platform</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 <span class="kn">from</span> <span class="nn">langchain_core.env</span> <span class="kn">import</span> <span class="n">get_runtime_environment</span>
@@ -260,6 +260,7 @@
 
 <span class="n">LOADER_DOC_URL</span> <span class="o">=</span> <span class="s2">&quot;/v1/loader/doc&quot;</span>
 <span class="n">APP_DISCOVER_URL</span> <span class="o">=</span> <span class="s2">&quot;/v1/app/discover&quot;</span>
+<span class="n">BATCH_SIZE_BYTES</span> <span class="o">=</span> <span class="mi">100</span> <span class="o">*</span> <span class="mi">1024</span>  <span class="c1"># 100 KB</span>
 
 <span class="c1"># Supported loaders for Pebblo safe data loading</span>
 <span class="n">file_loader</span> <span class="o">=</span> <span class="p">[</span>
@@ -541,6 +542,46 @@
     <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
         <span class="n">public_ip</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostbyname</span><span class="p">(</span><span class="s2">&quot;localhost&quot;</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">public_ip</span></div>
+
+
+<div class="viewcode-block" id="generate_size_based_batches"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.pebblo.generate_size_based_batches.html#langchain_community.utilities.pebblo.generate_size_based_batches">[docs]</a><span class="k">def</span> <span class="nf">generate_size_based_batches</span><span class="p">(</span>
+    <span class="n">docs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="n">max_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span> <span class="o">*</span> <span class="mi">1024</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generate batches of documents based on page_content size.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        docs: List of documents to be batched.</span>
+<span class="sd">        max_batch_size: Maximum size of each batch in bytes. Defaults to 100*1024(100KB)</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        List[List[Document]]: List of batches of documents</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">batches</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">current_batch</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">current_batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">:</span>
+        <span class="c1"># Calculate the size of the document in bytes</span>
+        <span class="n">doc_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">doc_size</span> <span class="o">&gt;</span> <span class="n">max_batch_size</span><span class="p">:</span>
+            <span class="c1"># If a single document exceeds the max batch size, send it as a single batch</span>
+            <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">doc</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">current_batch_size</span> <span class="o">+</span> <span class="n">doc_size</span> <span class="o">&gt;</span> <span class="n">max_batch_size</span><span class="p">:</span>
+                <span class="c1"># If adding this document exceeds the max batch size, start a new batch</span>
+                <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_batch</span><span class="p">)</span>
+                <span class="n">current_batch</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">current_batch_size</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="c1"># Add document to the current batch</span>
+            <span class="n">current_batch</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc</span><span class="p">)</span>
+            <span class="n">current_batch_size</span> <span class="o">+=</span> <span class="n">doc_size</span>
+
+    <span class="c1"># Add the last batch if it has documents</span>
+    <span class="k">if</span> <span class="n">current_batch</span><span class="p">:</span>
+        <span class="n">batches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current_batch</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">batches</span></div>
 </pre></div>
 
             </div>
@@ -549,7 +590,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 30, 2024.
+                                on Jul 31, 2024.
                 </footer>
             </div>
         </div>

@@ -243,6 +243,7 @@
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span> <span class="nn">base64</span>
+<span class="kn">import</span> <span class="nn">enum</span>
 <span class="kn">import</span> <span class="nn">io</span>
 <span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">import</span> <span class="nn">os</span>
@@ -267,18 +268,25 @@
     <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.exceptions</span> <span class="kn">import</span> <span class="n">OutputParserException</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">BaseChatModel</span><span class="p">,</span> <span class="n">LanguageModelInput</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AIMessage</span><span class="p">,</span>
     <span class="n">AIMessageChunk</span><span class="p">,</span>
     <span class="n">BaseMessage</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseOutputParser</span><span class="p">,</span>
+    <span class="n">JsonOutputParser</span><span class="p">,</span>
+    <span class="n">PydanticOutputParser</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">ChatGeneration</span><span class="p">,</span>
     <span class="n">ChatGenerationChunk</span><span class="p">,</span>
     <span class="n">ChatResult</span><span class="p">,</span>
+    <span class="n">Generation</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PrivateAttr</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">PrivateAttr</span><span class="p">,</span> <span class="n">root_validator</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
@@ -288,8 +296,8 @@
 <span class="kn">from</span> <span class="nn">langchain_nvidia_ai_endpoints._utils</span> <span class="kn">import</span> <span class="n">convert_message_to_dict</span>
 
 <span class="n">_CallbackManager</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">,</span> <span class="n">CallbackManagerForLLMRun</span><span class="p">]</span>
-<span class="n">_DictOrPydanticClass</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]]</span>
-<span class="n">_DictOrPydantic</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">]</span>
+<span class="n">_DictOrPydanticOrEnumClass</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">]]</span>
+<span class="n">_DictOrPydanticOrEnum</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">]</span>
 
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">import</span> <span class="nn">PIL.Image</span>
@@ -420,8 +428,8 @@
 
     <span class="n">_client</span><span class="p">:</span> <span class="n">_NVIDIAClient</span> <span class="o">=</span> <span class="n">PrivateAttr</span><span class="p">(</span><span class="n">_NVIDIAClient</span><span class="p">)</span>
     <span class="n">_default_model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;meta/llama3-8b-instruct&quot;</span>
+    <span class="n">_default_base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https://integrate.api.nvidia.com/v1&quot;</span>
     <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
-        <span class="s2">&quot;https://integrate.api.nvidia.com/v1&quot;</span><span class="p">,</span>
         <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Base url for model listing an invocation&quot;</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Name of the model to invoke&quot;</span><span class="p">)</span>
@@ -432,6 +440,18 @@
     <span class="n">top_p</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Top-p for distribution sampling&quot;</span><span class="p">)</span>
     <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;The seed for deterministic results&quot;</span><span class="p">)</span>
     <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">&quot;Stop words (cased)&quot;</span><span class="p">)</span>
+
+    <span class="n">_base_url_var</span> <span class="o">=</span> <span class="s2">&quot;NVIDIA_BASE_URL&quot;</span>
+
+    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">_validate_base_url</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;base_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">_base_url_var</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+            <span class="ow">or</span> <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;base_url&quot;</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">_base_url_var</span><span class="p">)</span>
+            <span class="ow">or</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_default_base_url</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">values</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -447,6 +467,7 @@
 <span class="sd">            nvidia_api_key (str): The API key to use for connecting to the hosted NIM.</span>
 <span class="sd">            api_key (str): Alternative to nvidia_api_key.</span>
 <span class="sd">            base_url (str): The base URL of the NIM to connect to.</span>
+<span class="sd">                            Format for base URL is http://host:port</span>
 <span class="sd">            temperature (float): Sampling temperature in [0, 1].</span>
 <span class="sd">            max_tokens (int): Maximum number of tokens to generate.</span>
 <span class="sd">            top_p (float): Top-p for distribution sampling.</span>
@@ -750,19 +771,217 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Not implemented, use `bind_tools` instead.&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ChatNVIDIA.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.html#langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>
+    <span class="c1"># we have an Enum extension to BaseChatModel.with_structured_output and</span>
+    <span class="c1"># as a result need to type ignore for the schema parameter and return type.</span>
+<div class="viewcode-block" id="ChatNVIDIA.with_structured_output"><a class="viewcode-back" href="../../chat_models/langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.html#langchain_nvidia_ai_endpoints.chat_models.ChatNVIDIA.with_structured_output">[docs]</a>    <span class="k">def</span> <span class="nf">with_structured_output</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">schema</span><span class="p">:</span> <span class="n">_DictOrPydanticClass</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">_DictOrPydanticOrEnumClass</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;function_calling&quot;</span><span class="p">,</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">,</span>
-        <span class="n">return_type</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;parsed&quot;</span><span class="p">,</span> <span class="s2">&quot;all&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;parsed&quot;</span><span class="p">,</span>
+        <span class="n">include_raw</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_DictOrPydantic</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="s2">&quot;Not implemented, awaiting server-side function-recieving API&quot;</span>
-            <span class="s2">&quot; Consider following open-source LLM agent spec techniques:&quot;</span>
-            <span class="s2">&quot; https://huggingface.co/blog/open-source-llms-as-agents&quot;</span>
-        <span class="p">)</span></div></div>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_DictOrPydanticOrEnum</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Bind a structured output schema to the model.</span>
+
+<span class="sd">        The schema can be -</span>
+<span class="sd">         0. a dictionary representing a JSON schema</span>
+<span class="sd">         1. a Pydantic object</span>
+<span class="sd">         2. an Enum</span>
+
+<span class="sd">        0. If a dictionary is provided, the model will return a dictionary. Example:</span>
+<span class="sd">        ```</span>
+<span class="sd">        json_schema = {</span>
+<span class="sd">            &quot;title&quot;: &quot;joke&quot;,</span>
+<span class="sd">            &quot;description&quot;: &quot;Joke to tell user.&quot;,</span>
+<span class="sd">            &quot;type&quot;: &quot;object&quot;,</span>
+<span class="sd">            &quot;properties&quot;: {</span>
+<span class="sd">                &quot;setup&quot;: {</span>
+<span class="sd">                    &quot;type&quot;: &quot;string&quot;,</span>
+<span class="sd">                    &quot;description&quot;: &quot;The setup of the joke&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">                &quot;punchline&quot;: {</span>
+<span class="sd">                    &quot;type&quot;: &quot;string&quot;,</span>
+<span class="sd">                    &quot;description&quot;: &quot;The punchline to the joke&quot;,</span>
+<span class="sd">                },</span>
+<span class="sd">            },</span>
+<span class="sd">            &quot;required&quot;: [&quot;setup&quot;, &quot;punchline&quot;],</span>
+<span class="sd">        }</span>
+
+<span class="sd">        structured_llm = llm.with_structured_output(json_schema)</span>
+<span class="sd">        structured_llm.invoke(&quot;Tell me a joke about NVIDIA&quot;)</span>
+<span class="sd">        # Output: {&#39;setup&#39;: &#39;Why did NVIDIA go broke? The hardware ate all the software.&#39;,</span>
+<span class="sd">        #          &#39;punchline&#39;: &#39;It took a big bite out of their main board.&#39;}</span>
+<span class="sd">        ```</span>
+
+<span class="sd">        1. If a Pydantic schema is provided, the model will return a Pydantic object.</span>
+<span class="sd">           Example:</span>
+<span class="sd">        ```</span>
+<span class="sd">        from langchain_core.pydantic_v1 import BaseModel, Field</span>
+<span class="sd">        class Joke(BaseModel):</span>
+<span class="sd">            setup: str = Field(description=&quot;The setup of the joke&quot;)</span>
+<span class="sd">            punchline: str = Field(description=&quot;The punchline to the joke&quot;)</span>
+
+<span class="sd">        structured_llm = llm.with_structured_output(Joke)</span>
+<span class="sd">        structured_llm.invoke(&quot;Tell me a joke about NVIDIA&quot;)</span>
+<span class="sd">        # Output: Joke(setup=&#39;Why did NVIDIA go broke? The hardware ate all the software.&#39;,</span>
+<span class="sd">        #              punchline=&#39;It took a big bite out of their main board.&#39;)</span>
+<span class="sd">        ```</span>
+
+<span class="sd">        2. If an Enum is provided, all values must be strings, and the model will return</span>
+<span class="sd">           an Enum object. Example:</span>
+<span class="sd">        ```</span>
+<span class="sd">        import enum</span>
+<span class="sd">        class Choices(enum.Enum):</span>
+<span class="sd">            A = &quot;A&quot;</span>
+<span class="sd">            B = &quot;B&quot;</span>
+<span class="sd">            C = &quot;C&quot;</span>
+
+<span class="sd">        structured_llm = llm.with_structured_output(Choices)</span>
+<span class="sd">        structured_llm.invoke(&quot;What is the first letter in this list? [X, Y, Z, C]&quot;)</span>
+<span class="sd">        # Output: &lt;Choices.C: &#39;C&#39;&gt;</span>
+<span class="sd">        ```</span>
+
+<span class="sd">        Note about streaming: Unlike other streaming responses, the streamed chunks</span>
+<span class="sd">        will be increasingly complete. They will not be deltas. The last chunk will</span>
+<span class="sd">        contain the complete response.</span>
+
+<span class="sd">        For instance with a dictionary schema, the chunks will be:</span>
+<span class="sd">        ```</span>
+<span class="sd">        structured_llm = llm.with_structured_output(json_schema)</span>
+<span class="sd">        for chunk in structured_llm.stream(&quot;Tell me a joke about NVIDIA&quot;):</span>
+<span class="sd">            print(chunk)</span>
+
+<span class="sd">        # Output:</span>
+<span class="sd">        # {}</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;&#39;}</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;Why&#39;}</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;Why did&#39;}</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;Why did N&#39;}</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;Why did NVID&#39;}</span>
+<span class="sd">        # ...</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;Why did NVIDIA go broke? The hardware ate all the software.&#39;, &#39;punchline&#39;: &#39;It took a big bite out of their main board&#39;}</span>
+<span class="sd">        # {&#39;setup&#39;: &#39;Why did NVIDIA go broke? The hardware ate all the software.&#39;, &#39;punchline&#39;: &#39;It took a big bite out of their main board.&#39;}</span>
+<span class="sd">        ```</span>
+
+<span class="sd">        For instnace with a Pydantic schema, the chunks will be:</span>
+<span class="sd">        ```</span>
+<span class="sd">        structured_llm = llm.with_structured_output(Joke)</span>
+<span class="sd">        for chunk in structured_llm.stream(&quot;Tell me a joke about NVIDIA&quot;):</span>
+<span class="sd">            print(chunk)</span>
+
+<span class="sd">        # Output:</span>
+<span class="sd">        # setup=&#39;Why did NVIDIA go broke? The hardware ate all the software.&#39; punchline=&#39;&#39;</span>
+<span class="sd">        # setup=&#39;Why did NVIDIA go broke? The hardware ate all the software.&#39; punchline=&#39;It&#39;</span>
+<span class="sd">        # setup=&#39;Why did NVIDIA go broke? The hardware ate all the software.&#39; punchline=&#39;It took&#39;</span>
+<span class="sd">        # ...</span>
+<span class="sd">        # setup=&#39;Why did NVIDIA go broke? The hardware ate all the software.&#39; punchline=&#39;It took a big bite out of their main board&#39;</span>
+<span class="sd">        # setup=&#39;Why did NVIDIA go broke? The hardware ate all the software.&#39; punchline=&#39;It took a big bite out of their main board.&#39;</span>
+<span class="sd">        ```</span>
+
+<span class="sd">        For Pydantic schema and Enum, the output will be None if the response is</span>
+<span class="sd">        insufficient to construct the object or otherwise invalid. For instance,</span>
+<span class="sd">        ```</span>
+<span class="sd">        llm = ChatNVIDIA(max_tokens=1)</span>
+<span class="sd">        structured_llm = llm.with_structured_output(Joke)</span>
+<span class="sd">        print(structured_llm.invoke(&quot;Tell me a joke about NVIDIA&quot;))</span>
+
+<span class="sd">        # Output: None</span>
+<span class="sd">        ```</span>
+
+<span class="sd">        For more, see https://python.langchain.com/v0.2/docs/how_to/structured_output/</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+
+        <span class="k">if</span> <span class="s2">&quot;method&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;The &#39;method&#39; parameter is unnecessary and is ignored. &quot;</span>
+                <span class="s2">&quot;The appropriate method will be chosen automatically depending &quot;</span>
+                <span class="s2">&quot;on the type of schema provided.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">include_raw</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;include_raw=True is not implemented, consider &quot;</span>
+                <span class="s2">&quot;https://python.langchain.com/v0.2/docs/how_to/&quot;</span>
+                <span class="s2">&quot;structured_output/#prompting-and-parsing-model&quot;</span>
+                <span class="s2">&quot;-outputs-directly or rely on the structured response &quot;</span>
+                <span class="s2">&quot;being None when the LLM produces an incomplete response.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># check if the model supports structured output, warn if it does not</span>
+        <span class="n">known_good</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># todo: we need to store model: Model in this class</span>
+        <span class="c1">#       instead of model: str (= Model.id)</span>
+        <span class="c1">#  this should be: if not self.model.supports_tools: warnings.warn...</span>
+        <span class="n">candidates</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">model</span> <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">available_models</span> <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">candidates</span><span class="p">:</span>  <span class="c1"># user must have specified the model themselves</span>
+            <span class="n">known_good</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidates</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Multiple models with the same id&quot;</span>
+            <span class="n">known_good</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">supports_structured_output</span> <span class="ow">is</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">known_good</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Model &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2">&#39; is not known to support structured output. &quot;</span>
+                <span class="s2">&quot;Your output may fail at inference time.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">output_parser</span><span class="p">:</span> <span class="n">BaseOutputParser</span> <span class="o">=</span> <span class="n">JsonOutputParser</span><span class="p">()</span>
+            <span class="n">nvext_param</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_json&quot;</span><span class="p">:</span> <span class="n">schema</span><span class="p">}</span>
+
+        <span class="k">elif</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
+            <span class="c1"># PydanticOutputParser does not support streaming. what we do</span>
+            <span class="c1"># instead is ignore all inputs that are incomplete wrt the</span>
+            <span class="c1"># underlying Pydantic schema. if the entire input is invalid,</span>
+            <span class="c1"># we return None.</span>
+            <span class="k">class</span> <span class="nc">ForgivingPydanticOutputParser</span><span class="p">(</span><span class="n">PydanticOutputParser</span><span class="p">):</span>
+                <span class="k">def</span> <span class="nf">parse_result</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Generation</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">partial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">parse_result</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="n">partial</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">OutputParserException</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="k">return</span> <span class="kc">None</span>
+
+            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">ForgivingPydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+            <span class="n">nvext_param</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_json&quot;</span><span class="p">:</span> <span class="n">schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()}</span>
+
+        <span class="k">elif</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
+            <span class="c1"># langchain&#39;s EnumOutputParser is not in langchain_core</span>
+            <span class="c1"># and doesn&#39;t support streaming. this is a simple implementation</span>
+            <span class="c1"># that supports streaming with our semantics of returning None</span>
+            <span class="c1"># if no complete object can be constructed.</span>
+            <span class="k">class</span> <span class="nc">EnumOutputParser</span><span class="p">(</span><span class="n">BaseOutputParser</span><span class="p">):</span>
+                <span class="n">enum</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">]</span>
+
+                <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">enum</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+                    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="k">return</span> <span class="kc">None</span>
+
+            <span class="c1"># guided_choice only supports string choices</span>
+            <span class="n">choices</span> <span class="o">=</span> <span class="p">[</span><span class="n">choice</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">choice</span> <span class="ow">in</span> <span class="n">schema</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">choice</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">for</span> <span class="n">choice</span> <span class="ow">in</span> <span class="n">choices</span><span class="p">):</span>
+                <span class="c1"># instead of erroring out we could coerce the enum values to</span>
+                <span class="c1"># strings, but would then need to coerce them back to their</span>
+                <span class="c1"># original type for Enum construction.</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;Enum schema must only contain string choices. &quot;</span>
+                    <span class="s2">&quot;Use StrEnum or ensure all member values are strings.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">EnumOutputParser</span><span class="p">(</span><span class="n">enum</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+            <span class="n">nvext_param</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_choice&quot;</span><span class="p">:</span> <span class="n">choices</span><span class="p">}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Schema must be a Pydantic object, a dictionary &quot;</span>
+                <span class="s2">&quot;representing a JSON schema, or an Enum.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">nvext</span><span class="o">=</span><span class="n">nvext_param</span><span class="p">)</span> <span class="o">|</span> <span class="n">output_parser</span></div></div>
 </pre></div>
 
             </div>
@@ -771,7 +990,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 30, 2024.
+                                on Jul 31, 2024.
                 </footer>
             </div>
         </div>
