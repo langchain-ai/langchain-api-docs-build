@@ -928,9 +928,8 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            tools: A list of tool definitions to bind to this chat model.</span>
-<span class="sd">                Can be  a dictionary, pydantic model, callable, or BaseTool. Pydantic</span>
-<span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
-<span class="sd">                their schema dictionary representation.</span>
+<span class="sd">                Supports any tool definition handled by</span>
+<span class="sd">                :meth:`langchain_core.utils.function_calling.convert_to_openai_tool`.</span>
 <span class="sd">            tool_choice: Which tool to require the model to call.</span>
 <span class="sd">                Must be the name of the single provided function,</span>
 <span class="sd">                &quot;auto&quot; to automatically determine which function to call</span>
@@ -986,19 +985,32 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            schema: The output schema as a dict or a Pydantic class. If a Pydantic class</span>
-<span class="sd">                then the model output will be an object of that class. If a dict then</span>
-<span class="sd">                the model output will be a dict. With a Pydantic class the returned</span>
-<span class="sd">                attributes will be validated, whereas with a dict they will not be. If</span>
-<span class="sd">                `method` is &quot;function_calling&quot; and `schema` is a dict, then the dict</span>
-<span class="sd">                must match the Fireworks function-calling spec.</span>
-<span class="sd">            method: The method for steering model generation, either &quot;function_calling&quot;</span>
+<span class="sd">            schema:</span>
+<span class="sd">                The output schema. Can be passed in as:</span>
+<span class="sd">                    - an OpenAI function/tool schema,</span>
+<span class="sd">                    - a JSON Schema,</span>
+<span class="sd">                    - a TypedDict class (support added in 0.1.7),</span>
+<span class="sd">                    - or a Pydantic class.</span>
+<span class="sd">                If ``schema`` is a Pydantic class then the model output will be a</span>
+<span class="sd">                Pydantic instance of that class, and the model-generated fields will be</span>
+<span class="sd">                validated by the Pydantic class. Otherwise the model output will be a</span>
+<span class="sd">                dict and will not be validated. See :meth:`langchain_core.utils.function_calling.convert_to_openai_tool`</span>
+<span class="sd">                for more on how to properly specify types and descriptions of</span>
+<span class="sd">                schema fields when specifying a Pydantic or TypedDict class.</span>
+
+<span class="sd">                .. versionchanged:: 0.1.7</span>
+
+<span class="sd">                        Added support for TypedDict class.</span>
+
+<span class="sd">            method:</span>
+<span class="sd">                The method for steering model generation, either &quot;function_calling&quot;</span>
 <span class="sd">                or &quot;json_mode&quot;. If &quot;function_calling&quot; then the schema will be converted</span>
-<span class="sd">                to a Fireworks function and the returned model will make use of the</span>
-<span class="sd">                function-calling API. If &quot;json_mode&quot; then Fireworks&#39;s JSON mode will be</span>
+<span class="sd">                to an OpenAI function and the returned model will make use of the</span>
+<span class="sd">                function-calling API. If &quot;json_mode&quot; then OpenAI&#39;s JSON mode will be</span>
 <span class="sd">                used. Note that if using &quot;json_mode&quot; then you must include instructions</span>
 <span class="sd">                for formatting the output into the desired schema into the model call.</span>
-<span class="sd">            include_raw: If False then only the parsed structured output is returned. If</span>
+<span class="sd">            include_raw:</span>
+<span class="sd">                If False then only the parsed structured output is returned. If</span>
 <span class="sd">                an error occurs during model output parsing it will be raised. If True</span>
 <span class="sd">                then both the raw model response (a BaseMessage) and the parsed model</span>
 <span class="sd">                response will be returned. If an error occurs during output parsing it</span>
@@ -1006,86 +1018,139 @@
 <span class="sd">                with keys &quot;raw&quot;, &quot;parsed&quot;, and &quot;parsing_error&quot;.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            A Runnable that takes any ChatModel input and returns as output:</span>
+<span class="sd">            A Runnable that takes same inputs as a :class:`langchain_core.language_models.chat.BaseChatModel`.</span>
 
-<span class="sd">                If include_raw is True then a dict with keys:</span>
-<span class="sd">                    raw: BaseMessage</span>
-<span class="sd">                    parsed: Optional[_DictOrPydantic]</span>
-<span class="sd">                    parsing_error: Optional[BaseException]</span>
+<span class="sd">            If ``include_raw`` is False and ``schema`` is a Pydantic class, Runnable outputs</span>
+<span class="sd">            an instance of ``schema`` (i.e., a Pydantic object).</span>
 
-<span class="sd">                If include_raw is False then just _DictOrPydantic is returned,</span>
-<span class="sd">                where _DictOrPydantic depends on the schema:</span>
+<span class="sd">            Otherwise, if ``include_raw`` is False then Runnable outputs a dict.</span>
 
-<span class="sd">                If schema is a Pydantic class then _DictOrPydantic is the Pydantic</span>
-<span class="sd">                    class.</span>
+<span class="sd">            If ``include_raw`` is True, then Runnable outputs a dict with keys:</span>
+<span class="sd">                - ``&quot;raw&quot;``: BaseMessage</span>
+<span class="sd">                - ``&quot;parsed&quot;``: None if there was a parsing error, otherwise the type depends on the ``schema`` as described above.</span>
+<span class="sd">                - ``&quot;parsing_error&quot;``: Optional[BaseException]</span>
 
-<span class="sd">                If schema is a dict then _DictOrPydantic is a dict.</span>
-
-<span class="sd">        Example: Function-calling, Pydantic schema (method=&quot;function_calling&quot;, include_raw=False):</span>
+<span class="sd">        Example: schema=Pydantic class, method=&quot;function_calling&quot;, include_raw=False:</span>
 <span class="sd">            .. code-block:: python</span>
 
+<span class="sd">                from typing import Optional</span>
+
 <span class="sd">                from langchain_fireworks import ChatFireworks</span>
-<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
+<span class="sd">                from langchain_core.pydantic_v1 import BaseModel, Field</span>
+
 
 <span class="sd">                class AnswerWithJustification(BaseModel):</span>
 <span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+
 <span class="sd">                    answer: str</span>
-<span class="sd">                    justification: str</span>
+<span class="sd">                    # If we provide default values and/or descriptions for fields, these will be passed</span>
+<span class="sd">                    # to the model. This is an important part of improving a model&#39;s ability to</span>
+<span class="sd">                    # correctly return structured outputs.</span>
+<span class="sd">                    justification: Optional[str] = Field(</span>
+<span class="sd">                        default=None, description=&quot;A justification for the answer.&quot;</span>
+<span class="sd">                    )</span>
+
 
 <span class="sd">                llm = ChatFireworks(model=&quot;accounts/fireworks/models/firefunction-v1&quot;, temperature=0)</span>
 <span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification)</span>
 
-<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+<span class="sd">                structured_llm.invoke(</span>
+<span class="sd">                    &quot;What weighs more a pound of bricks or a pound of feathers&quot;</span>
+<span class="sd">                )</span>
 
 <span class="sd">                # -&gt; AnswerWithJustification(</span>
 <span class="sd">                #     answer=&#39;They weigh the same&#39;,</span>
 <span class="sd">                #     justification=&#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.&#39;</span>
 <span class="sd">                # )</span>
 
-<span class="sd">        Example: Function-calling, Pydantic schema (method=&quot;function_calling&quot;, include_raw=True):</span>
+<span class="sd">        Example: schema=Pydantic class, method=&quot;function_calling&quot;, include_raw=True:</span>
 <span class="sd">            .. code-block:: python</span>
 
 <span class="sd">                from langchain_fireworks import ChatFireworks</span>
 <span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
 
+
 <span class="sd">                class AnswerWithJustification(BaseModel):</span>
 <span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+
 <span class="sd">                    answer: str</span>
 <span class="sd">                    justification: str</span>
 
-<span class="sd">                llm = ChatFireworks(model=&quot;accounts/fireworks/models/firefunction-v1&quot;, temperature=0)</span>
-<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification, include_raw=True)</span>
 
-<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+<span class="sd">                llm = ChatFireworks(model=&quot;accounts/fireworks/models/firefunction-v1&quot;, temperature=0)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(</span>
+<span class="sd">                    AnswerWithJustification, include_raw=True</span>
+<span class="sd">                )</span>
+
+<span class="sd">                structured_llm.invoke(</span>
+<span class="sd">                    &quot;What weighs more a pound of bricks or a pound of feathers&quot;</span>
+<span class="sd">                )</span>
 <span class="sd">                # -&gt; {</span>
 <span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;&#39;, additional_kwargs={&#39;tool_calls&#39;: [{&#39;id&#39;: &#39;call_Ao02pnFYXD6GN1yzc0uXPsvF&#39;, &#39;function&#39;: {&#39;arguments&#39;: &#39;{&quot;answer&quot;:&quot;They weigh the same.&quot;,&quot;justification&quot;:&quot;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.&quot;}&#39;, &#39;name&#39;: &#39;AnswerWithJustification&#39;}, &#39;type&#39;: &#39;function&#39;}]}),</span>
 <span class="sd">                #     &#39;parsed&#39;: AnswerWithJustification(answer=&#39;They weigh the same.&#39;, justification=&#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume or density of the objects may differ.&#39;),</span>
 <span class="sd">                #     &#39;parsing_error&#39;: None</span>
 <span class="sd">                # }</span>
 
-<span class="sd">        Example: Function-calling, dict schema (method=&quot;function_calling&quot;, include_raw=False):</span>
+<span class="sd">        Example: schema=TypedDict class, method=&quot;function_calling&quot;, include_raw=False:</span>
 <span class="sd">            .. code-block:: python</span>
 
+<span class="sd">                # IMPORTANT: If you are using Python &lt;=3.8, you need to import Annotated</span>
+<span class="sd">                # from typing_extensions, not from typing.</span>
+<span class="sd">                from typing_extensions import Annotated, TypedDict</span>
+
 <span class="sd">                from langchain_fireworks import ChatFireworks</span>
-<span class="sd">                from langchain_core.pydantic_v1 import BaseModel</span>
-<span class="sd">                from langchain_core.utils.function_calling import convert_to_openai_tool</span>
 
-<span class="sd">                class AnswerWithJustification(BaseModel):</span>
+
+<span class="sd">                class AnswerWithJustification(TypedDict):</span>
 <span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
+
 <span class="sd">                    answer: str</span>
-<span class="sd">                    justification: str</span>
+<span class="sd">                    justification: Annotated[</span>
+<span class="sd">                        Optional[str], None, &quot;A justification for the answer.&quot;</span>
+<span class="sd">                    ]</span>
 
-<span class="sd">                dict_schema = convert_to_openai_tool(AnswerWithJustification)</span>
+
 <span class="sd">                llm = ChatFireworks(model=&quot;accounts/fireworks/models/firefunction-v1&quot;, temperature=0)</span>
-<span class="sd">                structured_llm = llm.with_structured_output(dict_schema)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification)</span>
 
-<span class="sd">                structured_llm.invoke(&quot;What weighs more a pound of bricks or a pound of feathers&quot;)</span>
+<span class="sd">                structured_llm.invoke(</span>
+<span class="sd">                    &quot;What weighs more a pound of bricks or a pound of feathers&quot;</span>
+<span class="sd">                )</span>
 <span class="sd">                # -&gt; {</span>
 <span class="sd">                #     &#39;answer&#39;: &#39;They weigh the same&#39;,</span>
 <span class="sd">                #     &#39;justification&#39;: &#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume and density of the two substances differ.&#39;</span>
 <span class="sd">                # }</span>
 
-<span class="sd">        Example: JSON mode, Pydantic schema (method=&quot;json_mode&quot;, include_raw=True):</span>
+<span class="sd">        Example: schema=OpenAI function schema, method=&quot;function_calling&quot;, include_raw=False:</span>
+<span class="sd">            .. code-block:: python</span>
+
+<span class="sd">                from langchain_fireworks import ChatFireworks</span>
+
+<span class="sd">                oai_schema = {</span>
+<span class="sd">                    &#39;name&#39;: &#39;AnswerWithJustification&#39;,</span>
+<span class="sd">                    &#39;description&#39;: &#39;An answer to the user question along with justification for the answer.&#39;,</span>
+<span class="sd">                    &#39;parameters&#39;: {</span>
+<span class="sd">                        &#39;type&#39;: &#39;object&#39;,</span>
+<span class="sd">                        &#39;properties&#39;: {</span>
+<span class="sd">                            &#39;answer&#39;: {&#39;type&#39;: &#39;string&#39;},</span>
+<span class="sd">                            &#39;justification&#39;: {&#39;description&#39;: &#39;A justification for the answer.&#39;, &#39;type&#39;: &#39;string&#39;}</span>
+<span class="sd">                        },</span>
+<span class="sd">                       &#39;required&#39;: [&#39;answer&#39;]</span>
+<span class="sd">                   }</span>
+<span class="sd">               }</span>
+
+<span class="sd">                llm = ChatFireworks(model=&quot;accounts/fireworks/models/firefunction-v1&quot;, temperature=0)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(oai_schema)</span>
+
+<span class="sd">                structured_llm.invoke(</span>
+<span class="sd">                    &quot;What weighs more a pound of bricks or a pound of feathers&quot;</span>
+<span class="sd">                )</span>
+<span class="sd">                # -&gt; {</span>
+<span class="sd">                #     &#39;answer&#39;: &#39;They weigh the same&#39;,</span>
+<span class="sd">                #     &#39;justification&#39;: &#39;Both a pound of bricks and a pound of feathers weigh one pound. The weight is the same, but the volume and density of the two substances differ.&#39;</span>
+<span class="sd">                # }</span>
+
+<span class="sd">        Example: schema=Pydantic class, method=&quot;json_mode&quot;, include_raw=True:</span>
 <span class="sd">            .. code-block::</span>
 
 <span class="sd">                from langchain_fireworks import ChatFireworks</span>
@@ -1113,12 +1178,9 @@
 <span class="sd">                #     &#39;parsing_error&#39;: None</span>
 <span class="sd">                # }</span>
 
-<span class="sd">        Example: JSON mode, no schema (schema=None, method=&quot;json_mode&quot;, include_raw=True):</span>
+<span class="sd">        Example: schema=None, method=&quot;json_mode&quot;, include_raw=True:</span>
 <span class="sd">            .. code-block::</span>
 
-<span class="sd">                from langchain_fireworks import ChatFireworks</span>
-
-<span class="sd">                llm = ChatFireworks(model=&quot;accounts/fireworks/models/firefunction-v1&quot;, temperature=0)</span>
 <span class="sd">                structured_llm = llm.with_structured_output(method=&quot;json_mode&quot;, include_raw=True)</span>
 
 <span class="sd">                structured_llm.invoke(</span>
@@ -1134,8 +1196,6 @@
 <span class="sd">                #     },</span>
 <span class="sd">                #     &#39;parsing_error&#39;: None</span>
 <span class="sd">                # }</span>
-
-
 <span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received unsupported arguments </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -1217,7 +1277,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 31, 2024.
+                                on Aug 01, 2024.
                 </footer>
             </div>
         </div>

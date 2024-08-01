@@ -1022,7 +1022,7 @@
 
 <div class="viewcode-block" id="ChatAnthropic.bind_tools"><a class="viewcode-back" href="../../chat_models/langchain_anthropic.chat_models.ChatAnthropic.html#langchain_anthropic.experimental.ChatAnthropic.bind_tools">[docs]</a>    <span class="k">def</span> <span class="nf">bind_tools</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
+        <span class="n">tools</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">]],</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
             <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;any&quot;</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span>
@@ -1033,19 +1033,19 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            tools: A list of tool definitions to bind to this chat model.</span>
-<span class="sd">                Can be  a dictionary, pydantic model, callable, or BaseTool. Pydantic</span>
-<span class="sd">                models, callables, and BaseTools will be automatically converted to</span>
-<span class="sd">                their schema dictionary representation.</span>
+<span class="sd">                Supports Anthropic format tool schemas and any tool definition handled</span>
+<span class="sd">                by :meth:`langchain_core.utils.function_calling.convert_to_openai_tool`.</span>
 <span class="sd">            tool_choice: Which tool to require the model to call.</span>
 <span class="sd">                Options are:</span>
-<span class="sd">                    name of the tool (str): calls corresponding tool;</span>
-<span class="sd">                    &quot;auto&quot; or None: automatically selects a tool (including no tool);</span>
-<span class="sd">                    &quot;any&quot;: force at least one tool to be called;</span>
-<span class="sd">                    or a dict of the form:</span>
-<span class="sd">                        {&quot;type&quot;: &quot;tool&quot;, &quot;name&quot;: &quot;tool_name&quot;},</span>
-<span class="sd">                        or {&quot;type: &quot;any&quot;},</span>
-<span class="sd">                        or {&quot;type: &quot;auto&quot;};</span>
-<span class="sd">            **kwargs: Any additional parameters to bind.</span>
+<span class="sd">                    - name of the tool (str): calls corresponding tool;</span>
+<span class="sd">                    - ``&quot;auto&quot;`` or None: automatically selects a tool (including no tool);</span>
+<span class="sd">                    - ``&quot;any&quot;``: force at least one tool to be called;</span>
+<span class="sd">                    - or a dict of the form:</span>
+<span class="sd">                        ``{&quot;type&quot;: &quot;tool&quot;, &quot;name&quot;: &quot;tool_name&quot;}``,</span>
+<span class="sd">                        or ``{&quot;type: &quot;any&quot;}``,</span>
+<span class="sd">                        or ``{&quot;type: &quot;auto&quot;}``;</span>
+<span class="sd">            kwargs: Any additional parameters are passed directly to</span>
+<span class="sd">                ``self.bind(**kwargs)``.</span>
 
 <span class="sd">        Example:</span>
 <span class="sd">            .. code-block:: python</span>
@@ -1145,11 +1145,26 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            schema: The output schema as a dict or a Pydantic class. If a Pydantic class</span>
-<span class="sd">                then the model output will be an object of that class. If a dict then</span>
-<span class="sd">                the model output will be a dict. With a Pydantic class the returned</span>
-<span class="sd">                attributes will be validated, whereas with a dict they will not be.</span>
-<span class="sd">            include_raw: If False then only the parsed structured output is returned. If</span>
+<span class="sd">            schema:</span>
+<span class="sd">                The output schema. Can be passed in as:</span>
+<span class="sd">                    - an Anthropic tool schema,</span>
+<span class="sd">                    - an OpenAI function/tool schema,</span>
+<span class="sd">                    - a JSON Schema,</span>
+<span class="sd">                    - a TypedDict class (support added in 0.1.22),</span>
+<span class="sd">                    - or a Pydantic class.</span>
+<span class="sd">                If ``schema`` is a Pydantic class then the model output will be a</span>
+<span class="sd">                Pydantic instance of that class, and the model-generated fields will be</span>
+<span class="sd">                validated by the Pydantic class. Otherwise the model output will be a</span>
+<span class="sd">                dict and will not be validated. See :meth:`langchain_core.utils.function_calling.convert_to_openai_tool`</span>
+<span class="sd">                for more on how to properly specify types and descriptions of</span>
+<span class="sd">                schema fields when specifying a Pydantic or TypedDict class.</span>
+
+<span class="sd">                .. versionchanged:: 0.1.22</span>
+
+<span class="sd">                        Added support for TypedDict class.</span>
+
+<span class="sd">            include_raw:</span>
+<span class="sd">                If False then only the parsed structured output is returned. If</span>
 <span class="sd">                an error occurs during model output parsing it will be raised. If True</span>
 <span class="sd">                then both the raw model response (a BaseMessage) and the parsed model</span>
 <span class="sd">                response will be returned. If an error occurs during output parsing it</span>
@@ -1157,17 +1172,17 @@
 <span class="sd">                with keys &quot;raw&quot;, &quot;parsed&quot;, and &quot;parsing_error&quot;.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            A Runnable that takes any ChatModel input. The output type depends on</span>
-<span class="sd">            include_raw and schema.</span>
+<span class="sd">            A Runnable that takes same inputs as a :class:`langchain_core.language_models.chat.BaseChatModel`.</span>
 
-<span class="sd">            If include_raw is True then output is a dict with keys:</span>
-<span class="sd">                raw: BaseMessage,</span>
-<span class="sd">                parsed: Optional[_DictOrPydantic],</span>
-<span class="sd">                parsing_error: Optional[BaseException],</span>
+<span class="sd">            If ``include_raw`` is False and ``schema`` is a Pydantic class, Runnable outputs</span>
+<span class="sd">            an instance of ``schema`` (i.e., a Pydantic object).</span>
 
-<span class="sd">            If include_raw is False and schema is a Dict then the runnable outputs a Dict.</span>
-<span class="sd">            If include_raw is False and schema is a Type[BaseModel] then the runnable</span>
-<span class="sd">            outputs a BaseModel.</span>
+<span class="sd">            Otherwise, if ``include_raw`` is False then Runnable outputs a dict.</span>
+
+<span class="sd">            If ``include_raw`` is True, then Runnable outputs a dict with keys:</span>
+<span class="sd">                - ``&quot;raw&quot;``: BaseMessage</span>
+<span class="sd">                - ``&quot;parsed&quot;``: None if there was a parsing error, otherwise the type depends on the ``schema`` as described above.</span>
+<span class="sd">                - ``&quot;parsing_error&quot;``: Optional[BaseException]</span>
 
 <span class="sd">        Example: Pydantic schema (include_raw=False):</span>
 <span class="sd">            .. code-block:: python</span>
@@ -1272,7 +1287,7 @@
 
 
 <div class="viewcode-block" id="convert_to_anthropic_tool"><a class="viewcode-back" href="../../chat_models/langchain_anthropic.chat_models.convert_to_anthropic_tool.html#langchain_anthropic.experimental.convert_to_anthropic_tool">[docs]</a><span class="k">def</span> <span class="nf">convert_to_anthropic_tool</span><span class="p">(</span>
-    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">],</span>
+    <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AnthropicTool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a tool-like object to an Anthropic tool definition.&quot;&quot;&quot;</span>
     <span class="c1"># already in Anthropic tool format</span>
@@ -1415,7 +1430,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Jul 31, 2024.
+                                on Aug 01, 2024.
                 </footer>
             </div>
         </div>
