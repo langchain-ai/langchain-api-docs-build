@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_core.tools &mdash; 🦜🔗 LangChain 0.2.11</title>
+        <title>langchain_core.tools &mdash; 🦜🔗 LangChain 0.2.12</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_core/tools.html"/>
@@ -285,7 +285,7 @@
     <span class="n">get_type_hints</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">get_args</span><span class="p">,</span> <span class="n">get_origin</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
@@ -328,11 +328,16 @@
     <span class="n">run_in_executor</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.utils</span> <span class="kn">import</span> <span class="n">accepts_context</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">_parse_google_docstring</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_parse_google_docstring</span><span class="p">,</span>
+    <span class="n">_py_38_safe_origin</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.pydantic</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TypeBaseModel</span><span class="p">,</span>
     <span class="n">_create_subset_model</span><span class="p">,</span>
     <span class="n">is_basemodel_subclass</span><span class="p">,</span>
+    <span class="n">is_pydantic_v1_subclass</span><span class="p">,</span>
+    <span class="n">is_pydantic_v2_subclass</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">FILTERED_ARGS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;run_manager&quot;</span><span class="p">,</span> <span class="s2">&quot;callbacks&quot;</span><span class="p">)</span>
@@ -627,7 +632,7 @@
     <span class="k">def</span> <span class="nf">tool_call_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">]:</span>
         <span class="n">full_schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_input_schema</span><span class="p">()</span>
         <span class="n">fields</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">type_</span> <span class="ow">in</span> <span class="n">full_schema</span><span class="o">.</span><span class="vm">__annotations__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">type_</span> <span class="ow">in</span> <span class="n">_get_all_basemodel_annotations</span><span class="p">(</span><span class="n">full_schema</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_injected_arg_type</span><span class="p">(</span><span class="n">type_</span><span class="p">):</span>
                 <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">_create_subset_model</span><span class="p">(</span>
@@ -1890,6 +1895,83 @@
         <span class="n">filter_args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">config_param</span><span class="p">)</span>
     <span class="c1"># filter_args.extend(_get_non_model_params(type_hints))</span>
     <span class="k">return</span> <span class="n">filter_args</span>
+
+
+<span class="k">def</span> <span class="nf">_get_all_basemodel_annotations</span><span class="p">(</span>
+    <span class="bp">cls</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">TypeBaseModel</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">default_to_bound</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Type</span><span class="p">]:</span>
+    <span class="c1"># cls has no subscript: cls = FooBar</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+        <span class="n">annotations</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Type</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">annotations</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">annotation</span>
+        <span class="n">orig_bases</span><span class="p">:</span> <span class="n">Tuple</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="s2">&quot;__orig_bases__&quot;</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">())</span>
+    <span class="c1"># cls has subscript: cls = FooBar[int]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">annotations</span> <span class="o">=</span> <span class="n">_get_all_basemodel_annotations</span><span class="p">(</span>
+            <span class="n">get_origin</span><span class="p">(</span><span class="bp">cls</span><span class="p">),</span> <span class="n">default_to_bound</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="n">orig_bases</span> <span class="o">=</span> <span class="p">(</span><span class="bp">cls</span><span class="p">,)</span>
+
+    <span class="c1"># Pydantic v2 automatically resolves inherited generics, Pydantic v1 does not.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="n">is_pydantic_v2_subclass</span><span class="p">(</span><span class="bp">cls</span><span class="p">)):</span>
+        <span class="c1"># if cls = FooBar inherits from Baz[str], orig_bases will contain Baz[str]</span>
+        <span class="c1"># if cls = FooBar inherits from Baz, orig_bases will contain Baz</span>
+        <span class="c1"># if cls = FooBar[int], orig_bases will contain FooBar[int]</span>
+        <span class="k">for</span> <span class="n">parent</span> <span class="ow">in</span> <span class="n">orig_bases</span><span class="p">:</span>
+            <span class="c1"># if class = FooBar inherits from Baz, parent = Baz</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="n">is_pydantic_v1_subclass</span><span class="p">(</span><span class="n">parent</span><span class="p">):</span>
+                <span class="n">annotations</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                    <span class="n">_get_all_basemodel_annotations</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">default_to_bound</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">parent_origin</span> <span class="o">=</span> <span class="n">get_origin</span><span class="p">(</span><span class="n">parent</span><span class="p">)</span>
+
+            <span class="c1"># if class = FooBar inherits from non-pydantic class</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">parent_origin</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># if class = FooBar inherits from Baz[str]:</span>
+            <span class="c1"># parent = Baz[str],</span>
+            <span class="c1"># parent_origin = Baz,</span>
+            <span class="c1"># generic_type_vars = (type vars in Baz)</span>
+            <span class="c1"># generic_map = {type var in Baz: str}</span>
+            <span class="n">generic_type_vars</span><span class="p">:</span> <span class="n">Tuple</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent_origin</span><span class="p">,</span> <span class="s2">&quot;__parameters__&quot;</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">())</span>
+            <span class="n">generic_map</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">type_var</span><span class="p">:</span> <span class="n">t</span> <span class="k">for</span> <span class="n">type_var</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">generic_type_vars</span><span class="p">,</span> <span class="n">get_args</span><span class="p">(</span><span class="n">parent</span><span class="p">))</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parent_origin</span><span class="p">,</span> <span class="s2">&quot;__annotations__&quot;</span><span class="p">,</span> <span class="nb">dict</span><span class="p">()):</span>
+                <span class="n">annotations</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">_replace_type_vars</span><span class="p">(</span>
+                    <span class="n">annotations</span><span class="p">[</span><span class="n">field</span><span class="p">],</span> <span class="n">generic_map</span><span class="p">,</span> <span class="n">default_to_bound</span>
+                <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">k</span><span class="p">:</span> <span class="n">_replace_type_vars</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">default_to_bound</span><span class="o">=</span><span class="n">default_to_bound</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">annotations</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">_replace_type_vars</span><span class="p">(</span>
+    <span class="n">type_</span><span class="p">:</span> <span class="n">Type</span><span class="p">,</span>
+    <span class="n">generic_map</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="n">TypeVar</span><span class="p">,</span> <span class="n">Type</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">default_to_bound</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Type</span><span class="p">:</span>
+    <span class="n">generic_map</span> <span class="o">=</span> <span class="n">generic_map</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">type_</span><span class="p">,</span> <span class="n">TypeVar</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">type_</span> <span class="ow">in</span> <span class="n">generic_map</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">generic_map</span><span class="p">[</span><span class="n">type_</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">default_to_bound</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">type_</span><span class="o">.</span><span class="n">__bound__</span> <span class="ow">or</span> <span class="n">Any</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">type_</span>
+    <span class="k">elif</span> <span class="p">(</span><span class="n">origin</span> <span class="o">:=</span> <span class="n">get_origin</span><span class="p">(</span><span class="n">type_</span><span class="p">))</span> <span class="ow">and</span> <span class="p">(</span><span class="n">args</span> <span class="o">:=</span> <span class="n">get_args</span><span class="p">(</span><span class="n">type_</span><span class="p">)):</span>
+        <span class="n">new_args</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">_replace_type_vars</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">generic_map</span><span class="p">,</span> <span class="n">default_to_bound</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">args</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_py_38_safe_origin</span><span class="p">(</span><span class="n">origin</span><span class="p">)[</span><span class="n">new_args</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">type_</span>
 </pre></div>
 
             </div>
@@ -1898,7 +1980,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 01, 2024.
+                                on Aug 02, 2024.
                 </footer>
             </div>
         </div>
