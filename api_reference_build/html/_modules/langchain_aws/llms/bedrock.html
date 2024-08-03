@@ -262,8 +262,9 @@
     <span class="n">CallbackManagerForLLMRun</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">LLM</span><span class="p">,</span> <span class="n">BaseLanguageModel</span>
-<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">ToolCall</span>
-<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">tool_call</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessageChunk</span><span class="p">,</span> <span class="n">ToolCall</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.ai</span> <span class="kn">import</span> <span class="n">UsageMetadata</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">tool_call</span><span class="p">,</span> <span class="n">tool_call_chunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">Generation</span><span class="p">,</span> <span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">LLMResult</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">root_validator</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span>
@@ -329,61 +330,94 @@
     <span class="n">provider</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">output_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">messages_api</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="n">coerce_content_to_string</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>  <span class="c1"># type ignore[return]</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a stream response to a generation chunk.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">messages_api</span><span class="p">:</span>
         <span class="n">msg_type</span> <span class="o">=</span> <span class="n">stream_response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">msg_type</span> <span class="o">==</span> <span class="s2">&quot;message_start&quot;</span><span class="p">:</span>
-            <span class="n">usage_info</span> <span class="o">=</span> <span class="n">stream_response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">usage_info</span> <span class="o">=</span> <span class="n">_nest_usage_info_token_counts</span><span class="p">(</span><span class="n">usage_info</span><span class="p">)</span>
-            <span class="n">generation_info</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;usage&quot;</span><span class="p">:</span> <span class="n">usage_info</span><span class="p">}</span>
-            <span class="k">return</span> <span class="n">GenerationChunk</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">msg_type</span> <span class="o">==</span> <span class="s2">&quot;content_block_delta&quot;</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">]:</span>
-                <span class="k">return</span> <span class="n">GenerationChunk</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">GenerationChunk</span><span class="p">(</span>
-                <span class="n">text</span><span class="o">=</span><span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">],</span>
-                <span class="n">generation_info</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span>
-                    <span class="n">stop_reason</span><span class="o">=</span><span class="n">stream_response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop_reason&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+            <span class="n">input_tokens</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;message&quot;</span><span class="p">][</span><span class="s2">&quot;usage&quot;</span><span class="p">][</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span> <span class="k">if</span> <span class="n">coerce_content_to_string</span> <span class="k">else</span> <span class="p">[],</span>
+                <span class="n">usage_metadata</span><span class="o">=</span><span class="n">UsageMetadata</span><span class="p">(</span>
+                    <span class="n">input_tokens</span><span class="o">=</span><span class="n">input_tokens</span><span class="p">,</span>
+                    <span class="n">output_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">total_tokens</span><span class="o">=</span><span class="n">input_tokens</span><span class="p">,</span>
                 <span class="p">),</span>
             <span class="p">)</span>
+        <span class="k">elif</span> <span class="p">(</span>
+            <span class="n">msg_type</span> <span class="o">==</span> <span class="s2">&quot;content_block_start&quot;</span>
+            <span class="ow">and</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;content_block&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;content_block&quot;</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;tool_use&quot;</span>
+        <span class="p">):</span>
+            <span class="n">content_block</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;content_block&quot;</span><span class="p">]</span>
+            <span class="n">content_block</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span>
+            <span class="n">tc_chunk</span> <span class="o">=</span> <span class="n">tool_call_chunk</span><span class="p">(</span>
+                <span class="n">index</span><span class="o">=</span><span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">],</span>
+                <span class="nb">id</span><span class="o">=</span><span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;content_block&quot;</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;content_block&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                <span class="n">args</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">content_block</span><span class="p">],</span>
+                <span class="n">tool_call_chunks</span><span class="o">=</span><span class="p">[</span><span class="n">tc_chunk</span><span class="p">],</span>  <span class="c1"># type: ignore</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">msg_type</span> <span class="o">==</span> <span class="s2">&quot;content_block_delta&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">]:</span>
+                <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;text_delta&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">coerce_content_to_string</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">content_block</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">]</span>
+                    <span class="n">content_block</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span>
+                    <span class="n">content_block</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span>
+                    <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">content_block</span><span class="p">])</span>
+            <span class="k">elif</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;input_json_delta&quot;</span><span class="p">:</span>
+                <span class="n">content_block</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">]</span>
+                <span class="n">content_block</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span>
+                <span class="n">content_block</span><span class="p">[</span><span class="s2">&quot;type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;tool_use&quot;</span>
+                <span class="n">tc_chunk</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;partial_json&quot;</span><span class="p">],</span>
+                <span class="p">}</span>
+                <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                    <span class="n">content</span><span class="o">=</span><span class="p">[</span><span class="n">content_block</span><span class="p">],</span>
+                    <span class="n">tool_call_chunks</span><span class="o">=</span><span class="p">[</span><span class="n">tc_chunk</span><span class="p">],</span>  <span class="c1"># type: ignore</span>
+                <span class="p">)</span>
         <span class="k">elif</span> <span class="n">msg_type</span> <span class="o">==</span> <span class="s2">&quot;message_delta&quot;</span><span class="p">:</span>
-            <span class="n">usage_info</span> <span class="o">=</span> <span class="n">stream_response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">usage_info</span> <span class="o">=</span> <span class="n">_nest_usage_info_token_counts</span><span class="p">(</span><span class="n">usage_info</span><span class="p">)</span>
-            <span class="n">stop_reason</span> <span class="o">=</span> <span class="n">stream_response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;delta&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop_reason&quot;</span><span class="p">)</span>
-            <span class="n">generation_info</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;stop_reason&quot;</span><span class="p">:</span> <span class="n">stop_reason</span><span class="p">,</span> <span class="s2">&quot;usage&quot;</span><span class="p">:</span> <span class="n">usage_info</span><span class="p">}</span>
-            <span class="k">return</span> <span class="n">GenerationChunk</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">)</span>
+            <span class="n">output_tokens</span> <span class="o">=</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;usage&quot;</span><span class="p">][</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">]</span>
+            <span class="k">return</span> <span class="n">AIMessageChunk</span><span class="p">(</span>
+                <span class="n">content</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="n">usage_metadata</span><span class="o">=</span><span class="n">UsageMetadata</span><span class="p">(</span>
+                    <span class="n">input_tokens</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">output_tokens</span><span class="o">=</span><span class="n">output_tokens</span><span class="p">,</span>
+                    <span class="n">total_tokens</span><span class="o">=</span><span class="n">output_tokens</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">response_metadata</span><span class="o">=</span><span class="p">{</span>
+                    <span class="s2">&quot;stop_reason&quot;</span><span class="p">:</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;stop_reason&quot;</span><span class="p">],</span>
+                    <span class="s2">&quot;stop_sequence&quot;</span><span class="p">:</span> <span class="n">stream_response</span><span class="p">[</span><span class="s2">&quot;delta&quot;</span><span class="p">][</span><span class="s2">&quot;stop_sequence&quot;</span><span class="p">],</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># chunk obj format varies with provider</span>
-        <span class="n">generation_info</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
-            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">stream_response</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">output_key</span><span class="p">,</span> <span class="s2">&quot;prompt_token_count&quot;</span><span class="p">,</span> <span class="s2">&quot;generation_token_count&quot;</span><span class="p">]</span>
-        <span class="p">}</span>
-        <span class="k">return</span> <span class="n">GenerationChunk</span><span class="p">(</span>
-            <span class="n">text</span><span class="o">=</span><span class="p">(</span>
-                <span class="n">stream_response</span><span class="p">[</span><span class="n">output_key</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">provider</span> <span class="o">!=</span> <span class="s2">&quot;mistral&quot;</span>
-                <span class="k">else</span> <span class="n">stream_response</span><span class="p">[</span><span class="n">output_key</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
-            <span class="p">),</span>
-            <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
-        <span class="p">)</span>
 
-
-<span class="k">def</span> <span class="nf">_nest_usage_info_token_counts</span><span class="p">(</span><span class="n">usage_info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Sticking usage info for token counts into lists to</span>
-<span class="sd">    deal with langchain_core.utils.merge_dicts incompatibility</span>
-<span class="sd">    in which integers must be equal to be merged</span>
-<span class="sd">    as seen here: https://github.com/langchain-ai/langchain-aws/pull/20#issuecomment-2118166376</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="s2">&quot;input_tokens&quot;</span> <span class="ow">in</span> <span class="n">usage_info</span><span class="p">:</span>
-        <span class="n">usage_info</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">usage_info</span><span class="p">[</span><span class="s2">&quot;input_tokens&quot;</span><span class="p">]]</span>
-    <span class="k">if</span> <span class="s2">&quot;output_tokens&quot;</span> <span class="ow">in</span> <span class="n">usage_info</span><span class="p">:</span>
-        <span class="n">usage_info</span><span class="p">[</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">usage_info</span><span class="p">[</span><span class="s2">&quot;output_tokens&quot;</span><span class="p">]]</span>
-    <span class="k">return</span> <span class="n">usage_info</span>
+    <span class="c1"># chunk obj format varies with provider</span>
+    <span class="n">generation_info</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">stream_response</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">output_key</span><span class="p">,</span> <span class="s2">&quot;prompt_token_count&quot;</span><span class="p">,</span> <span class="s2">&quot;generation_token_count&quot;</span><span class="p">]</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">GenerationChunk</span><span class="p">(</span>
+        <span class="n">text</span><span class="o">=</span><span class="p">(</span>
+            <span class="n">stream_response</span><span class="p">[</span><span class="n">output_key</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">provider</span> <span class="o">!=</span> <span class="s2">&quot;mistral&quot;</span>
+            <span class="k">else</span> <span class="n">stream_response</span><span class="p">[</span><span class="n">output_key</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;text&quot;</span><span class="p">]</span>
+        <span class="p">),</span>
+        <span class="n">generation_info</span><span class="o">=</span><span class="n">generation_info</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_combine_generation_info_for_llm_result</span><span class="p">(</span>
@@ -556,7 +590,8 @@
         <span class="n">response</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">messages_api</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]:</span>
+        <span class="n">coerce_content_to_string</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">]]:</span>
         <span class="n">stream</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;body&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">stream</span><span class="p">:</span>
@@ -604,6 +639,7 @@
                 <span class="n">provider</span><span class="o">=</span><span class="n">provider</span><span class="p">,</span>
                 <span class="n">output_key</span><span class="o">=</span><span class="n">output_key</span><span class="p">,</span>
                 <span class="n">messages_api</span><span class="o">=</span><span class="n">messages_api</span><span class="p">,</span>
+                <span class="n">coerce_content_to_string</span><span class="o">=</span><span class="n">coerce_content_to_string</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">generation_chunk</span><span class="p">:</span>
                 <span class="k">yield</span> <span class="n">generation_chunk</span>
@@ -617,7 +653,8 @@
         <span class="n">response</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">messages_api</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]:</span>
+        <span class="n">coerce_content_to_string</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">]]:</span>
         <span class="n">stream</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;body&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">stream</span><span class="p">:</span>
@@ -653,6 +690,7 @@
                 <span class="n">provider</span><span class="o">=</span><span class="n">provider</span><span class="p">,</span>
                 <span class="n">output_key</span><span class="o">=</span><span class="n">output_key</span><span class="p">,</span>
                 <span class="n">messages_api</span><span class="o">=</span><span class="n">messages_api</span><span class="p">,</span>
+                <span class="n">coerce_content_to_string</span><span class="o">=</span><span class="n">coerce_content_to_string</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">generation_chunk</span><span class="p">:</span>
                 <span class="k">yield</span> <span class="n">generation_chunk</span>
@@ -996,7 +1034,7 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">]]:</span>
         <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">provider</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_provider</span><span class="p">()</span>
 
@@ -1023,8 +1061,10 @@
             <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
             <span class="n">model_kwargs</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="n">coerce_content_to_string</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">if</span> <span class="s2">&quot;claude-3&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_model</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">_tools_in_params</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+                <span class="n">coerce_content_to_string</span> <span class="o">=</span> <span class="kc">False</span>
                 <span class="n">input_body</span> <span class="o">=</span> <span class="n">LLMInputOutputAdapter</span><span class="o">.</span><span class="n">prepare_input</span><span class="p">(</span>
                     <span class="n">provider</span><span class="o">=</span><span class="n">provider</span><span class="p">,</span>
                     <span class="n">model_kwargs</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
@@ -1063,13 +1103,12 @@
             <span class="n">response</span><span class="p">,</span>
             <span class="n">stop</span><span class="p">,</span>
             <span class="kc">True</span> <span class="k">if</span> <span class="n">messages</span> <span class="k">else</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="n">coerce_content_to_string</span><span class="o">=</span><span class="n">coerce_content_to_string</span><span class="p">,</span>
         <span class="p">):</span>
             <span class="k">yield</span> <span class="n">chunk</span>
             <span class="c1"># verify and raise callback error if any middleware intervened</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_get_bedrock_services_signal</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">generation_info</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
-
-            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_get_bedrock_services_signal</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">generation_info</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_aprepare_input_and_invoke_stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1079,7 +1118,7 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">AIMessageChunk</span><span class="p">]]:</span>
         <span class="n">_model_kwargs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_kwargs</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">provider</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_provider</span><span class="p">()</span>
 
@@ -1130,13 +1169,7 @@
             <span class="n">stop</span><span class="p">,</span>
             <span class="kc">True</span> <span class="k">if</span> <span class="n">messages</span> <span class="k">else</span> <span class="kc">False</span><span class="p">,</span>
         <span class="p">):</span>
-            <span class="k">yield</span> <span class="n">chunk</span>
-            <span class="k">if</span> <span class="n">run_manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">iscoroutinefunction</span><span class="p">(</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span>
-            <span class="p">):</span>
-                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">run_manager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">text</span><span class="p">,</span> <span class="n">chunk</span><span class="o">=</span><span class="n">chunk</span><span class="p">)</span>  <span class="c1"># type: ignore[unused-coroutine]</span></div>
+            <span class="k">yield</span> <span class="n">chunk</span></div>
 
 
 <div class="viewcode-block" id="BedrockLLM"><a class="viewcode-back" href="../../../llms/langchain_aws.llms.bedrock.BedrockLLM.html#langchain_aws.llms.bedrock.BedrockLLM">[docs]</a><span class="k">class</span> <span class="nc">BedrockLLM</span><span class="p">(</span><span class="n">LLM</span><span class="p">,</span> <span class="n">BedrockBase</span><span class="p">):</span>
@@ -1230,7 +1263,7 @@
 <span class="sd">        Yields:</span>
 <span class="sd">            Iterator[GenerationChunk]: Responses from the model.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_input_and_invoke_stream</span><span class="p">(</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_input_and_invoke_stream</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
             <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
 
@@ -1323,7 +1356,7 @@
         <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aprepare_input_and_invoke_stream</span><span class="p">(</span>
             <span class="n">prompt</span><span class="o">=</span><span class="n">prompt</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">):</span>
-            <span class="k">yield</span> <span class="n">chunk</span>
+            <span class="k">yield</span> <span class="n">chunk</span>  <span class="c1"># type: ignore</span>
 
     <span class="k">async</span> <span class="k">def</span> <span class="nf">_acall</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1405,7 +1438,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 02, 2024.
+                                on Aug 03, 2024.
                 </footer>
             </div>
         </div>
