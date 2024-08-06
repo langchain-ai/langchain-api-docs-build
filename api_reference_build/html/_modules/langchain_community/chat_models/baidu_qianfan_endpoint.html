@@ -274,6 +274,7 @@
     <span class="n">ToolMessage</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages.ai</span> <span class="kn">import</span> <span class="n">UsageMetadata</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">tool_call_chunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.base</span> <span class="kn">import</span> <span class="n">OutputParserLike</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.openai_tools</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">JsonOutputKeyToolsParser</span><span class="p">,</span>
@@ -344,13 +345,18 @@
             <span class="c1"># align to api sample, which affects the llm function_call output</span>
             <span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;function_call&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;thoughts&quot;</span><span class="p">)</span>
 
+    <span class="c1"># DO NOT ADD ANY NUMERIC OBJECT TO `msg_additional_kwargs` AND `additional_kwargs`</span>
+    <span class="c1"># ALONG WITH THEIRS SUB-CONTAINERS !!!</span>
+    <span class="c1"># OR IT WILL RAISE A DEADLY EXCEPTION FROM `merge_dict`</span>
+    <span class="c1"># 不要往 `msg_additional_kwargs` 和 `additional_kwargs` 里面加任何数值类对象！</span>
+    <span class="c1"># 子容器也不行！</span>
+    <span class="c1"># 不然 `merge_dict` 会报错导致代码无法运行</span>
     <span class="n">additional_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;body&quot;</span><span class="p">,</span> <span class="p">{}),</span> <span class="o">**</span><span class="n">additional_kwargs</span><span class="p">}</span>
     <span class="n">msg_additional_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
         <span class="n">finish_reason</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;finish_reason&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
         <span class="n">request_id</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
         <span class="nb">object</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;object&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
         <span class="n">search_info</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;search_info&quot;</span><span class="p">,</span> <span class="p">[]),</span>
-        <span class="n">usage</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
     <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;function_call&quot;</span><span class="p">,</span> <span class="p">{}):</span>
@@ -365,21 +371,19 @@
             <span class="p">}</span>
         <span class="p">]</span>
 
-    <span class="k">if</span> <span class="n">usage</span> <span class="o">:=</span> <span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span>
-            <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
-            <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">msg_additional_kwargs</span><span class="p">,</span>
-            <span class="n">usage_metadata</span><span class="o">=</span><span class="n">UsageMetadata</span><span class="p">(</span>
-                <span class="n">input_tokens</span><span class="o">=</span><span class="n">usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-                <span class="n">output_tokens</span><span class="o">=</span><span class="n">usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;completion_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-                <span class="n">total_tokens</span><span class="o">=</span><span class="n">usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">AIMessage</span><span class="p">(</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">AIMessage</span><span class="p">(</span>
         <span class="n">content</span><span class="o">=</span><span class="n">content</span><span class="p">,</span>
         <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">msg_additional_kwargs</span><span class="p">,</span>
     <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">usage</span> <span class="o">:=</span> <span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;usage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="n">ret</span><span class="o">.</span><span class="n">usage_metadata</span> <span class="o">=</span> <span class="n">UsageMetadata</span><span class="p">(</span>
+            <span class="n">input_tokens</span><span class="o">=</span><span class="n">usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;prompt_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">output_tokens</span><span class="o">=</span><span class="n">usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;completion_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">total_tokens</span><span class="o">=</span><span class="n">usage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;total_tokens&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ret</span>
 
 
 <div class="viewcode-block" id="QianfanChatEndpoint"><a class="viewcode-back" href="../../../chat_models/langchain_community.chat_models.baidu_qianfan_endpoint.QianfanChatEndpoint.html#langchain_community.chat_models.baidu_qianfan_endpoint.QianfanChatEndpoint">[docs]</a><span class="k">class</span> <span class="nc">QianfanChatEndpoint</span><span class="p">(</span><span class="n">BaseChatModel</span><span class="p">):</span>
@@ -853,6 +857,15 @@
                         <span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
                         <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
                         <span class="n">usage_metadata</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">,</span>
+                        <span class="n">tool_call_chunks</span><span class="o">=</span><span class="p">[</span>
+                            <span class="n">tool_call_chunk</span><span class="p">(</span>
+                                <span class="n">name</span><span class="o">=</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                                <span class="n">args</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">]),</span>
+                                <span class="nb">id</span><span class="o">=</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                                <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                            <span class="p">)</span>
+                            <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">msg</span><span class="o">.</span><span class="n">tool_calls</span>
+                        <span class="p">],</span>
                     <span class="p">),</span>
                     <span class="n">generation_info</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
                 <span class="p">)</span>
@@ -881,6 +894,15 @@
                         <span class="n">role</span><span class="o">=</span><span class="s2">&quot;assistant&quot;</span><span class="p">,</span>
                         <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">additional_kwargs</span><span class="p">,</span>
                         <span class="n">usage_metadata</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">,</span>
+                        <span class="n">tool_call_chunks</span><span class="o">=</span><span class="p">[</span>
+                            <span class="n">tool_call_chunk</span><span class="p">(</span>
+                                <span class="n">name</span><span class="o">=</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">],</span>
+                                <span class="n">args</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;args&quot;</span><span class="p">]),</span>
+                                <span class="nb">id</span><span class="o">=</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+                                <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                            <span class="p">)</span>
+                            <span class="k">for</span> <span class="n">tc</span> <span class="ow">in</span> <span class="n">msg</span><span class="o">.</span><span class="n">tool_calls</span>
+                        <span class="p">],</span>
                     <span class="p">),</span>
                     <span class="n">generation_info</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
                 <span class="p">)</span>
@@ -1047,7 +1069,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 05, 2024.
+                                on Aug 06, 2024.
                 </footer>
             </div>
         </div>
