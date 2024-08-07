@@ -290,6 +290,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 <span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">BaseTool</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils.function_calling</span> <span class="kn">import</span> <span class="n">convert_to_openai_tool</span>
+<span class="kn">from</span> <span class="nn">langchain_core.utils.pydantic</span> <span class="kn">import</span> <span class="n">is_basemodel_subclass</span>
 
 <span class="kn">from</span> <span class="nn">langchain_nvidia_ai_endpoints._common</span> <span class="kn">import</span> <span class="n">_NVIDIAClient</span>
 <span class="kn">from</span> <span class="nn">langchain_nvidia_ai_endpoints._statics</span> <span class="kn">import</span> <span class="n">Model</span>
@@ -919,24 +920,6 @@
             <span class="n">output_parser</span><span class="p">:</span> <span class="n">BaseOutputParser</span> <span class="o">=</span> <span class="n">JsonOutputParser</span><span class="p">()</span>
             <span class="n">nvext_param</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_json&quot;</span><span class="p">:</span> <span class="n">schema</span><span class="p">}</span>
 
-        <span class="k">elif</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">BaseModel</span><span class="p">):</span>
-            <span class="c1"># PydanticOutputParser does not support streaming. what we do</span>
-            <span class="c1"># instead is ignore all inputs that are incomplete wrt the</span>
-            <span class="c1"># underlying Pydantic schema. if the entire input is invalid,</span>
-            <span class="c1"># we return None.</span>
-            <span class="k">class</span> <span class="nc">ForgivingPydanticOutputParser</span><span class="p">(</span><span class="n">PydanticOutputParser</span><span class="p">):</span>
-                <span class="k">def</span> <span class="nf">parse_result</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Generation</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">partial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
-                <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">parse_result</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="n">partial</span><span class="p">)</span>
-                    <span class="k">except</span> <span class="n">OutputParserException</span><span class="p">:</span>
-                        <span class="k">pass</span>
-                    <span class="k">return</span> <span class="kc">None</span>
-
-            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">ForgivingPydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
-            <span class="n">nvext_param</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_json&quot;</span><span class="p">:</span> <span class="n">schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()}</span>
-
         <span class="k">elif</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">enum</span><span class="o">.</span><span class="n">Enum</span><span class="p">):</span>
             <span class="c1"># langchain&#39;s EnumOutputParser is not in langchain_core</span>
             <span class="c1"># and doesn&#39;t support streaming. this is a simple implementation</span>
@@ -964,6 +947,25 @@
                 <span class="p">)</span>
             <span class="n">output_parser</span> <span class="o">=</span> <span class="n">EnumOutputParser</span><span class="p">(</span><span class="n">enum</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
             <span class="n">nvext_param</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_choice&quot;</span><span class="p">:</span> <span class="n">choices</span><span class="p">}</span>
+
+        <span class="k">elif</span> <span class="n">is_basemodel_subclass</span><span class="p">(</span><span class="n">schema</span><span class="p">):</span>
+            <span class="c1"># PydanticOutputParser does not support streaming. what we do</span>
+            <span class="c1"># instead is ignore all inputs that are incomplete wrt the</span>
+            <span class="c1"># underlying Pydantic schema. if the entire input is invalid,</span>
+            <span class="c1"># we return None.</span>
+            <span class="k">class</span> <span class="nc">ForgivingPydanticOutputParser</span><span class="p">(</span><span class="n">PydanticOutputParser</span><span class="p">):</span>
+                <span class="k">def</span> <span class="nf">parse_result</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Generation</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">partial</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">parse_result</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">partial</span><span class="o">=</span><span class="n">partial</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">OutputParserException</span><span class="p">:</span>
+                        <span class="k">pass</span>
+                    <span class="k">return</span> <span class="kc">None</span>
+
+            <span class="n">output_parser</span> <span class="o">=</span> <span class="n">ForgivingPydanticOutputParser</span><span class="p">(</span><span class="n">pydantic_object</span><span class="o">=</span><span class="n">schema</span><span class="p">)</span>
+            <span class="n">nvext_param</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;guided_json&quot;</span><span class="p">:</span> <span class="n">schema</span><span class="o">.</span><span class="n">schema</span><span class="p">()}</span>
+
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;Schema must be a Pydantic object, a dictionary &quot;</span>
@@ -979,7 +981,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 06, 2024.
+                                on Aug 07, 2024.
                 </footer>
             </div>
         </div>

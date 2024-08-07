@@ -242,7 +242,35 @@
 <span class="sd">for debugging purposes.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Sequence</span>
+
+
+<span class="k">def</span> <span class="nf">_get_sub_deps</span><span class="p">(</span><span class="n">packages</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get any specified sub-dependencies.&quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">importlib</span> <span class="kn">import</span> <span class="n">metadata</span>
+
+    <span class="n">sub_deps</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">_underscored_packages</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">pkg</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">pkg</span> <span class="ow">in</span> <span class="n">packages</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">pkg</span> <span class="ow">in</span> <span class="n">packages</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">required</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">requires</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">metadata</span><span class="o">.</span><span class="n">PackageNotFoundError</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">required</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">required</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cleaned_req</span> <span class="o">=</span> <span class="n">req</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># In case parsing of requirement spec fails</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">cleaned_req</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_underscored_packages</span><span class="p">:</span>
+                <span class="n">sub_deps</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">cleaned_req</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">sub_deps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
 
 
 <div class="viewcode-block" id="print_sys_info"><a class="viewcode-back" href="../../sys_info/langchain_core.sys_info.print_sys_info.html#langchain_core.sys_info.print_sys_info">[docs]</a><span class="k">def</span> <span class="nf">print_sys_info</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">additional_pkgs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">())</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -321,12 +349,24 @@
 
     <span class="k">if</span> <span class="n">not_installed</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">()</span>  <span class="c1"># noqa: T201</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Packages not installed (Not Necessarily a Problem)&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;--------------------------------------------------&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;The following packages were not found:&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
-        <span class="nb">print</span><span class="p">()</span>  <span class="c1"># noqa: T201</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Optional packages not installed&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;-------------------------------&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
         <span class="k">for</span> <span class="n">pkg</span> <span class="ow">in</span> <span class="n">not_installed</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt; </span><span class="si">{</span><span class="n">pkg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span></div>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt; </span><span class="si">{</span><span class="n">pkg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
+
+    <span class="n">sub_dependencies</span> <span class="o">=</span> <span class="n">_get_sub_deps</span><span class="p">(</span><span class="n">all_packages</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">sub_dependencies</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">()</span>  <span class="c1"># noqa: T201</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Other Dependencies&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;------------------&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
+
+        <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">sub_dependencies</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">dep_version</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt; </span><span class="si">{</span><span class="n">dep</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">dep_version</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&gt; </span><span class="si">{</span><span class="n">dep</span><span class="si">}</span><span class="s2">: Installed. No version info available.&quot;</span><span class="p">)</span>  <span class="c1"># noqa: T201</span></div>
 
 
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
@@ -339,7 +379,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 06, 2024.
+                                on Aug 07, 2024.
                 </footer>
             </div>
         </div>

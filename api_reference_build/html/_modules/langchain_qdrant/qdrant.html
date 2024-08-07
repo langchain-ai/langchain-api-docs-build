@@ -279,14 +279,138 @@
 
 
 <div class="viewcode-block" id="QdrantVectorStore"><a class="viewcode-back" href="../../qdrant/langchain_qdrant.qdrant.QdrantVectorStore.html#langchain_qdrant.qdrant.QdrantVectorStore">[docs]</a><span class="k">class</span> <span class="nc">QdrantVectorStore</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;`QdrantVectorStore` - Vector store implementation using https://qdrant.tech/</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Qdrant vector store integration.</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">    Setup:</span>
+<span class="sd">        Install ``langchain-qdrant`` and ``qdrant-client[fastembed]`` packages.</span>
+
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -qU langchain-qdrant &#39;qdrant-client[fastembed]&#39;</span>
+
+<span class="sd">    Key init args — indexing params:</span>
+<span class="sd">        collection_name: str</span>
+<span class="sd">            Name of the collection.</span>
+<span class="sd">        embedding: Embeddings</span>
+<span class="sd">            Embedding function to use.</span>
+
+<span class="sd">    Key init args — client params:</span>
+<span class="sd">        client: QdrantClient</span>
+<span class="sd">            Qdrant client to use.</span>
+<span class="sd">        retrieval_mode: RetrievalMode</span>
+<span class="sd">            Retrieval mode to use.</span>
+
+<span class="sd">    Instantiate:</span>
 <span class="sd">        .. code-block:: python</span>
-<span class="sd">        from langchain_qdrant import QdrantVectorStore</span>
 
-<span class="sd">        store = QdrantVectorStore.from_existing_collection(&quot;my-collection&quot;, embedding, url=&quot;http://localhost:6333&quot;)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">            from langchain_qdrant import QdrantVectorStore</span>
+<span class="sd">            from qdrant_client import QdrantClient</span>
+<span class="sd">            from qdrant_client.http.models import Distance, VectorParams</span>
+<span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">            client = QdrantClient(&quot;:memory:&quot;)</span>
+
+<span class="sd">            client.create_collection(</span>
+<span class="sd">                collection_name=&quot;demo_collection&quot;,</span>
+<span class="sd">                vectors_config=VectorParams(size=1536, distance=Distance.COSINE),</span>
+<span class="sd">            )</span>
+
+<span class="sd">            vector_store = QdrantVectorStore(</span>
+<span class="sd">                client=client,</span>
+<span class="sd">                collection_name=&quot;demo_collection&quot;,</span>
+<span class="sd">                embedding=OpenAIEmbeddings(),</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Add Documents:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.documents import Document</span>
+<span class="sd">            from uuid import uuid4</span>
+
+<span class="sd">            document_1 = Document(page_content=&quot;foo&quot;, metadata={&quot;baz&quot;: &quot;bar&quot;})</span>
+<span class="sd">            document_2 = Document(page_content=&quot;thud&quot;, metadata={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            document_3 = Document(page_content=&quot;i will be deleted :(&quot;)</span>
+
+<span class="sd">            documents = [document_1, document_2, document_3]</span>
+<span class="sd">            ids = [str(uuid4()) for _ in range(len(documents))]</span>
+<span class="sd">            vector_store.add_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">    Delete Documents:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            vector_store.delete(ids=[ids[-1]])</span>
+
+<span class="sd">    Search:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1)</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;, &#39;_id&#39;: &#39;0d706099-6dd9-412a-9df6-a71043e020de&#39;, &#39;_collection_name&#39;: &#39;demo_collection&#39;}]</span>
+
+<span class="sd">    Search with filter:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from qdrant_client.http import models</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1,filter=models.Filter(must=[models.FieldCondition(key=&quot;metadata.bar&quot;, match=models.MatchValue(value=&quot;baz&quot;),)]))</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;, &#39;_id&#39;: &#39;0d706099-6dd9-412a-9df6-a71043e020de&#39;, &#39;_collection_name&#39;: &#39;demo_collection&#39;}]</span>
+
+
+<span class="sd">    Search with score:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc, score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.832268] foo [{&#39;baz&#39;: &#39;bar&#39;, &#39;_id&#39;: &#39;44ec7094-b061-45ac-8fbf-014b0f18e8aa&#39;, &#39;_collection_name&#39;: &#39;demo_collection&#39;}]</span>
+
+<span class="sd">    Async:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            # add documents</span>
+<span class="sd">            # await vector_store.aadd_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">            # delete documents</span>
+<span class="sd">            # await vector_store.adelete(ids=[&quot;3&quot;])</span>
+
+<span class="sd">            # search</span>
+<span class="sd">            # results = vector_store.asimilarity_search(query=&quot;thud&quot;,k=1)</span>
+
+<span class="sd">            # search with score</span>
+<span class="sd">            results = await vector_store.asimilarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc,score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.832268] foo [{&#39;baz&#39;: &#39;bar&#39;, &#39;_id&#39;: &#39;44ec7094-b061-45ac-8fbf-014b0f18e8aa&#39;, &#39;_collection_name&#39;: &#39;demo_collection&#39;}]</span>
+
+<span class="sd">    Use as Retriever:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            retriever = vector_store.as_retriever(</span>
+<span class="sd">                search_type=&quot;mmr&quot;,</span>
+<span class="sd">                search_kwargs={&quot;k&quot;: 1, &quot;fetch_k&quot;: 2, &quot;lambda_mult&quot;: 0.5},</span>
+<span class="sd">            )</span>
+<span class="sd">            retriever.invoke(&quot;thud&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [Document(metadata={&#39;bar&#39;: &#39;baz&#39;, &#39;_id&#39;: &#39;0d706099-6dd9-412a-9df6-a71043e020de&#39;, &#39;_collection_name&#39;: &#39;demo_collection&#39;}, page_content=&#39;thud&#39;)]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="n">CONTENT_KEY</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;page_content&quot;</span>
     <span class="n">METADATA_KEY</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;metadata&quot;</span>
@@ -1298,7 +1422,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 06, 2024.
+                                on Aug 07, 2024.
                 </footer>
             </div>
         </div>

@@ -626,7 +626,7 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">values</span>
 
-    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that api key and python package exists in environment.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -704,6 +704,7 @@
             <span class="n">values</span><span class="p">[</span><span class="s2">&quot;async_client&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">openai</span><span class="o">.</span><span class="n">AsyncOpenAI</span><span class="p">(</span>
                 <span class="o">**</span><span class="n">client_params</span><span class="p">,</span> <span class="o">**</span><span class="n">async_specific</span>
             <span class="p">)</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span>
+
         <span class="k">return</span> <span class="n">values</span>
 
     <span class="nd">@property</span>
@@ -1192,11 +1193,16 @@
         <span class="n">tool_choice</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
             <span class="n">Union</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">,</span> <span class="s2">&quot;required&quot;</span><span class="p">,</span> <span class="s2">&quot;any&quot;</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span>
         <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">BaseMessage</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Bind tool-like objects to this chat model.</span>
 
 <span class="sd">        Assumes model is compatible with OpenAI tool-calling API.</span>
+
+<span class="sd">        .. versionchanged:: 0.1.21</span>
+
+<span class="sd">            Support for ``strict`` argument added.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            tools: A list of tool definitions to bind to this chat model.</span>
@@ -1210,11 +1216,23 @@
 <span class="sd">                    - ``&quot;any&quot;`` or ``&quot;required&quot;`` or ``True``: force at least one tool to be called.</span>
 <span class="sd">                    - dict of the form ``{&quot;type&quot;: &quot;function&quot;, &quot;function&quot;: {&quot;name&quot;: &lt;&lt;tool_name&gt;&gt;}}``: calls &lt;&lt;tool_name&gt;&gt; tool.</span>
 <span class="sd">                    - ``False`` or ``None``: no effect, default OpenAI behavior.</span>
+<span class="sd">            strict: If True, model output is guaranteed to exactly match the JSON Schema</span>
+<span class="sd">                provided in the tool definition. If True, the input schema will be</span>
+<span class="sd">                validated according to</span>
+<span class="sd">                https://platform.openai.com/docs/guides/structured-outputs/supported-schemas.</span>
+<span class="sd">                If False, input schema will not be validated and model output will not</span>
+<span class="sd">                be validated.</span>
+<span class="sd">                If None, ``strict`` argument will not be passed to the model.</span>
+
+<span class="sd">                .. versionadded:: 0.1.21</span>
+
 <span class="sd">            kwargs: Any additional parameters are passed directly to</span>
 <span class="sd">                ``self.bind(**kwargs)``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
-        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span><span class="p">]</span>
+        <span class="n">formatted_tools</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">tools</span>
+        <span class="p">]</span>
         <span class="k">if</span> <span class="n">tool_choice</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool_choice</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="c1"># tool_choice is a tool/function name</span>
@@ -1258,6 +1276,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;function_calling&quot;</span><span class="p">,</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">,</span>
         <span class="n">include_raw</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">True</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">strict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_AllReturnType</span><span class="p">]:</span> <span class="o">...</span>
 
@@ -1268,6 +1287,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;function_calling&quot;</span><span class="p">,</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">,</span>
         <span class="n">include_raw</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">strict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_DictOrPydantic</span><span class="p">]:</span> <span class="o">...</span>
 
@@ -1277,9 +1297,14 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;function_calling&quot;</span><span class="p">,</span> <span class="s2">&quot;json_mode&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">,</span>
         <span class="n">include_raw</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">strict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Runnable</span><span class="p">[</span><span class="n">LanguageModelInput</span><span class="p">,</span> <span class="n">_DictOrPydantic</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Model wrapper that returns outputs formatted to match the given schema.</span>
+
+<span class="sd">        .. versionchanged:: 0.1.21</span>
+
+<span class="sd">            Support for ``strict`` argument added.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            schema:</span>
@@ -1300,7 +1325,7 @@
 <span class="sd">                        Added support for TypedDict class.</span>
 
 <span class="sd">            method:</span>
-<span class="sd">                The method for steering model generation, either &quot;function_calling&quot;</span>
+<span class="sd">                The method for steering model generation, one of &quot;function_calling&quot;</span>
 <span class="sd">                or &quot;json_mode&quot;. If &quot;function_calling&quot; then the schema will be converted</span>
 <span class="sd">                to an OpenAI function and the returned model will make use of the</span>
 <span class="sd">                function-calling API. If &quot;json_mode&quot; then OpenAI&#39;s JSON mode will be</span>
@@ -1313,6 +1338,22 @@
 <span class="sd">                response will be returned. If an error occurs during output parsing it</span>
 <span class="sd">                will be caught and returned as well. The final output is always a dict</span>
 <span class="sd">                with keys &quot;raw&quot;, &quot;parsed&quot;, and &quot;parsing_error&quot;.</span>
+<span class="sd">            strict: If True and ``method`` = &quot;function_calling&quot;, model output is</span>
+<span class="sd">                guaranteed to exactly match the schema</span>
+<span class="sd">                If True, the input schema will also be</span>
+<span class="sd">                validated according to</span>
+<span class="sd">                https://platform.openai.com/docs/guides/structured-outputs/supported-schemas.</span>
+<span class="sd">                If False, input schema will not be validated and model output will not</span>
+<span class="sd">                be validated.</span>
+<span class="sd">                If None, ``strict`` argument will not be passed to the model.</span>
+
+<span class="sd">                .. versionadded:: 0.1.21</span>
+
+<span class="sd">                .. note:: Planned breaking change in version `0.2.0`</span>
+
+<span class="sd">                    ``strict`` will default to True when ``method`` is</span>
+<span class="sd">                    &quot;function_calling&quot; as of version `0.2.0`.</span>
+<span class="sd">            kwargs: Additional keyword args aren&#39;t supported.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            A Runnable that takes same inputs as a :class:`langchain_core.language_models.chat.BaseChatModel`.</span>
@@ -1327,7 +1368,16 @@
 <span class="sd">                - ``&quot;parsed&quot;``: None if there was a parsing error, otherwise the type depends on the ``schema`` as described above.</span>
 <span class="sd">                - ``&quot;parsing_error&quot;``: Optional[BaseException]</span>
 
-<span class="sd">        Example: schema=Pydantic class, method=&quot;function_calling&quot;, include_raw=False:</span>
+<span class="sd">        Example: schema=Pydantic class, method=&quot;function_calling&quot;, include_raw=False, strict=True:</span>
+<span class="sd">            .. note:: Valid schemas when using ``strict`` = True</span>
+
+<span class="sd">                OpenAI has a number of restrictions on what types of schemas can be</span>
+<span class="sd">                provided if ``strict`` = True. When using Pydantic, our model cannot</span>
+<span class="sd">                specify any Field metadata (like min/max constraints) and fields cannot</span>
+<span class="sd">                have default values.</span>
+
+<span class="sd">                See all constraints here: https://platform.openai.com/docs/guides/structured-outputs/supported-schemas</span>
+
 <span class="sd">            .. code-block:: python</span>
 
 <span class="sd">                from typing import Optional</span>
@@ -1340,16 +1390,15 @@
 <span class="sd">                    &#39;&#39;&#39;An answer to the user question along with justification for the answer.&#39;&#39;&#39;</span>
 
 <span class="sd">                    answer: str</span>
-<span class="sd">                    # If we provide default values and/or descriptions for fields, these will be passed</span>
-<span class="sd">                    # to the model. This is an important part of improving a model&#39;s ability to</span>
-<span class="sd">                    # correctly return structured outputs.</span>
 <span class="sd">                    justification: Optional[str] = Field(</span>
-<span class="sd">                        default=None, description=&quot;A justification for the answer.&quot;</span>
+<span class="sd">                        default=..., description=&quot;A justification for the answer.&quot;</span>
 <span class="sd">                    )</span>
 
 
-<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-3.5-turbo-0125&quot;, temperature=0)</span>
-<span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification)</span>
+<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-4o&quot;, temperature=0)</span>
+<span class="sd">                structured_llm = llm.with_structured_output(</span>
+<span class="sd">                    AnswerWithJustification, strict=True</span>
+<span class="sd">                )</span>
 
 <span class="sd">                structured_llm.invoke(</span>
 <span class="sd">                    &quot;What weighs more a pound of bricks or a pound of feathers&quot;</span>
@@ -1374,7 +1423,7 @@
 <span class="sd">                    justification: str</span>
 
 
-<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-3.5-turbo-0125&quot;, temperature=0)</span>
+<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-4o&quot;, temperature=0)</span>
 <span class="sd">                structured_llm = llm.with_structured_output(</span>
 <span class="sd">                    AnswerWithJustification, include_raw=True</span>
 <span class="sd">                )</span>
@@ -1407,7 +1456,7 @@
 <span class="sd">                    ]</span>
 
 
-<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-3.5-turbo-0125&quot;, temperature=0)</span>
+<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-4o&quot;, temperature=0)</span>
 <span class="sd">                structured_llm = llm.with_structured_output(AnswerWithJustification)</span>
 
 <span class="sd">                structured_llm.invoke(</span>
@@ -1436,7 +1485,7 @@
 <span class="sd">                   }</span>
 <span class="sd">               }</span>
 
-<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-3.5-turbo-0125&quot;, temperature=0)</span>
+<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-4o&quot;, temperature=0)</span>
 <span class="sd">                structured_llm = llm.with_structured_output(oai_schema)</span>
 
 <span class="sd">                structured_llm.invoke(</span>
@@ -1457,7 +1506,7 @@
 <span class="sd">                    answer: str</span>
 <span class="sd">                    justification: str</span>
 
-<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-3.5-turbo-0125&quot;, temperature=0)</span>
+<span class="sd">                llm = ChatOpenAI(model=&quot;gpt-4o&quot;, temperature=0)</span>
 <span class="sd">                structured_llm = llm.with_structured_output(</span>
 <span class="sd">                    AnswerWithJustification,</span>
 <span class="sd">                    method=&quot;json_mode&quot;,</span>
@@ -1466,11 +1515,11 @@
 
 <span class="sd">                structured_llm.invoke(</span>
 <span class="sd">                    &quot;Answer the following question. &quot;</span>
-<span class="sd">                    &quot;Make sure to return a JSON blob with keys &#39;answer&#39; and &#39;justification&#39;.\n\n&quot;</span>
+<span class="sd">                    &quot;Make sure to return a JSON blob with keys &#39;answer&#39; and &#39;justification&#39;.\\n\\n&quot;</span>
 <span class="sd">                    &quot;What&#39;s heavier a pound of bricks or a pound of feathers?&quot;</span>
 <span class="sd">                )</span>
 <span class="sd">                # -&gt; {</span>
-<span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;{\n    &quot;answer&quot;: &quot;They are both the same weight.&quot;,\n    &quot;justification&quot;: &quot;Both a pound of bricks and a pound of feathers weigh one pound. The difference lies in the volume and density of the materials, not the weight.&quot; \n}&#39;),</span>
+<span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;{\\n    &quot;answer&quot;: &quot;They are both the same weight.&quot;,\\n    &quot;justification&quot;: &quot;Both a pound of bricks and a pound of feathers weigh one pound. The difference lies in the volume and density of the materials, not the weight.&quot; \\n}&#39;),</span>
 <span class="sd">                #     &#39;parsed&#39;: AnswerWithJustification(answer=&#39;They are both the same weight.&#39;, justification=&#39;Both a pound of bricks and a pound of feathers weigh one pound. The difference lies in the volume and density of the materials, not the weight.&#39;),</span>
 <span class="sd">                #     &#39;parsing_error&#39;: None</span>
 <span class="sd">                # }</span>
@@ -1482,11 +1531,11 @@
 
 <span class="sd">                structured_llm.invoke(</span>
 <span class="sd">                    &quot;Answer the following question. &quot;</span>
-<span class="sd">                    &quot;Make sure to return a JSON blob with keys &#39;answer&#39; and &#39;justification&#39;.\n\n&quot;</span>
+<span class="sd">                    &quot;Make sure to return a JSON blob with keys &#39;answer&#39; and &#39;justification&#39;.\\n\\n&quot;</span>
 <span class="sd">                    &quot;What&#39;s heavier a pound of bricks or a pound of feathers?&quot;</span>
 <span class="sd">                )</span>
 <span class="sd">                # -&gt; {</span>
-<span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;{\n    &quot;answer&quot;: &quot;They are both the same weight.&quot;,\n    &quot;justification&quot;: &quot;Both a pound of bricks and a pound of feathers weigh one pound. The difference lies in the volume and density of the materials, not the weight.&quot; \n}&#39;),</span>
+<span class="sd">                #     &#39;raw&#39;: AIMessage(content=&#39;{\\n    &quot;answer&quot;: &quot;They are both the same weight.&quot;,\\n    &quot;justification&quot;: &quot;Both a pound of bricks and a pound of feathers weigh one pound. The difference lies in the volume and density of the materials, not the weight.&quot; \\n}&#39;),</span>
 <span class="sd">                #     &#39;parsed&#39;: {</span>
 <span class="sd">                #         &#39;answer&#39;: &#39;They are both the same weight.&#39;,</span>
 <span class="sd">                #         &#39;justification&#39;: &#39;Both a pound of bricks and a pound of feathers weigh one pound. The difference lies in the volume and density of the materials, not the weight.&#39;</span>
@@ -1496,6 +1545,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="k">if</span> <span class="n">kwargs</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Received unsupported arguments </span><span class="si">{</span><span class="n">kwargs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">strict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">method</span> <span class="o">!=</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Argument `strict` is only supported for `method`=&#39;function_calling&#39;&quot;</span>
+            <span class="p">)</span>
         <span class="n">is_pydantic_schema</span> <span class="o">=</span> <span class="n">_is_pydantic_class</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;function_calling&quot;</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">schema</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1505,7 +1558,10 @@
                 <span class="p">)</span>
             <span class="n">tool_name</span> <span class="o">=</span> <span class="n">convert_to_openai_tool</span><span class="p">(</span><span class="n">schema</span><span class="p">)[</span><span class="s2">&quot;function&quot;</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
             <span class="n">llm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">(</span>
-                <span class="p">[</span><span class="n">schema</span><span class="p">],</span> <span class="n">tool_choice</span><span class="o">=</span><span class="n">tool_name</span><span class="p">,</span> <span class="n">parallel_tool_calls</span><span class="o">=</span><span class="kc">False</span>
+                <span class="p">[</span><span class="n">schema</span><span class="p">],</span>
+                <span class="n">tool_choice</span><span class="o">=</span><span class="n">tool_name</span><span class="p">,</span>
+                <span class="n">parallel_tool_calls</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">is_pydantic_schema</span><span class="p">:</span>
                 <span class="n">output_parser</span><span class="p">:</span> <span class="n">OutputParserLike</span> <span class="o">=</span> <span class="n">PydanticToolsParser</span><span class="p">(</span>
@@ -1738,7 +1794,10 @@
 <span class="sd">                )</span>
 
 
-<span class="sd">            llm_with_tools = llm.bind_tools([GetWeather, GetPopulation])</span>
+<span class="sd">            llm_with_tools = llm.bind_tools(</span>
+<span class="sd">                [GetWeather, GetPopulation]</span>
+<span class="sd">                # strict = True  # enforce tool args schema is respected</span>
+<span class="sd">            )</span>
 <span class="sd">            ai_msg = llm_with_tools.invoke(</span>
 <span class="sd">                &quot;Which city is hotter today and which is bigger: LA or NY?&quot;</span>
 <span class="sd">            )</span>
@@ -2164,7 +2223,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 06, 2024.
+                                on Aug 07, 2024.
                 </footer>
             </div>
         </div>

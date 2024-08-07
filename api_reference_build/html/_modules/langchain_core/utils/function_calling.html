@@ -562,6 +562,8 @@
 
 <div class="viewcode-block" id="convert_to_openai_function"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.convert_to_openai_function.html#langchain_core.utils.function_calling.convert_to_openai_function">[docs]</a><span class="k">def</span> <span class="nf">convert_to_openai_function</span><span class="p">(</span>
     <span class="n">function</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a raw function/class to an OpenAI function.</span>
 
@@ -570,6 +572,9 @@
 <span class="sd">            Tool object, or a Python function. If a dictionary is passed in, it is</span>
 <span class="sd">            assumed to already be a valid OpenAI function or a JSON schema with</span>
 <span class="sd">            top-level &#39;title&#39; and &#39;description&#39; keys specified.</span>
+<span class="sd">        strict: If True, model output is guaranteed to exactly match the JSON Schema</span>
+<span class="sd">            provided in the function definition. If None, ``strict`` argument will not</span>
+<span class="sd">            be included in function definition.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A dict version of the passed in function which is compatible with the OpenAI</span>
@@ -584,36 +589,47 @@
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
         <span class="n">k</span> <span class="ow">in</span> <span class="n">function</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="s2">&quot;parameters&quot;</span><span class="p">)</span>
     <span class="p">):</span>
-        <span class="k">return</span> <span class="n">function</span>
+        <span class="n">oai_function</span> <span class="o">=</span> <span class="n">function</span>
     <span class="c1"># a JSON schema with title and description</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
         <span class="n">k</span> <span class="ow">in</span> <span class="n">function</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">,</span> <span class="s2">&quot;description&quot;</span><span class="p">,</span> <span class="s2">&quot;properties&quot;</span><span class="p">)</span>
     <span class="p">):</span>
         <span class="n">function</span> <span class="o">=</span> <span class="n">function</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="k">return</span> <span class="p">{</span>
+        <span class="n">oai_function</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">function</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;title&quot;</span><span class="p">),</span>
             <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="n">function</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;description&quot;</span><span class="p">),</span>
             <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="n">function</span><span class="p">,</span>
         <span class="p">}</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="n">is_basemodel_subclass</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">convert_pydantic_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
+        <span class="n">oai_function</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">convert_pydantic_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">elif</span> <span class="n">is_typeddict</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">_convert_typed_dict_to_openai_function</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">Type</span><span class="p">,</span> <span class="n">function</span><span class="p">)))</span>
+        <span class="n">oai_function</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span>
+            <span class="n">Dict</span><span class="p">,</span> <span class="n">_convert_typed_dict_to_openai_function</span><span class="p">(</span><span class="n">cast</span><span class="p">(</span><span class="n">Type</span><span class="p">,</span> <span class="n">function</span><span class="p">))</span>
+        <span class="p">)</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">function</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">format_tool_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
+        <span class="n">oai_function</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">format_tool_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">elif</span> <span class="nb">callable</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">convert_python_function_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
+        <span class="n">oai_function</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">Dict</span><span class="p">,</span> <span class="n">convert_python_function_to_openai_function</span><span class="p">(</span><span class="n">function</span><span class="p">))</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Unsupported function</span><span class="se">\n\n</span><span class="si">{</span><span class="n">function</span><span class="si">}</span><span class="se">\n\n</span><span class="s2">Functions must be passed in&quot;</span>
             <span class="s2">&quot; as Dict, pydantic.BaseModel, or Callable. If they&#39;re a dict they must&quot;</span>
             <span class="s2">&quot; either be in OpenAI function format or valid JSON schema with top-level&quot;</span>
             <span class="s2">&quot; &#39;title&#39; and &#39;description&#39; keys.&quot;</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">strict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">oai_function</span><span class="p">[</span><span class="s2">&quot;strict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">strict</span>
+        <span class="c1"># As of 08/06/24, OpenAI requires that additionalProperties be supplied and set</span>
+        <span class="c1"># to False if strict is True.</span>
+        <span class="n">oai_function</span><span class="p">[</span><span class="s2">&quot;parameters&quot;</span><span class="p">][</span><span class="s2">&quot;additionalProperties&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">oai_function</span></div>
 
 
 <div class="viewcode-block" id="convert_to_openai_tool"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.convert_to_openai_tool.html#langchain_core.utils.function_calling.convert_to_openai_tool">[docs]</a><span class="k">def</span> <span class="nf">convert_to_openai_tool</span><span class="p">(</span>
     <span class="n">tool</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseModel</span><span class="p">],</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">BaseTool</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a raw function/class to an OpenAI tool.</span>
 
@@ -622,6 +638,9 @@
 <span class="sd">            BaseTool. If a dictionary is passed in, it is assumed to already be a valid</span>
 <span class="sd">            OpenAI tool, OpenAI function, or a JSON schema with top-level &#39;title&#39; and</span>
 <span class="sd">            &#39;description&#39; keys specified.</span>
+<span class="sd">        strict: If True, model output is guaranteed to exactly match the JSON Schema</span>
+<span class="sd">            provided in the function definition. If None, ``strict`` argument will not</span>
+<span class="sd">            be included in tool definition.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A dict version of the passed in tool which is compatible with the</span>
@@ -629,8 +648,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;function&quot;</span> <span class="ow">and</span> <span class="s2">&quot;function&quot;</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">tool</span>
-    <span class="n">function</span> <span class="o">=</span> <span class="n">convert_to_openai_function</span><span class="p">(</span><span class="n">tool</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span> <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">function</span><span class="p">}</span></div>
+    <span class="n">oai_function</span> <span class="o">=</span> <span class="n">convert_to_openai_function</span><span class="p">(</span><span class="n">tool</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">)</span>
+    <span class="n">oai_tool</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;function&quot;</span><span class="p">,</span> <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">oai_function</span><span class="p">}</span>
+    <span class="k">return</span> <span class="n">oai_tool</span></div>
 
 
 <div class="viewcode-block" id="tool_example_to_messages"><a class="viewcode-back" href="../../../utils/langchain_core.utils.function_calling.tool_example_to_messages.html#langchain_core.utils.function_calling.tool_example_to_messages">[docs]</a><span class="k">def</span> <span class="nf">tool_example_to_messages</span><span class="p">(</span>
@@ -798,7 +818,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 06, 2024.
+                                on Aug 07, 2024.
                 </footer>
             </div>
         </div>

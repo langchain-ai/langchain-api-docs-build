@@ -312,21 +312,130 @@
 
 
 <div class="viewcode-block" id="FAISS"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.faiss.FAISS.html#langchain_community.vectorstores.faiss.FAISS">[docs]</a><span class="k">class</span> <span class="nc">FAISS</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;`Meta Faiss` vector store.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;FAISS vector store integration.</span>
 
-<span class="sd">    To use, you must have the ``faiss`` python package installed.</span>
+<span class="sd">    Setup:</span>
+<span class="sd">        Install ``langchain_community`` and ``faiss-cpu`` python packages.</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -qU langchain_community faiss-cpu</span>
+
+<span class="sd">    Key init args — indexing params:</span>
+<span class="sd">        embedding_function: Embeddings</span>
+<span class="sd">            Embedding function to use.</span>
+
+<span class="sd">    Key init args — client params:</span>
+<span class="sd">        index: Any</span>
+<span class="sd">            FAISS index to use.</span>
+<span class="sd">        docstore: Docstore</span>
+<span class="sd">            Docstore to use.</span>
+<span class="sd">        index_to_docstore_id: Dict[int, str]</span>
+<span class="sd">            Mapping of index to docstore id.</span>
+
+<span class="sd">    Instantiate:</span>
 <span class="sd">        .. code-block:: python</span>
 
-<span class="sd">            from langchain_community.embeddings.openai import OpenAIEmbeddings</span>
+<span class="sd">            import faiss</span>
 <span class="sd">            from langchain_community.vectorstores import FAISS</span>
+<span class="sd">            from langchain_community.docstore.in_memory import InMemoryDocstore</span>
+<span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
 
-<span class="sd">            embeddings = OpenAIEmbeddings()</span>
-<span class="sd">            texts = [&quot;FAISS is an important library&quot;, &quot;LangChain supports FAISS&quot;]</span>
-<span class="sd">            faiss = FAISS.from_texts(texts, embeddings)</span>
+<span class="sd">            index = faiss.IndexFlatL2(len(OpenAIEmbeddings().embed_query(&quot;hello world&quot;)))</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">            vector_store = FAISS(</span>
+<span class="sd">                embedding_function=OpenAIEmbeddings(),</span>
+<span class="sd">                index=index,</span>
+<span class="sd">                docstore= InMemoryDocstore(),</span>
+<span class="sd">                index_to_docstore_id={}</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Add Documents:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.documents import Document</span>
+
+<span class="sd">            document_1 = Document(page_content=&quot;foo&quot;, metadata={&quot;baz&quot;: &quot;bar&quot;})</span>
+<span class="sd">            document_2 = Document(page_content=&quot;thud&quot;, metadata={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            document_3 = Document(page_content=&quot;i will be deleted :(&quot;)</span>
+
+<span class="sd">            documents = [document_1, document_2, document_3]</span>
+<span class="sd">            ids = [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+<span class="sd">            vector_store.add_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">    Delete Documents:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            vector_store.delete(ids=[&quot;3&quot;])</span>
+
+<span class="sd">    Search:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1)</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;}]</span>
+
+<span class="sd">    Search with filter:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1,filter={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;}]</span>
+
+<span class="sd">    Search with score:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc, score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.335304] foo [{&#39;baz&#39;: &#39;bar&#39;}]</span>
+
+<span class="sd">    Async:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            # add documents</span>
+<span class="sd">            # await vector_store.aadd_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">            # delete documents</span>
+<span class="sd">            # await vector_store.adelete(ids=[&quot;3&quot;])</span>
+
+<span class="sd">            # search</span>
+<span class="sd">            # results = vector_store.asimilarity_search(query=&quot;thud&quot;,k=1)</span>
+
+<span class="sd">            # search with score</span>
+<span class="sd">            results = await vector_store.asimilarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc,score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.335304] foo [{&#39;baz&#39;: &#39;bar&#39;}]</span>
+
+<span class="sd">    Use as Retriever:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            retriever = vector_store.as_retriever(</span>
+<span class="sd">                search_type=&quot;mmr&quot;,</span>
+<span class="sd">                search_kwargs={&quot;k&quot;: 1, &quot;fetch_k&quot;: 2, &quot;lambda_mult&quot;: 0.5},</span>
+<span class="sd">            )</span>
+<span class="sd">            retriever.invoke(&quot;thud&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [Document(metadata={&#39;bar&#39;: &#39;baz&#39;}, page_content=&#39;thud&#39;)]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
 <div class="viewcode-block" id="FAISS.__init__"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.faiss.FAISS.html#langchain_community.vectorstores.faiss.FAISS.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1503,7 +1612,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 06, 2024.
+                                on Aug 07, 2024.
                 </footer>
             </div>
         </div>
