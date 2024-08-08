@@ -306,6 +306,137 @@
 
 
 <div class="viewcode-block" id="AstraDBVectorStore"><a class="viewcode-back" href="../../vectorstores/langchain_astradb.vectorstores.AstraDBVectorStore.html#langchain_astradb.vectorstores.AstraDBVectorStore">[docs]</a><span class="k">class</span> <span class="nc">AstraDBVectorStore</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;AstraDB vector store integration.</span>
+
+<span class="sd">    Setup:</span>
+<span class="sd">        Install ``langchain-astradb`` and head to the [AstraDB website](https://astra.datastax.com), create an account, create a new database and [create an application token](https://docs.datastax.com/en/astra-db-serverless/administration/manage-application-tokens.html#generate-application-token).</span>
+
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -qU langchain-astradb</span>
+
+<span class="sd">    Key init args — indexing params:</span>
+<span class="sd">        collection_name: str</span>
+<span class="sd">            Name of the collection.</span>
+<span class="sd">        embedding: Embeddings</span>
+<span class="sd">            Embedding function to use.</span>
+
+<span class="sd">    Key init args — client params:</span>
+<span class="sd">        api_endpoint: str</span>
+<span class="sd">            AstraDB API endpoint.</span>
+<span class="sd">        token: str</span>
+<span class="sd">            API token for Astra DB usage.</span>
+<span class="sd">        namespace: Optional[str]</span>
+<span class="sd">            Namespace (aka keyspace) where the collection is created</span>
+
+<span class="sd">    # TODO: Replace with relevant init params.</span>
+<span class="sd">    Instantiate:</span>
+
+<span class="sd">        Get your API endpoint and application token from the dashboard of your database.</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            import getpass</span>
+<span class="sd">            from langchain_astradb import AstraDBVectorStore</span>
+<span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
+
+<span class="sd">            ASTRA_DB_API_ENDPOINT = getpass.getpass(&quot;ASTRA_DB_API_ENDPOINT = &quot;)</span>
+<span class="sd">            ASTRA_DB_APPLICATION_TOKEN = getpass.getpass(&quot;ASTRA_DB_APPLICATION_TOKEN = &quot;)</span>
+
+<span class="sd">            vector_store = AstraDBVectorStore(</span>
+<span class="sd">                collection_name=&quot;astra_vector_langchain&quot;,</span>
+<span class="sd">                embedding=OpenAIEmbeddings(),</span>
+<span class="sd">                api_endpoint=ASTRA_DB_API_ENDPOINT,</span>
+<span class="sd">                token=ASTRA_DB_APPLICATION_TOKEN,</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Add Documents:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.documents import Document</span>
+
+<span class="sd">            document_1 = Document(page_content=&quot;foo&quot;, metadata={&quot;baz&quot;: &quot;bar&quot;})</span>
+<span class="sd">            document_2 = Document(page_content=&quot;thud&quot;, metadata={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            document_3 = Document(page_content=&quot;i will be deleted :(&quot;)</span>
+
+<span class="sd">            documents = [document_1, document_2, document_3]</span>
+<span class="sd">            ids = [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+<span class="sd">            vector_store.add_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">    Delete Documents:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            vector_store.delete(ids=[&quot;3&quot;])</span>
+
+<span class="sd">    Search:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1)</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;}]</span>
+
+<span class="sd">    Search with filter:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1,filter={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;}]</span>
+
+<span class="sd">    Search with score:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc, score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.916135] foo [{&#39;baz&#39;: &#39;bar&#39;}]</span>
+
+<span class="sd">    Async:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            # add documents</span>
+<span class="sd">            # await vector_store.aadd_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">            # delete documents</span>
+<span class="sd">            # await vector_store.adelete(ids=[&quot;3&quot;])</span>
+
+<span class="sd">            # search</span>
+<span class="sd">            # results = vector_store.asimilarity_search(query=&quot;thud&quot;,k=1)</span>
+
+<span class="sd">            # search with score</span>
+<span class="sd">            results = await vector_store.asimilarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc,score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.916135] foo [{&#39;baz&#39;: &#39;bar&#39;}]</span>
+
+<span class="sd">    Use as Retriever:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            retriever = vector_store.as_retriever(</span>
+<span class="sd">                search_type=&quot;similarity_score_threshold&quot;,</span>
+<span class="sd">                search_kwargs={&quot;k&quot;: 1, &quot;score_threshold&quot;: 0.5},</span>
+<span class="sd">            )</span>
+<span class="sd">            retriever.invoke(&quot;thud&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [Document(metadata={&#39;bar&#39;: &#39;baz&#39;}, page_content=&#39;thud&#39;)]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_filter_to_metadata</span><span class="p">(</span><span class="n">filter_dict</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
         <span class="k">if</span> <span class="n">filter_dict</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -402,22 +533,6 @@
 
 <span class="sd">        For quickstart and details, visit</span>
 <span class="sd">        https://docs.datastax.com/en/astra/astra-db-vector/</span>
-
-<span class="sd">        Example:</span>
-<span class="sd">            .. code-block:: python</span>
-
-<span class="sd">                from langchain_astradb.vectorstores import AstraDBVectorStore</span>
-<span class="sd">                from langchain_openai.embeddings import OpenAIEmbeddings</span>
-<span class="sd">                embeddings = OpenAIEmbeddings()</span>
-<span class="sd">                vectorstore = AstraDBVectorStore(</span>
-<span class="sd">                    embedding=embeddings,</span>
-<span class="sd">                    collection_name=&quot;my_store&quot;,</span>
-<span class="sd">                    token=&quot;AstraCS:...&quot;,</span>
-<span class="sd">                    api_endpoint=&quot;https://&lt;DB-ID&gt;-&lt;REGION&gt;.apps.astra.datastax.com&quot;</span>
-<span class="sd">                )</span>
-
-<span class="sd">                vectorstore.add_texts([&quot;Giraffes&quot;, &quot;All good here&quot;])</span>
-<span class="sd">                results = vectorstore.similarity_search(&quot;Everything&#39;s ok&quot;, k=1)</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            embedding: the embeddings function or service to use.</span>
@@ -2001,7 +2116,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>

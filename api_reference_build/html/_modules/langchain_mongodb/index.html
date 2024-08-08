@@ -238,7 +238,9 @@
             <div class="sk-page-content container-fluid body px-md-3" role="main">
                 
   <h1>Source code for langchain_mongodb.index</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span> <span class="nn">logging</span>
+<span></span><span class="sd">&quot;&quot;&quot;Search Index Commands&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
 <span class="kn">from</span> <span class="nn">time</span> <span class="kn">import</span> <span class="n">monotonic</span><span class="p">,</span> <span class="n">sleep</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
@@ -247,8 +249,6 @@
 <span class="kn">from</span> <span class="nn">pymongo.operations</span> <span class="kn">import</span> <span class="n">SearchIndexModel</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span>
-
-<span class="n">_DELAY</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># Interval between checks for index operations</span>
 
 
 <span class="k">def</span> <span class="nf">_search_index_error_message</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -265,19 +265,24 @@
     <span class="n">dimensions</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">similarity</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]],</span>
+    <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;numDimensions&quot;</span><span class="p">:</span> <span class="n">dimensions</span><span class="p">,</span>
-                <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="n">path</span><span class="p">,</span>
-                <span class="s2">&quot;similarity&quot;</span><span class="p">:</span> <span class="n">similarity</span><span class="p">,</span>
-                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;vector&quot;</span><span class="p">,</span>
-            <span class="p">},</span>
-            <span class="o">*</span><span class="p">(</span><span class="n">filters</span> <span class="ow">or</span> <span class="p">[]),</span>
-        <span class="p">]</span>
-    <span class="p">}</span>
+    <span class="c1"># https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;numDimensions&quot;</span><span class="p">:</span> <span class="n">dimensions</span><span class="p">,</span>
+            <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="n">path</span><span class="p">,</span>
+            <span class="s2">&quot;similarity&quot;</span><span class="p">:</span> <span class="n">similarity</span><span class="p">,</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;vector&quot;</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">filters</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">filters</span><span class="p">:</span>
+            <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;filter&quot;</span><span class="p">,</span> <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="n">field</span><span class="p">})</span>
+    <span class="n">definition</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">fields</span><span class="p">}</span>
+    <span class="n">definition</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">definition</span>
 
 
 <div class="viewcode-block" id="create_vector_search_index"><a class="viewcode-back" href="../../index/langchain_mongodb.index.create_vector_search_index.html#langchain_mongodb.index.create_vector_search_index">[docs]</a><span class="k">def</span> <span class="nf">create_vector_search_index</span><span class="p">(</span>
@@ -286,9 +291,10 @@
     <span class="n">dimensions</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">similarity</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">wait_until_complete</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Experimental Utility function to create a vector search index</span>
 
@@ -298,9 +304,10 @@
 <span class="sd">        dimensions (int): Number of dimensions in embedding</span>
 <span class="sd">        path (str): field with vector embedding</span>
 <span class="sd">        similarity (str): The similarity score used for the index</span>
-<span class="sd">        filters (List[Dict[str, str]]): additional filters for index definition.</span>
+<span class="sd">        filters (List[str]): Fields/paths to index to allow filtering in $vectorSearch</span>
 <span class="sd">        wait_until_complete (Optional[float]): If provided, number of seconds to wait</span>
 <span class="sd">            until search index is ready.</span>
+<span class="sd">        kwargs: Keyword arguments supplying any additional options to SearchIndexModel.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating Search Index </span><span class="si">%s</span><span class="s2"> on </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">index_name</span><span class="p">,</span> <span class="n">collection</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 
@@ -312,6 +319,7 @@
                     <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
                     <span class="n">similarity</span><span class="o">=</span><span class="n">similarity</span><span class="p">,</span>
                     <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
                 <span class="p">),</span>
                 <span class="n">name</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span>
                 <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;vectorSearch&quot;</span><span class="p">,</span>
@@ -323,7 +331,7 @@
     <span class="k">if</span> <span class="n">wait_until_complete</span><span class="p">:</span>
         <span class="n">_wait_for_predicate</span><span class="p">(</span>
             <span class="n">predicate</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">_is_index_ready</span><span class="p">(</span><span class="n">collection</span><span class="p">,</span> <span class="n">index_name</span><span class="p">),</span>
-            <span class="n">err</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Index </span><span class="si">{</span><span class="n">index_name</span><span class="si">}</span><span class="s2"> creation did not finish in </span><span class="si">{</span><span class="n">wait_until_complete</span><span class="si">}</span><span class="s2">!&quot;</span><span class="p">,</span>
+            <span class="n">err</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">index_name</span><span class="si">=}</span><span class="s2"> did not complete in </span><span class="si">{</span><span class="n">wait_until_complete</span><span class="si">}</span><span class="s2">!&quot;</span><span class="p">,</span>
             <span class="n">timeout</span><span class="o">=</span><span class="n">wait_until_complete</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
@@ -367,9 +375,10 @@
     <span class="n">dimensions</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">similarity</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">filters</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
+    <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">wait_until_complete</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Update a search index.</span>
 
@@ -378,12 +387,13 @@
 <span class="sd">    Args:</span>
 <span class="sd">        collection (Collection): MongoDB Collection</span>
 <span class="sd">        index_name (str): Name of Index</span>
-<span class="sd">        dimensions (int): Number of dimensions in embedding.</span>
-<span class="sd">        path (str): field with vector embedding.</span>
+<span class="sd">        dimensions (int): Number of dimensions in embedding</span>
+<span class="sd">        path (str): field with vector embedding</span>
 <span class="sd">        similarity (str): The similarity score used for the index.</span>
-<span class="sd">        filters (List[Dict[str, str]]): additional filters for index definition.</span>
+<span class="sd">        filters (List[str]): Fields/paths to index to allow filtering in $vectorSearch</span>
 <span class="sd">        wait_until_complete (Optional[float]): If provided, number of seconds to wait</span>
 <span class="sd">            until search index is ready.</span>
+<span class="sd">        kwargs: Keyword arguments supplying any additional options to SearchIndexModel.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
@@ -397,6 +407,7 @@
                 <span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
                 <span class="n">similarity</span><span class="o">=</span><span class="n">similarity</span><span class="p">,</span>
                 <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
             <span class="p">),</span>
         <span class="p">)</span>
     <span class="k">except</span> <span class="n">OperationFailure</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
@@ -441,7 +452,7 @@
 <span class="sd">    Args:</span>
 <span class="sd">        predicate (Callable[, bool]): A function that returns a boolean value</span>
 <span class="sd">        err (str): Error message to raise if nothing occurs</span>
-<span class="sd">        timeout (float, optional):  wait time for predicate. Defaults to TIMEOUT.</span>
+<span class="sd">        timeout (float, optional): Wait time for predicate. Defaults to TIMEOUT.</span>
 <span class="sd">        interval (float, optional): Interval to check predicate. Defaults to DELAY.</span>
 
 <span class="sd">    Raises:</span>
@@ -452,6 +463,51 @@
         <span class="k">if</span> <span class="n">monotonic</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
         <span class="n">sleep</span><span class="p">(</span><span class="n">interval</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="create_fulltext_search_index"><a class="viewcode-back" href="../../index/langchain_mongodb.index.create_fulltext_search_index.html#langchain_mongodb.index.create_fulltext_search_index">[docs]</a><span class="k">def</span> <span class="nf">create_fulltext_search_index</span><span class="p">(</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="n">Collection</span><span class="p">,</span>
+    <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">wait_until_complete</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Experimental Utility function to create an Atlas Search index</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        collection (Collection): MongoDB Collection</span>
+<span class="sd">        index_name (str): Name of Index</span>
+<span class="sd">        field (str): Field to index</span>
+<span class="sd">        wait_until_complete (Optional[float]): If provided, number of seconds to wait</span>
+<span class="sd">            until search index is ready</span>
+<span class="sd">        kwargs: Keyword arguments supplying any additional options to SearchIndexModel.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating Search Index </span><span class="si">%s</span><span class="s2"> on </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">index_name</span><span class="p">,</span> <span class="n">collection</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="n">definition</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;mappings&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;dynamic&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">}]}}</span>
+    <span class="p">}</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">collection</span><span class="o">.</span><span class="n">create_search_index</span><span class="p">(</span>
+            <span class="n">SearchIndexModel</span><span class="p">(</span>
+                <span class="n">definition</span><span class="o">=</span><span class="n">definition</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">index_name</span><span class="p">,</span>
+                <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;search&quot;</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">OperationFailure</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">OperationFailure</span><span class="p">(</span><span class="n">_search_index_error_message</span><span class="p">())</span> <span class="kn">from</span> <span class="nn">e</span>
+
+    <span class="k">if</span> <span class="n">wait_until_complete</span><span class="p">:</span>
+        <span class="n">_wait_for_predicate</span><span class="p">(</span>
+            <span class="n">predicate</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">_is_index_ready</span><span class="p">(</span><span class="n">collection</span><span class="p">,</span> <span class="n">index_name</span><span class="p">),</span>
+            <span class="n">err</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">index_name</span><span class="si">=}</span><span class="s2"> did not complete in </span><span class="si">{</span><span class="n">wait_until_complete</span><span class="si">}</span><span class="s2">!&quot;</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">wait_until_complete</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
 </pre></div>
 
             </div>
@@ -460,7 +516,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>

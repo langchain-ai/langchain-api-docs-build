@@ -238,13 +238,7 @@
             <div class="sk-page-content container-fluid body px-md-3" role="main">
                 
   <h1>Source code for langchain_mongodb.cache</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">LangChain MongoDB Caches</span>
-
-<span class="sd">Functions &quot;_loads_generations&quot; and &quot;_dumps_generations&quot;</span>
-<span class="sd">are duplicated in this utility from modules:</span>
-<span class="sd">    - &quot;libs/community/langchain_community/cache.py&quot;</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span></span><span class="sd">&quot;&quot;&quot;LangChain MongoDB Caches.&quot;&quot;&quot;</span>
 
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">logging</span>
@@ -265,100 +259,6 @@
 <span class="kn">from</span> <span class="nn">langchain_mongodb.vectorstores</span> <span class="kn">import</span> <span class="n">MongoDBAtlasVectorSearch</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_generate_mongo_client</span><span class="p">(</span><span class="n">connection_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MongoClient</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">MongoClient</span><span class="p">(</span>
-        <span class="n">connection_string</span><span class="p">,</span>
-        <span class="n">driver</span><span class="o">=</span><span class="n">DriverInfo</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Langchain&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">(</span><span class="s2">&quot;langchain-mongodb&quot;</span><span class="p">)),</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">_dumps_generations</span><span class="p">(</span><span class="n">generations</span><span class="p">:</span> <span class="n">RETURN_VAL_TYPE</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Serialization for generic RETURN_VAL_TYPE, i.e. sequence of `Generation`</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        generations (RETURN_VAL_TYPE): A list of language model generations.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        str: a single string representing a list of generations.</span>
-
-<span class="sd">    This function (+ its counterpart `_loads_generations`) rely on</span>
-<span class="sd">    the dumps/loads pair with Reviver, so are able to deal</span>
-<span class="sd">    with all subclasses of Generation.</span>
-
-<span class="sd">    Each item in the list can be `dumps`ed to a string,</span>
-<span class="sd">    then we make the whole list of strings into a json-dumped.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="n">dumps</span><span class="p">(</span><span class="n">_item</span><span class="p">)</span> <span class="k">for</span> <span class="n">_item</span> <span class="ow">in</span> <span class="n">generations</span><span class="p">])</span>
-
-
-<span class="k">def</span> <span class="nf">_loads_generations</span><span class="p">(</span><span class="n">generations_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">RETURN_VAL_TYPE</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Deserialization of a string into a generic RETURN_VAL_TYPE</span>
-<span class="sd">    (i.e. a sequence of `Generation`).</span>
-
-<span class="sd">    See `_dumps_generations`, the inverse of this function.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        generations_str (str): A string representing a list of generations.</span>
-
-<span class="sd">    Compatible with the legacy cache-blob format</span>
-<span class="sd">    Does not raise exceptions for malformed entries, just logs a warning</span>
-<span class="sd">    and returns none: the caller should be prepared for such a cache miss.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        RETURN_VAL_TYPE: A list of generations.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span><span class="n">loads</span><span class="p">(</span><span class="n">_item_str</span><span class="p">)</span> <span class="k">for</span> <span class="n">_item_str</span> <span class="ow">in</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">generations_str</span><span class="p">)]</span>
-        <span class="k">return</span> <span class="n">generations</span>
-    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
-        <span class="c1"># deferring the (soft) handling to after the legacy-format attempt</span>
-        <span class="k">pass</span>
-
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">gen_dicts</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">generations_str</span><span class="p">)</span>
-        <span class="c1"># not relying on `_load_generations_from_json` (which could disappear):</span>
-        <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span><span class="n">Generation</span><span class="p">(</span><span class="o">**</span><span class="n">generation_dict</span><span class="p">)</span> <span class="k">for</span> <span class="n">generation_dict</span> <span class="ow">in</span> <span class="n">gen_dicts</span><span class="p">]</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Legacy &#39;Generation&#39; cached blob encountered: &#39;</span><span class="si">{</span><span class="n">generations_str</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">generations</span>
-    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Malformed/unparsable cached blob encountered: &#39;</span><span class="si">{</span><span class="n">generations_str</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="kc">None</span>
-
-
-<span class="k">def</span> <span class="nf">_wait_until</span><span class="p">(</span>
-    <span class="n">predicate</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">success_description</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wait up to 10 seconds (by default) for predicate to be true.</span>
-
-<span class="sd">    E.g.:</span>
-
-<span class="sd">        wait_until(lambda: client.primary == (&#39;a&#39;, 1),</span>
-<span class="sd">                &#39;connect to the primary&#39;)</span>
-
-<span class="sd">    If the lambda-expression isn&#39;t true after 10 seconds, we raise</span>
-<span class="sd">    AssertionError(&quot;Didn&#39;t ever connect to the primary&quot;).</span>
-
-<span class="sd">    Returns the predicate&#39;s first true value.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="n">interval</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span> <span class="o">/</span> <span class="mi">100</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
-    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-        <span class="n">retval</span> <span class="o">=</span> <span class="n">predicate</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">retval</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">retval</span>
-
-        <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;Didn&#39;t ever </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">success_description</span><span class="p">)</span>
-
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">interval</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="MongoDBCache"><a class="viewcode-back" href="../../cache/langchain_mongodb.cache.MongoDBCache.html#langchain_mongodb.cache.MongoDBCache">[docs]</a><span class="k">class</span> <span class="nc">MongoDBCache</span><span class="p">(</span><span class="n">BaseCache</span><span class="p">):</span>
@@ -456,7 +356,7 @@
         <span class="n">collection_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
         <span class="n">database_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
         <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
-        <span class="n">wait_until_ready</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">wait_until_ready</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">score_threshold</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="p">):</span>
@@ -473,8 +373,8 @@
 <span class="sd">                Defaults to &quot;default&quot;.</span>
 <span class="sd">            index_name: Name of the Atlas Search index.</span>
 <span class="sd">                defaults to &#39;default&#39;</span>
-<span class="sd">            wait_until_ready (bool): Block until MongoDB Atlas finishes indexing</span>
-<span class="sd">                the stored text. Hard timeout of 10 seconds. Defaults to False.</span>
+<span class="sd">            wait_until_ready (float): Wait this time for Atlas to finish indexing</span>
+<span class="sd">                the stored text. Defaults to None.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">client</span> <span class="o">=</span> <span class="n">_generate_mongo_client</span><span class="p">(</span><span class="n">connection_string</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection</span> <span class="o">=</span> <span class="n">client</span><span class="p">[</span><span class="n">database_name</span><span class="p">][</span><span class="n">collection_name</span><span class="p">]</span>
@@ -512,7 +412,7 @@
         <span class="n">prompt</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">llm_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">return_val</span><span class="p">:</span> <span class="n">RETURN_VAL_TYPE</span><span class="p">,</span>
-        <span class="n">wait_until_ready</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">wait_until_ready</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Update cache based on prompt and llm_string.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span>
@@ -530,7 +430,7 @@
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">prompt</span><span class="p">,</span> <span class="n">llm_string</span><span class="p">)</span> <span class="o">==</span> <span class="n">return_val</span>
 
         <span class="k">if</span> <span class="n">wait</span><span class="p">:</span>
-            <span class="n">_wait_until</span><span class="p">(</span><span class="n">is_indexed</span><span class="p">,</span> <span class="n">return_val</span><span class="p">)</span></div>
+            <span class="n">_wait_until</span><span class="p">(</span><span class="n">is_indexed</span><span class="p">,</span> <span class="n">return_val</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="MongoDBAtlasSemanticCache.clear"><a class="viewcode-back" href="../../cache/langchain_mongodb.cache.MongoDBAtlasSemanticCache.html#langchain_mongodb.cache.MongoDBAtlasSemanticCache.clear">[docs]</a>    <span class="k">def</span> <span class="nf">clear</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Clear cache that can take additional keyword arguments.</span>
@@ -542,6 +442,110 @@
 <span class="sd">            self.clear(llm_string=&quot;fake-model&quot;)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="o">.</span><span class="n">delete_many</span><span class="p">({</span><span class="o">**</span><span class="n">kwargs</span><span class="p">})</span></div></div>
+
+
+<span class="k">def</span> <span class="nf">_generate_mongo_client</span><span class="p">(</span><span class="n">connection_string</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MongoClient</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">MongoClient</span><span class="p">(</span>
+        <span class="n">connection_string</span><span class="p">,</span>
+        <span class="n">driver</span><span class="o">=</span><span class="n">DriverInfo</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Langchain&quot;</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">(</span><span class="s2">&quot;langchain-mongodb&quot;</span><span class="p">)),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_dumps_generations</span><span class="p">(</span><span class="n">generations</span><span class="p">:</span> <span class="n">RETURN_VAL_TYPE</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Serialization for generic RETURN_VAL_TYPE, i.e. sequence of `Generation`</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        generations (RETURN_VAL_TYPE): A list of language model generations.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: a single string representing a list of generations.</span>
+
+<span class="sd">    This, and &quot;_dumps_generations&quot; are duplicated in this utility</span>
+<span class="sd">    from modules: &quot;libs/community/langchain_community/cache.py&quot;</span>
+
+<span class="sd">    This function and its counterpart rely on</span>
+<span class="sd">    the dumps/loads pair with Reviver, so are able to deal</span>
+<span class="sd">    with all subclasses of Generation.</span>
+
+<span class="sd">    Each item in the list can be `dumps`ed to a string,</span>
+<span class="sd">    then we make the whole list of strings into a json-dumped.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="n">dumps</span><span class="p">(</span><span class="n">_item</span><span class="p">)</span> <span class="k">for</span> <span class="n">_item</span> <span class="ow">in</span> <span class="n">generations</span><span class="p">])</span>
+
+
+<span class="k">def</span> <span class="nf">_loads_generations</span><span class="p">(</span><span class="n">generations_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">RETURN_VAL_TYPE</span><span class="p">,</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Deserialization of a string into a generic RETURN_VAL_TYPE</span>
+<span class="sd">    (i.e. a sequence of `Generation`).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        generations_str (str): A string representing a list of generations.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        RETURN_VAL_TYPE: A list of generations.</span>
+
+
+<span class="sd">    This function and its counterpart rely on</span>
+<span class="sd">    the dumps/loads pair with Reviver, so are able to deal</span>
+<span class="sd">    with all subclasses of Generation.</span>
+
+<span class="sd">    See `_dumps_generations`, the inverse of this function.</span>
+
+<span class="sd">    Compatible with the legacy cache-blob format</span>
+<span class="sd">    Does not raise exceptions for malformed entries, just logs a warning</span>
+<span class="sd">    and returns none: the caller should be prepared for such a cache miss.</span>
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span><span class="n">loads</span><span class="p">(</span><span class="n">_item_str</span><span class="p">)</span> <span class="k">for</span> <span class="n">_item_str</span> <span class="ow">in</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">generations_str</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="n">generations</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="c1"># deferring the (soft) handling to after the legacy-format attempt</span>
+        <span class="k">pass</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">gen_dicts</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">generations_str</span><span class="p">)</span>
+        <span class="c1"># not relying on `_load_generations_from_json` (which could disappear):</span>
+        <span class="n">generations</span> <span class="o">=</span> <span class="p">[</span><span class="n">Generation</span><span class="p">(</span><span class="o">**</span><span class="n">generation_dict</span><span class="p">)</span> <span class="k">for</span> <span class="n">generation_dict</span> <span class="ow">in</span> <span class="n">gen_dicts</span><span class="p">]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Legacy &#39;Generation&#39; cached blob encountered: &#39;</span><span class="si">{</span><span class="n">generations_str</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">generations</span>
+    <span class="k">except</span> <span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">JSONDecodeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Malformed/unparsable cached blob encountered: &#39;</span><span class="si">{</span><span class="n">generations_str</span><span class="si">}</span><span class="s2">&#39;&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">_wait_until</span><span class="p">(</span>
+    <span class="n">predicate</span><span class="p">:</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">success_description</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wait up to 10 seconds (by default) for predicate to be true.</span>
+
+<span class="sd">    E.g.:</span>
+
+<span class="sd">        wait_until(lambda: client.primary == (&#39;a&#39;, 1),</span>
+<span class="sd">                &#39;connect to the primary&#39;)</span>
+
+<span class="sd">    If the lambda-expression isn&#39;t true after 10 seconds, we raise</span>
+<span class="sd">    AssertionError(&quot;Didn&#39;t ever connect to the primary&quot;).</span>
+
+<span class="sd">    Returns the predicate&#39;s first true value.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">interval</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span> <span class="o">/</span> <span class="mi">100</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">retval</span> <span class="o">=</span> <span class="n">predicate</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">retval</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">retval</span>
+
+        <span class="k">if</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="n">timeout</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span><span class="s2">&quot;Didn&#39;t ever </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">success_description</span><span class="p">)</span>
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">interval</span><span class="p">)</span>
 </pre></div>
 
             </div>
@@ -550,7 +554,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>

@@ -269,6 +269,7 @@
     <span class="n">create_vector_search_index</span><span class="p">,</span>
     <span class="n">update_vector_search_index</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span> <span class="nn">langchain_mongodb.pipelines</span> <span class="kn">import</span> <span class="n">vector_search_stage</span>
 <span class="kn">from</span> <span class="nn">langchain_mongodb.utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">make_serializable</span><span class="p">,</span>
     <span class="n">maximal_marginal_relevance</span><span class="p">,</span>
@@ -276,7 +277,6 @@
     <span class="n">str_to_oid</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">MongoDBDocumentType</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;MongoDBDocumentType&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span>
 <span class="n">VST</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;VST&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">VectorStore</span><span class="p">)</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -285,19 +285,40 @@
 
 
 <div class="viewcode-block" id="MongoDBAtlasVectorSearch"><a class="viewcode-back" href="../../vectorstores/langchain_mongodb.vectorstores.MongoDBAtlasVectorSearch.html#langchain_mongodb.cache.MongoDBAtlasVectorSearch">[docs]</a><span class="k">class</span> <span class="nc">MongoDBAtlasVectorSearch</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;MongoDBAtlas vector store integration.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;MongoDB Atlas vector store integration.</span>
+
+<span class="sd">    MongoDBAtlasVectorSearch performs data operations on</span>
+<span class="sd">    text, embeddings and arbitrary data. In addition to CRUD operations,</span>
+<span class="sd">    the VectorStore provides Vector Search</span>
+<span class="sd">    based on similarity of embedding vectors following the</span>
+<span class="sd">    Hierarchical Navigable Small Worlds (HNSW) algorithm.</span>
+
+<span class="sd">    This supports a number of models to ascertain scores,</span>
+<span class="sd">    &quot;similarity&quot; (default), &quot;MMR&quot;, and &quot;similarity_score_threshold&quot;.</span>
+<span class="sd">    These are described in the search_type argument to as_retriever,</span>
+<span class="sd">    which provides the Runnable.invoke(query) API, allowing</span>
+<span class="sd">    MongoDBAtlasVectorSearch to be used within a chain.</span>
 
 <span class="sd">    Setup:</span>
-<span class="sd">        Install ``langchain-mongodb`` and ``pymongo`` and setup a MongoDB Atlas cluster (read through [this guide](https://www.mongodb.com/docs/manual/reference/connection-string/) to do so).</span>
+<span class="sd">        * Set up a MongoDB Atlas cluster. The free tier M0 will allow you to start.</span>
+<span class="sd">        Search Indexes are only available on Atlas, the fully managed cloud service,</span>
+<span class="sd">        not the self-managed MongoDB.</span>
+<span class="sd">        Follow [this guide](https://www.mongodb.com/basics/mongodb-atlas-tutorial)</span>
+
+<span class="sd">        * Create a Collection and a Vector Search Index.The procedure is described</span>
+<span class="sd">        [here](https://www.mongodb.com/docs/atlas/atlas-vector-search/create-index/#procedure).</span>
+
+<span class="sd">        * Install ``langchain-mongodb``</span>
+
 
 <span class="sd">        .. code-block:: bash</span>
 
 <span class="sd">            pip install -qU langchain-mongodb pymongo</span>
 
+
 <span class="sd">        .. code-block:: python</span>
 
 <span class="sd">            import getpass</span>
-
 <span class="sd">            MONGODB_ATLAS_CLUSTER_URI = getpass.getpass(&quot;MongoDB Atlas Cluster URI:&quot;)</span>
 
 <span class="sd">    Key init args — indexing params:</span>
@@ -367,7 +388,7 @@
 <span class="sd">    Search with filter:</span>
 <span class="sd">        .. code-block:: python</span>
 
-<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1,filter={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1,post_filter=[{&quot;bar&quot;: &quot;baz&quot;]})</span>
 <span class="sd">            for doc in results:</span>
 <span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
 
@@ -424,29 +445,24 @@
 
 <div class="viewcode-block" id="MongoDBAtlasVectorSearch.__init__"><a class="viewcode-back" href="../../vectorstores/langchain_mongodb.vectorstores.MongoDBAtlasVectorSearch.html#langchain_mongodb.cache.MongoDBAtlasVectorSearch.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">collection</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="n">MongoDBDocumentType</span><span class="p">],</span>
+        <span class="n">collection</span><span class="p">:</span> <span class="n">Collection</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="n">index_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;vector_index&quot;</span><span class="p">,</span>
         <span class="n">text_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;text&quot;</span><span class="p">,</span>
         <span class="n">embedding_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;embedding&quot;</span><span class="p">,</span>
         <span class="n">relevance_score_fn</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cosine&quot;</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Args:</span>
-<span class="sd">            collection: MongoDB collection to add the texts to.</span>
-<span class="sd">            embedding: Text embedding model to use.</span>
-<span class="sd">            text_key: MongoDB field that will contain the text for each</span>
-<span class="sd">                document.</span>
-<span class="sd">                defaults to &#39;text&#39;</span>
-<span class="sd">            embedding_key: MongoDB field that will contain the embedding for</span>
-<span class="sd">                each document.</span>
-<span class="sd">                defaults to &#39;embedding&#39;</span>
-<span class="sd">            index_name: Name of the Atlas Search index.</span>
-<span class="sd">                defaults to &#39;default&#39;</span>
-<span class="sd">            relevance_score_fn: The similarity score used for the index.</span>
-<span class="sd">                defaults to &#39;cosine&#39;</span>
-<span class="sd">            Currently supported: &#39;euclidean&#39;, &#39;cosine&#39;, and &#39;dotProduct&#39;.</span>
+<span class="sd">            collection: MongoDB collection to add the texts to</span>
+<span class="sd">            embedding: Text embedding model to use</span>
+<span class="sd">            text_key: MongoDB field that will contain the text for each document</span>
+<span class="sd">            index_name: Existing Atlas Vector Search Index</span>
+<span class="sd">            embedding_key: Field that will contain the embedding for each document</span>
+<span class="sd">            vector_index_name: Name of the Atlas Vector Search index</span>
+<span class="sd">            relevance_score_fn: The similarity score used for the index</span>
+<span class="sd">                Currently supported: &#39;euclidean&#39;, &#39;cosine&#39;, and &#39;dotProduct&#39;</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_collection</span> <span class="o">=</span> <span class="n">collection</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span> <span class="o">=</span> <span class="n">embedding</span>
@@ -652,69 +668,32 @@
             <span class="n">start</span> <span class="o">=</span> <span class="n">end</span>
         <span class="k">return</span> <span class="n">result_ids</span></div>
 
-    <span class="k">def</span> <span class="nf">_similarity_search_with_score</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">embedding</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
-        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
-        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">include_embedding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">include_ids</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Core implementation.&quot;&quot;&quot;</span>
-        <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;queryVector&quot;</span><span class="p">:</span> <span class="n">embedding</span><span class="p">,</span>
-            <span class="s2">&quot;path&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="p">,</span>
-            <span class="s2">&quot;numCandidates&quot;</span><span class="p">:</span> <span class="n">k</span> <span class="o">*</span> <span class="mi">10</span><span class="p">,</span>
-            <span class="s2">&quot;limit&quot;</span><span class="p">:</span> <span class="n">k</span><span class="p">,</span>
-            <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="k">if</span> <span class="n">pre_filter</span><span class="p">:</span>
-            <span class="n">params</span><span class="p">[</span><span class="s2">&quot;filter&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pre_filter</span>
-        <span class="n">query</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;$vectorSearch&quot;</span><span class="p">:</span> <span class="n">params</span><span class="p">}</span>
-
-        <span class="n">pipeline</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">query</span><span class="p">,</span>
-            <span class="p">{</span><span class="s2">&quot;$set&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$meta&quot;</span><span class="p">:</span> <span class="s2">&quot;vectorSearchScore&quot;</span><span class="p">}}},</span>
-        <span class="p">]</span>
-
-        <span class="c1"># Exclude the embedding key from the return payload</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">include_embedding</span><span class="p">:</span>
-            <span class="n">pipeline</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;$project&quot;</span><span class="p">:</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="p">:</span> <span class="mi">0</span><span class="p">}})</span>
-
-        <span class="k">if</span> <span class="n">post_filter_pipeline</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">pipeline</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">post_filter_pipeline</span><span class="p">)</span>
-        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span><span class="n">pipeline</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
-        <span class="n">docs</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">cursor</span><span class="p">:</span>
-            <span class="n">text</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span><span class="p">)</span>
-            <span class="n">score</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">)</span>
-            <span class="n">make_serializable</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
-            <span class="n">docs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">res</span><span class="p">),</span> <span class="n">score</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">docs</span>
-
 <div class="viewcode-block" id="MongoDBAtlasVectorSearch.similarity_search_with_score"><a class="viewcode-back" href="../../vectorstores/langchain_mongodb.vectorstores.MongoDBAtlasVectorSearch.html#langchain_mongodb.cache.MongoDBAtlasVectorSearch.similarity_search_with_score">[docs]</a>    <span class="k">def</span> <span class="nf">similarity_search_with_score</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
-        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">oversampling_factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="n">include_embeddings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>  <span class="c1"># noqa: E501</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return MongoDB documents most similar to the given query and their scores.</span>
 
-<span class="sd">        Uses the vectorSearch operator available in MongoDB Atlas Search.</span>
-<span class="sd">        For more: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/</span>
+<span class="sd">        Atlas Vector Search eliminates the need to run a separate</span>
+<span class="sd">        search system alongside your database.</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            query: Text to look up documents similar to.</span>
-<span class="sd">            k: (Optional) number of documents to return. Defaults to 4.</span>
-<span class="sd">            pre_filter: (Optional) dictionary of argument(s) to prefilter document</span>
-<span class="sd">                fields on.</span>
-<span class="sd">            post_filter_pipeline: (Optional) Pipeline of MongoDB aggregation stages</span>
-<span class="sd">                following the vectorSearch stage.</span>
+<span class="sd">         Args:</span>
+<span class="sd">            query: Input text of semantic query</span>
+<span class="sd">            k: Number of documents to return. Also known as top_k.</span>
+<span class="sd">            pre_filter: List of MQL match expressions comparing an indexed field</span>
+<span class="sd">            post_filter_pipeline: (Optional) Arbitrary pipeline of MongoDB</span>
+<span class="sd">                aggregation stages applied after the search is complete.</span>
+<span class="sd">            oversampling_factor: This times k is the number of candidates chosen</span>
+<span class="sd">                at each step in the in HNSW Vector Search</span>
+<span class="sd">            include_embeddings: If True, the embedding vector of each result</span>
+<span class="sd">                will be included in metadata.</span>
+<span class="sd">            kwargs: Additional arguments are specific to the search_type</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List of documents most similar to the query and their scores.</span>
@@ -725,6 +704,8 @@
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
             <span class="n">pre_filter</span><span class="o">=</span><span class="n">pre_filter</span><span class="p">,</span>
             <span class="n">post_filter_pipeline</span><span class="o">=</span><span class="n">post_filter_pipeline</span><span class="p">,</span>
+            <span class="n">oversampling_factor</span><span class="o">=</span><span class="n">oversampling_factor</span><span class="p">,</span>
+            <span class="n">include_embeddings</span><span class="o">=</span><span class="n">include_embeddings</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">docs</span></div>
@@ -733,36 +714,46 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
-        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">oversampling_factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="n">include_scores</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">include_embeddings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>  <span class="c1"># noqa: E501</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return MongoDB documents most similar to the given query.</span>
 
-<span class="sd">        Uses the vectorSearch operator available in MongoDB Atlas Search.</span>
-<span class="sd">        For more: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/</span>
+<span class="sd">        Atlas Vector Search eliminates the need to run a separate</span>
+<span class="sd">        search system alongside your database.</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            query: Text to look up documents similar to.</span>
+<span class="sd">         Args:</span>
+<span class="sd">            query: Input text of semantic query</span>
 <span class="sd">            k: (Optional) number of documents to return. Defaults to 4.</span>
-<span class="sd">            pre_filter: (Optional) dictionary of argument(s) to prefilter document</span>
-<span class="sd">                fields on.</span>
+<span class="sd">            pre_filter: List of MQL match expressions comparing an indexed field</span>
 <span class="sd">            post_filter_pipeline: (Optional) Pipeline of MongoDB aggregation stages</span>
-<span class="sd">                following the vectorSearch stage.</span>
+<span class="sd">                to filter/process results after $vectorSearch.</span>
+<span class="sd">            oversampling_factor: Multiple of k used when generating number of candidates</span>
+<span class="sd">                at each step in the HNSW Vector Search,</span>
+<span class="sd">            include_scores: If True, the query score of each result</span>
+<span class="sd">                will be included in metadata.</span>
+<span class="sd">            include_embeddings: If True, the embedding vector of each result</span>
+<span class="sd">                will be included in metadata.</span>
+<span class="sd">            kwargs: Additional arguments are specific to the search_type</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            List of documents most similar to the query and their scores.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">additional</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;additional&quot;</span><span class="p">)</span>
         <span class="n">docs_and_scores</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">similarity_search_with_score</span><span class="p">(</span>
             <span class="n">query</span><span class="p">,</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
             <span class="n">pre_filter</span><span class="o">=</span><span class="n">pre_filter</span><span class="p">,</span>
             <span class="n">post_filter_pipeline</span><span class="o">=</span><span class="n">post_filter_pipeline</span><span class="p">,</span>
+            <span class="n">oversampling_factor</span><span class="o">=</span><span class="n">oversampling_factor</span><span class="p">,</span>
+            <span class="n">include_embeddings</span><span class="o">=</span><span class="n">include_embeddings</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">additional</span> <span class="ow">and</span> <span class="s2">&quot;similarity_score&quot;</span> <span class="ow">in</span> <span class="n">additional</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">include_scores</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">score</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="p">:</span>
                 <span class="n">doc</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;score&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">score</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">doc</span> <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">docs_and_scores</span><span class="p">]</span></div>
@@ -773,7 +764,7 @@
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
-        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
@@ -788,19 +779,16 @@
 <span class="sd">            fetch_k: (Optional) number of documents to fetch before passing to MMR</span>
 <span class="sd">                algorithm. Defaults to 20.</span>
 <span class="sd">            lambda_mult: Number between 0 and 1 that determines the degree</span>
-<span class="sd">                        of diversity among the results with 0 corresponding</span>
-<span class="sd">                        to maximum diversity and 1 to minimum diversity.</span>
-<span class="sd">                        Defaults to 0.5.</span>
-<span class="sd">            pre_filter: (Optional) dictionary of argument(s) to prefilter on document</span>
-<span class="sd">                fields.</span>
+<span class="sd">                of diversity among the results with 0 corresponding</span>
+<span class="sd">                to maximum diversity and 1 to minimum diversity. Defaults to 0.5.</span>
+<span class="sd">            pre_filter: List of MQL match expressions comparing an indexed field</span>
 <span class="sd">            post_filter_pipeline: (Optional) pipeline of MongoDB aggregation stages</span>
-<span class="sd">                following the vectorSearch stage.</span>
+<span class="sd">                following the $vectorSearch stage.</span>
 <span class="sd">        Returns:</span>
 <span class="sd">            List of documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">query_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_by_vector</span><span class="p">(</span>
-            <span class="n">embedding</span><span class="o">=</span><span class="n">query_embedding</span><span class="p">,</span>
+            <span class="n">embedding</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding</span><span class="o">.</span><span class="n">embed_query</span><span class="p">(</span><span class="n">query</span><span class="p">),</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
             <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
             <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
@@ -815,7 +803,7 @@
         <span class="n">texts</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
         <span class="n">embedding</span><span class="p">:</span> <span class="n">Embeddings</span><span class="p">,</span>
         <span class="n">metadatas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Collection</span><span class="p">[</span><span class="n">MongoDBDocumentType</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Collection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">ids</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MongoDBAtlasVectorSearch</span><span class="p">:</span>
@@ -827,6 +815,9 @@
 <span class="sd">                (Lucene)</span>
 
 <span class="sd">        This is intended to be a quick way to get started.</span>
+
+<span class="sd">        See `MongoDBAtlasVectorSearch` for kwargs and further description.</span>
+
 
 <span class="sd">        Example:</span>
 <span class="sd">            .. code-block:: python</span>
@@ -889,8 +880,9 @@
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
-        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">oversampling_factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>  <span class="c1"># type: ignore</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs selected using the maximal marginal relevance.</span>
@@ -906,10 +898,13 @@
 <span class="sd">                        of diversity among the results with 0 corresponding</span>
 <span class="sd">                        to maximum diversity and 1 to minimum diversity.</span>
 <span class="sd">                        Defaults to 0.5.</span>
-<span class="sd">            pre_filter: (Optional) dictionary of argument(s) to prefilter on document</span>
-<span class="sd">                fields.</span>
+<span class="sd">            pre_filter: (Optional) dictionary of arguments to filter document fields on.</span>
 <span class="sd">            post_filter_pipeline: (Optional) pipeline of MongoDB aggregation stages</span>
 <span class="sd">                following the vectorSearch stage.</span>
+<span class="sd">            oversampling_factor: Multiple of k used when generating number</span>
+<span class="sd">                of candidates in HNSW Vector Search,</span>
+<span class="sd">            kwargs: Additional arguments are specific to the search_type</span>
+
 <span class="sd">        Returns:</span>
 <span class="sd">            List of Documents selected by maximal marginal relevance.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -918,7 +913,8 @@
             <span class="n">k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
             <span class="n">pre_filter</span><span class="o">=</span><span class="n">pre_filter</span><span class="p">,</span>
             <span class="n">post_filter_pipeline</span><span class="o">=</span><span class="n">post_filter_pipeline</span><span class="p">,</span>
-            <span class="n">include_embedding</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;include_embedding&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="n">include_embeddings</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">oversampling_factor</span><span class="o">=</span><span class="n">oversampling_factor</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">mmr_doc_indexes</span> <span class="o">=</span> <span class="n">maximal_marginal_relevance</span><span class="p">(</span>
@@ -936,31 +932,82 @@
         <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
         <span class="n">fetch_k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
         <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">oversampling_factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs selected using the maximal marginal relevance.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span>
             <span class="kc">None</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_by_vector</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">max_marginal_relevance_search_by_vector</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
             <span class="n">embedding</span><span class="p">,</span>
             <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
             <span class="n">fetch_k</span><span class="o">=</span><span class="n">fetch_k</span><span class="p">,</span>
             <span class="n">lambda_mult</span><span class="o">=</span><span class="n">lambda_mult</span><span class="p">,</span>
+            <span class="n">pre_filter</span><span class="o">=</span><span class="n">pre_filter</span><span class="p">,</span>
+            <span class="n">post_filter_pipeline</span><span class="o">=</span><span class="n">post_filter_pipeline</span><span class="p">,</span>
+            <span class="n">oversampling_factor</span><span class="o">=</span><span class="n">oversampling_factor</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_similarity_search_with_score</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">query_vector</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+        <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">pre_filter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">post_filter_pipeline</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">oversampling_factor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="n">include_embeddings</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Core search routine. See external methods for details.&quot;&quot;&quot;</span>
+
+        <span class="c1"># Atlas Vector Search, potentially with filter</span>
+        <span class="n">pipeline</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">vector_search_stage</span><span class="p">(</span>
+                <span class="n">query_vector</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_index_name</span><span class="p">,</span>
+                <span class="n">k</span><span class="p">,</span>
+                <span class="n">pre_filter</span><span class="p">,</span>
+                <span class="n">oversampling_factor</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="p">{</span><span class="s2">&quot;$set&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;$meta&quot;</span><span class="p">:</span> <span class="s2">&quot;vectorSearchScore&quot;</span><span class="p">}}},</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Remove embeddings unless requested.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">include_embeddings</span><span class="p">:</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;$project&quot;</span><span class="p">:</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_embedding_key</span><span class="p">:</span> <span class="mi">0</span><span class="p">}})</span>
+        <span class="c1"># Post-processing</span>
+        <span class="k">if</span> <span class="n">post_filter_pipeline</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">post_filter_pipeline</span><span class="p">)</span>
+
+        <span class="c1"># Execution</span>
+        <span class="n">cursor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collection</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span><span class="n">pipeline</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Format</span>
+        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_text_key</span><span class="p">)</span>
+            <span class="n">score</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;score&quot;</span><span class="p">)</span>
+            <span class="n">make_serializable</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+            <span class="n">docs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">res</span><span class="p">),</span> <span class="n">score</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">docs</span>
 
 <div class="viewcode-block" id="MongoDBAtlasVectorSearch.create_vector_search_index"><a class="viewcode-back" href="../../vectorstores/langchain_mongodb.vectorstores.MongoDBAtlasVectorSearch.html#langchain_mongodb.cache.MongoDBAtlasVectorSearch.create_vector_search_index">[docs]</a>    <span class="k">def</span> <span class="nf">create_vector_search_index</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">dimensions</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">update</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Creates a MongoDB Atlas vectorSearch index for the VectorStore</span>
 
-<span class="sd">        Note**: This method may fail as it requires a MongoDB Atlas with</span>
-<span class="sd">        these pre-requisites:</span>
-<span class="sd">            - M10 cluster or higher</span>
-<span class="sd">            - https://www.mongodb.com/docs/atlas/atlas-vector-search/create-index/#prerequisites</span>
+<span class="sd">        Note**: This method may fail as it requires a MongoDB Atlas with these</span>
+<span class="sd">        `pre-requisites &lt;https://www.mongodb.com/docs/atlas/atlas-vector-search/create-index/#prerequisites&gt;`.</span>
+<span class="sd">        Currently, vector and full-text search index operations need to be</span>
+<span class="sd">        performed manually on the Atlas UI for shared M0 clusters.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            dimensions (int): Number of dimensions in embedding</span>
@@ -995,7 +1042,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>

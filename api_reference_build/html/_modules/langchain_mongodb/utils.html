@@ -238,9 +238,16 @@
             <div class="sk-page-content container-fluid body px-md-3" role="main">
                 
   <h1>Source code for langchain_mongodb.utils</h1><div class="highlight"><pre>
-<span></span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">Tools for the Maximal Marginal Relevance (MMR) reranking.</span>
-<span class="sd">Duplicated from langchain_community to avoid cross-dependencies.</span>
+<span></span><span class="sd">&quot;&quot;&quot;Various Utility Functions</span>
+
+<span class="sd">- Tools for handling bson.ObjectId</span>
+
+<span class="sd">The help IDs live as ObjectId in MongoDB and str in Langchain and JSON.</span>
+
+
+<span class="sd">- Tools for the Maximal Marginal Relevance (MMR) reranking</span>
+
+<span class="sd">These are duplicated from langchain_community to avoid cross-dependencies.</span>
 
 <span class="sd">Functions &quot;maximal_marginal_relevance&quot; and &quot;cosine_similarity&quot;</span>
 <span class="sd">are duplicated in this utility respectively from modules:</span>
@@ -259,11 +266,6 @@
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 <span class="n">Matrix</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]],</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
-
-
-<div class="viewcode-block" id="FailCode"><a class="viewcode-back" href="../../utils/langchain_mongodb.utils.FailCode.html#langchain_mongodb.utils.FailCode">[docs]</a><span class="k">class</span> <span class="nc">FailCode</span><span class="p">:</span>
-    <span class="n">INDEX_NOT_FOUND</span> <span class="o">=</span> <span class="mi">27</span>
-    <span class="n">INDEX_ALREADY_EXISTS</span> <span class="o">=</span> <span class="mi">68</span></div>
 
 
 <div class="viewcode-block" id="cosine_similarity"><a class="viewcode-back" href="../../utils/langchain_mongodb.utils.cosine_similarity.html#langchain_mongodb.utils.cosine_similarity">[docs]</a><span class="k">def</span> <span class="nf">cosine_similarity</span><span class="p">(</span><span class="n">X</span><span class="p">:</span> <span class="n">Matrix</span><span class="p">,</span> <span class="n">Y</span><span class="p">:</span> <span class="n">Matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
@@ -305,7 +307,37 @@
     <span class="n">lambda_mult</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
     <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate maximal marginal relevance.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute Maximal Marginal Relevance (MMR).</span>
+
+<span class="sd">    MMR is a technique used to select documents that are both relevant to the query</span>
+<span class="sd">    and diverse among themselves. This function returns the indices</span>
+<span class="sd">    of the top-k embeddings that maximize the marginal relevance.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        query_embedding (np.ndarray): The embedding vector of the query.</span>
+<span class="sd">        embedding_list (list of np.ndarray): A list containing the embedding vectors</span>
+<span class="sd">            of the candidate documents.</span>
+<span class="sd">        lambda_mult (float, optional): The trade-off parameter between</span>
+<span class="sd">            relevance and diversity. Defaults to 0.5.</span>
+<span class="sd">        k (int, optional): The number of embeddings to select. Defaults to 4.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list of int: The indices of the embeddings that maximize the marginal relevance.</span>
+
+<span class="sd">    Notes:</span>
+<span class="sd">        The Maximal Marginal Relevance (MMR) is computed using the following formula:</span>
+
+<span class="sd">    MMR = argmax_{D_i ∈ R \ S} [λ * Sim(D_i, Q) - (1 - λ) * max_{D_j ∈ S} Sim(D_i, D_j)]</span>
+
+<span class="sd">        where:</span>
+<span class="sd">        - R is the set of candidate documents,</span>
+<span class="sd">        - S is the set of selected documents,</span>
+<span class="sd">        - Q is the query embedding,</span>
+<span class="sd">        - Sim(D_i, Q) is the similarity between document D_i and the query,</span>
+<span class="sd">        - Sim(D_i, D_j) is the similarity between documents D_i and D_j,</span>
+<span class="sd">        - λ is the trade-off parameter.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">embedding_list</span><span class="p">))</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">query_embedding</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
@@ -377,6 +409,7 @@
     <span class="n">obj</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Recursively cast values in a dict to a form able to json.dump&quot;&quot;&quot;</span>
+
     <span class="kn">from</span> <span class="nn">bson</span> <span class="kn">import</span> <span class="n">ObjectId</span>
 
     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -396,7 +429,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>

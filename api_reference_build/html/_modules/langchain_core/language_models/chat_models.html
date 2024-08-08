@@ -448,11 +448,30 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
-    <span class="n">callback_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseCallbackManager</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;[DEPRECATED] Callback manager to add to the run trace.&quot;&quot;&quot;</span>
+    <span class="n">callback_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseCallbackManager</span><span class="p">]</span> <span class="o">=</span> <span class="n">deprecated</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;callback_manager&quot;</span><span class="p">,</span> <span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.1.7&quot;</span><span class="p">,</span> <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;0.3.0&quot;</span><span class="p">,</span> <span class="n">alternative</span><span class="o">=</span><span class="s2">&quot;callbacks&quot;</span>
+    <span class="p">)(</span>
+        <span class="n">Field</span><span class="p">(</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">exclude</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Callback manager to add to the run trace.&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
 
     <span class="n">rate_limiter</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseRateLimiter</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;An optional rate limiter to use for limiting the number of requests.&quot;&quot;&quot;</span>
+    <span class="s2">&quot;An optional rate limiter to use for limiting the number of requests.&quot;</span>
+
+    <span class="n">disable_streaming</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;tool_calling&quot;</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Whether to disable streaming for this model.</span>
+<span class="sd">    </span>
+<span class="sd">    If streaming is bypassed, then ``stream()/astream()`` will defer to </span>
+<span class="sd">    ``invoke()/ainvoke()``.</span>
+
+<span class="sd">    - If True, will always bypass streaming case.</span>
+<span class="sd">    - If &quot;tool_calling&quot;, will bypass streaming case only when the model is called</span>
+<span class="sd">      with a ``tools`` keyword argument.</span>
+<span class="sd">    - If False (default), will always use streaming case if available.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">raise_deprecation</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
@@ -542,6 +561,41 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">ChatGeneration</span><span class="p">,</span> <span class="n">llm_result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">message</span></div>
 
+    <span class="k">def</span> <span class="nf">_should_stream</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">async_api</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">run_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+            <span class="n">Union</span><span class="p">[</span><span class="n">CallbackManagerForLLMRun</span><span class="p">,</span> <span class="n">AsyncCallbackManagerForLLMRun</span><span class="p">]</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determine if a given model call should hit the streaming API.&quot;&quot;&quot;</span>
+        <span class="n">sync_not_implemented</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="o">==</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span>
+        <span class="n">async_not_implemented</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="o">==</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_astream</span>
+
+        <span class="c1"># Check if streaming is implemented.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">async_api</span><span class="p">)</span> <span class="ow">and</span> <span class="n">sync_not_implemented</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># Note, since async falls back to sync we check both here.</span>
+        <span class="k">if</span> <span class="n">async_api</span> <span class="ow">and</span> <span class="n">async_not_implemented</span> <span class="ow">and</span> <span class="n">sync_not_implemented</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="c1"># Check if streaming has been disabled on this instance.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_streaming</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># We assume tools are passed in via &quot;tools&quot; kwarg in all models.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">disable_streaming</span> <span class="o">==</span> <span class="s2">&quot;tool_calling&quot;</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tools&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="c1"># Check if a runtime streaming flag has been passed in.</span>
+        <span class="k">if</span> <span class="s2">&quot;stream&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;stream&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Check if any streaming callback handlers have been passed in.</span>
+        <span class="n">handlers</span> <span class="o">=</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">handlers</span> <span class="k">if</span> <span class="n">run_manager</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">_StreamingCallbackHandler</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">handlers</span><span class="p">)</span>
+
 <div class="viewcode-block" id="BaseChatModel.stream"><a class="viewcode-back" href="../../../language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_google_vertexai.vision_models.BaseChatModel.stream">[docs]</a>    <span class="k">def</span> <span class="nf">stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">input</span><span class="p">:</span> <span class="n">LanguageModelInput</span><span class="p">,</span>
@@ -550,7 +604,7 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="o">==</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_stream</span><span class="p">(</span><span class="n">async_api</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}}):</span>
             <span class="c1"># model doesn&#39;t implement streaming, so use default implementation</span>
             <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span>
                 <span class="n">BaseMessageChunk</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -620,10 +674,7 @@
         <span class="n">stop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]:</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="ow">is</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_astream</span>
-            <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">is</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span>
-        <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_stream</span><span class="p">(</span><span class="n">async_api</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}}):</span>
             <span class="c1"># No async or sync stream is implemented, so fall back to ainvoke</span>
             <span class="k">yield</span> <span class="n">cast</span><span class="p">(</span>
                 <span class="n">BaseMessageChunk</span><span class="p">,</span>
@@ -1000,20 +1051,10 @@
 
         <span class="c1"># If stream is not explicitly set, check if implicitly requested by</span>
         <span class="c1"># astream_events() or astream_log(). Bail out if _stream not implemented</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="o">!=</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span>
-            <span class="s2">&quot;stream&quot;</span><span class="p">,</span>
-            <span class="p">(</span>
-                <span class="nb">next</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="kc">True</span>
-                        <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">handlers</span>
-                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">_StreamingCallbackHandler</span><span class="p">)</span>
-                    <span class="p">),</span>
-                    <span class="kc">False</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">run_manager</span>
-                <span class="k">else</span> <span class="kc">False</span>
-            <span class="p">),</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_stream</span><span class="p">(</span>
+            <span class="n">async_api</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">):</span>
             <span class="n">chunks</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -1087,23 +1128,10 @@
 
         <span class="c1"># If stream is not explicitly set, check if implicitly requested by</span>
         <span class="c1"># astream_events() or astream_log(). Bail out if _astream not implemented</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_astream</span> <span class="o">!=</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_astream</span>
-            <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_stream</span> <span class="o">!=</span> <span class="n">BaseChatModel</span><span class="o">.</span><span class="n">_stream</span>
-        <span class="p">)</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span>
-            <span class="s2">&quot;stream&quot;</span><span class="p">,</span>
-            <span class="p">(</span>
-                <span class="nb">next</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="kc">True</span>
-                        <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">handlers</span>
-                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">_StreamingCallbackHandler</span><span class="p">)</span>
-                    <span class="p">),</span>
-                    <span class="kc">False</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">run_manager</span>
-                <span class="k">else</span> <span class="kc">False</span>
-            <span class="p">),</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_stream</span><span class="p">(</span>
+            <span class="n">async_api</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">run_manager</span><span class="o">=</span><span class="n">run_manager</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">):</span>
             <span class="n">chunks</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">async</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_astream</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -1544,7 +1572,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>

@@ -486,98 +486,130 @@
 
 
 <div class="viewcode-block" id="PGVector"><a class="viewcode-back" href="../../vectorstores/langchain_postgres.vectorstores.PGVector.html#langchain_postgres.vectorstores.PGVector">[docs]</a><span class="k">class</span> <span class="nc">PGVector</span><span class="p">(</span><span class="n">VectorStore</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Vectorstore implementation using Postgres as the backend.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Postgres vector store integration.</span>
 
-<span class="sd">    Currently, there is no mechanism for supporting data migration.</span>
+<span class="sd">    Setup:</span>
+<span class="sd">        Install ``langchain_postgres`` and run the docker container.</span>
 
-<span class="sd">    So breaking changes in the vectorstore schema will require the user to recreate</span>
-<span class="sd">    the tables and re-add the documents.</span>
+<span class="sd">        .. code-block:: bash</span>
 
-<span class="sd">    If this is a concern, please use a different vectorstore. If</span>
-<span class="sd">    not, this implementation should be fine for your use case.</span>
+<span class="sd">            pip install -qU langchain-postgres</span>
+<span class="sd">            docker run --name pgvector-container -e POSTGRES_USER=langchain -e POSTGRES_PASSWORD=langchain -e POSTGRES_DB=langchain -p 6024:5432 -d pgvector/pgvector:pg16</span>
 
-<span class="sd">    To use this vectorstore you need to have the `vector` extension installed.</span>
-<span class="sd">    The `vector` extension is a Postgres extension that provides vector</span>
-<span class="sd">    similarity search capabilities.</span>
+<span class="sd">    Key init args — indexing params:</span>
+<span class="sd">        collection_name: str</span>
+<span class="sd">            Name of the collection.</span>
+<span class="sd">        embeddings: Embeddings</span>
+<span class="sd">            Embedding function to use.</span>
 
-<span class="sd">    ```sh</span>
-<span class="sd">    docker run --name pgvector-container -e POSTGRES_PASSWORD=...</span>
-<span class="sd">        -d pgvector/pgvector:pg16</span>
-<span class="sd">    ```</span>
+<span class="sd">    Key init args — client params:</span>
+<span class="sd">        connection: Union[None, DBConnection, Engine, AsyncEngine, str]</span>
+<span class="sd">            Connection string or engine.</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">    Instantiate:</span>
 <span class="sd">        .. code-block:: python</span>
 
+<span class="sd">            from langchain_postgres import PGVector</span>
 <span class="sd">            from langchain_postgres.vectorstores import PGVector</span>
-<span class="sd">            from langchain_openai.embeddings import OpenAIEmbeddings</span>
+<span class="sd">            from langchain_openai import OpenAIEmbeddings</span>
 
-<span class="sd">            connection_string = &quot;postgresql+psycopg://...&quot;</span>
-<span class="sd">            collection_name = &quot;state_of_the_union_test&quot;</span>
-<span class="sd">            embeddings = OpenAIEmbeddings()</span>
-<span class="sd">            vectorstore = PGVector.from_documents(</span>
-<span class="sd">                embedding=embeddings,</span>
-<span class="sd">                documents=docs,</span>
-<span class="sd">                connection=connection_string,</span>
+<span class="sd">            # See docker command above to launch a postgres instance with pgvector enabled.</span>
+<span class="sd">            connection = &quot;postgresql+psycopg://langchain:langchain@localhost:6024/langchain&quot;  # Uses psycopg3!</span>
+<span class="sd">            collection_name = &quot;my_docs&quot;</span>
+
+<span class="sd">            vector_store = PGVector(</span>
+<span class="sd">                embeddings=OpenAIEmbeddings(model=&quot;text-embedding-3-large&quot;),</span>
 <span class="sd">                collection_name=collection_name,</span>
+<span class="sd">                connection=connection,</span>
 <span class="sd">                use_jsonb=True,</span>
-<span class="sd">                async_mode=False,</span>
 <span class="sd">            )</span>
 
+<span class="sd">    Add Documents:</span>
+<span class="sd">        .. code-block:: python</span>
 
-<span class="sd">    This code has been ported over from langchain_community with minimal changes</span>
-<span class="sd">    to allow users to easily transition from langchain_community to langchain_postgres.</span>
+<span class="sd">            from langchain_core.documents import Document</span>
 
-<span class="sd">    Some changes had to be made to address issues with the community implementation:</span>
-<span class="sd">    * langchain_postgres now works with psycopg3. Please update your</span>
-<span class="sd">      connection strings from `postgresql+psycopg2://...` to</span>
-<span class="sd">      `postgresql+psycopg://langchain:langchain@...`</span>
-<span class="sd">      (yes, the driver name is `psycopg` not `psycopg3`)</span>
-<span class="sd">    * The schema of the embedding store and collection have been changed to make</span>
-<span class="sd">      add_documents work correctly with user specified ids, specifically</span>
-<span class="sd">      when overwriting existing documents.</span>
-<span class="sd">      You will need to recreate the tables if you are using an existing database.</span>
-<span class="sd">    * A Connection object has to be provided explicitly. Connections will not be</span>
-<span class="sd">      picked up automatically based on env variables.</span>
-<span class="sd">    * langchain_postgres now accept async connections. If you want to use the async</span>
-<span class="sd">        version, you need to set `async_mode=True` when initializing the store or</span>
-<span class="sd">        use an async engine.</span>
+<span class="sd">            document_1 = Document(page_content=&quot;foo&quot;, metadata={&quot;baz&quot;: &quot;bar&quot;})</span>
+<span class="sd">            document_2 = Document(page_content=&quot;thud&quot;, metadata={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            document_3 = Document(page_content=&quot;i will be deleted :(&quot;)</span>
 
-<span class="sd">    Supported filter operators:</span>
+<span class="sd">            documents = [document_1, document_2, document_3]</span>
+<span class="sd">            ids = [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+<span class="sd">            vector_store.add_documents(documents=documents, ids=ids)</span>
 
-<span class="sd">    * $eq: Equality operator</span>
-<span class="sd">    * $ne: Not equal operator</span>
-<span class="sd">    * $lt: Less than operator</span>
-<span class="sd">    * $lte: Less than or equal operator</span>
-<span class="sd">    * $gt: Greater than operator</span>
-<span class="sd">    * $gte: Greater than or equal operator</span>
-<span class="sd">    * $in: In operator</span>
-<span class="sd">    * $nin: Not in operator</span>
-<span class="sd">    * $between: Between operator</span>
-<span class="sd">    * $exists: Exists operator</span>
-<span class="sd">    * $like: Like operator</span>
-<span class="sd">    * $ilike: Case insensitive like operator</span>
-<span class="sd">    * $and: Logical AND operator</span>
-<span class="sd">    * $or: Logical OR operator</span>
-<span class="sd">    * $not: Logical NOT operator</span>
+<span class="sd">    Delete Documents:</span>
+<span class="sd">        .. code-block:: python</span>
 
-<span class="sd">    Example:</span>
+<span class="sd">            vector_store.delete(ids=[&quot;3&quot;])</span>
 
-<span class="sd">    .. code-block:: python</span>
+<span class="sd">    Search:</span>
+<span class="sd">        .. code-block:: python</span>
 
-<span class="sd">        vectorstore.similarity_search(&#39;kitty&#39;, k=10, filter={</span>
-<span class="sd">            &#39;id&#39;: {&#39;$in&#39;: [1, 5, 2, 9]}</span>
-<span class="sd">        })</span>
-<span class="sd">        #%% md</span>
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1)</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
 
-<span class="sd">        If you provide a dict with multiple fields, but no operators,</span>
-<span class="sd">        the top level will be interpreted as a logical **AND** filter</span>
+<span class="sd">        .. code-block:: python</span>
 
-<span class="sd">        vectorstore.similarity_search(&#39;ducks&#39;, k=10, filter={</span>
-<span class="sd">            &#39;id&#39;: {&#39;$in&#39;: [1, 5, 2, 9]},</span>
-<span class="sd">            &#39;location&#39;: {&#39;$in&#39;: [&quot;pond&quot;, &quot;market&quot;]}</span>
-<span class="sd">        })</span>
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;}]</span>
 
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    Search with filter:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search(query=&quot;thud&quot;,k=1,filter={&quot;bar&quot;: &quot;baz&quot;})</span>
+<span class="sd">            for doc in results:</span>
+<span class="sd">                print(f&quot;* {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * thud [{&#39;bar&#39;: &#39;baz&#39;}]</span>
+
+<span class="sd">    Search with score:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            results = vector_store.similarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc, score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.499243] foo [{&#39;baz&#39;: &#39;bar&#39;}]</span>
+
+<span class="sd">    Async:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            # add documents</span>
+<span class="sd">            # await vector_store.aadd_documents(documents=documents, ids=ids)</span>
+
+<span class="sd">            # delete documents</span>
+<span class="sd">            # await vector_store.adelete(ids=[&quot;3&quot;])</span>
+
+<span class="sd">            # search</span>
+<span class="sd">            # results = vector_store.asimilarity_search(query=&quot;thud&quot;,k=1)</span>
+
+<span class="sd">            # search with score</span>
+<span class="sd">            results = await vector_store.asimilarity_search_with_score(query=&quot;qux&quot;,k=1)</span>
+<span class="sd">            for doc,score in results:</span>
+<span class="sd">                print(f&quot;* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            * [SIM=0.499243] foo [{&#39;baz&#39;: &#39;bar&#39;}]</span>
+
+<span class="sd">    Use as Retriever:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            retriever = vector_store.as_retriever(</span>
+<span class="sd">                search_type=&quot;mmr&quot;,</span>
+<span class="sd">                search_kwargs={&quot;k&quot;: 1, &quot;fetch_k&quot;: 2, &quot;lambda_mult&quot;: 0.5},</span>
+<span class="sd">            )</span>
+<span class="sd">            retriever.invoke(&quot;thud&quot;)</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            [Document(metadata={&#39;bar&#39;: &#39;baz&#39;}, page_content=&#39;thud&#39;)]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
 <div class="viewcode-block" id="PGVector.__init__"><a class="viewcode-back" href="../../vectorstores/langchain_postgres.vectorstores.PGVector.html#langchain_postgres.vectorstores.PGVector.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -2486,7 +2518,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 07, 2024.
+                                on Aug 08, 2024.
                 </footer>
             </div>
         </div>
