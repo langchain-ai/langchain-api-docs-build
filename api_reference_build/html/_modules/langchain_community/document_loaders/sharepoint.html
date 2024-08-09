@@ -273,10 +273,6 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; Whether to load authorization identities.&quot;&quot;&quot;</span>
     <span class="n">token_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="s2">&quot;.credentials&quot;</span> <span class="o">/</span> <span class="s2">&quot;o365_token.txt&quot;</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; The path to the token to make api calls&quot;&quot;&quot;</span>
-    <span class="n">file_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot; The ID of the file for which we need auth identities&quot;&quot;&quot;</span>
-    <span class="n">site_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot; The ID of the Sharepoint site of the user where the file is present &quot;&quot;&quot;</span>
     <span class="n">load_extended_metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot; Whether to load extended metadata. Size, Owner and full_path.&quot;&quot;&quot;</span>
 
@@ -363,8 +359,17 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_folder</span><span class="p">,</span> <span class="n">Folder</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unable to fetch root folder&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">blob</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_folder</span><span class="p">(</span><span class="n">target_folder</span><span class="p">):</span>
+                <span class="n">file_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">))</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_auth</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="n">auth_identities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">authorized_identities</span><span class="p">(</span><span class="n">file_id</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_extended_metadata</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="n">extended_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_extended_metadata</span><span class="p">(</span><span class="n">file_id</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">blob_part</span> <span class="ow">in</span> <span class="n">blob_parser</span><span class="o">.</span><span class="n">lazy_parse</span><span class="p">(</span><span class="n">blob</span><span class="p">):</span>
                     <span class="n">blob_part</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">blob</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_auth</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                        <span class="n">blob_part</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;authorized_identities&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">auth_identities</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_extended_metadata</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+                        <span class="n">blob_part</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">extended_metadata</span><span class="p">)</span>
                     <span class="k">yield</span> <span class="n">blob_part</span></div>
 
 <div class="viewcode-block" id="SharePointLoader.authorized_identities"><a class="viewcode-back" href="../../../document_loaders/langchain_community.document_loaders.sharepoint.SharePointLoader.html#langchain_community.document_loaders.sharepoint.SharePointLoader.authorized_identities">[docs]</a>    <span class="k">def</span> <span class="nf">authorized_identities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">:</span>
@@ -455,7 +460,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 08, 2024.
+                                on Aug 09, 2024.
                 </footer>
             </div>
         </div>

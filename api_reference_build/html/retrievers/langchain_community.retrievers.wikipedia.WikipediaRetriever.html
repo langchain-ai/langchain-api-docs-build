@@ -282,8 +282,61 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain_community.retrievers.wikipedia.</span></span><span class="sig-name descname"><span class="pre">WikipediaRetriever</span></span><a class="reference internal" href="../_modules/langchain_community/retrievers/wikipedia.html#WikipediaRetriever"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain_community.retrievers.wikipedia.WikipediaRetriever" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain_core.retrievers.BaseRetriever.html#langchain_core.retrievers.BaseRetriever" title="langchain_core.retrievers.BaseRetriever"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseRetriever</span></code></a>, <a class="reference internal" href="../utilities/langchain_community.utilities.wikipedia.WikipediaAPIWrapper.html#langchain_community.utilities.wikipedia.WikipediaAPIWrapper" title="langchain_community.utilities.wikipedia.WikipediaAPIWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">WikipediaAPIWrapper</span></code></a></p>
 <p><cite>Wikipedia API</cite> retriever.</p>
-<p>It wraps load() to get_relevant_documents().
-It uses all WikipediaAPIWrapper arguments without any change.</p>
+<dl>
+<dt>Setup:</dt><dd><p>Install the <code class="docutils literal notranslate"><span class="pre">wikipedia</span></code> dependency:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>wikipedia
+</pre></div>
+</div>
+</dd>
+<dt>Instantiate:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_community.retrievers</span> <span class="kn">import</span> <span class="n">WikipediaRetriever</span>
+
+<span class="n">retriever</span> <span class="o">=</span> <span class="n">WikipediaRetriever</span><span class="p">()</span>
+</pre></div>
+</div>
+</dd>
+<dt>Usage:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">docs</span> <span class="o">=</span> <span class="n">retriever</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="s2">&quot;TOKYO GHOUL&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">docs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">page_content</span><span class="p">[:</span><span class="mi">100</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Tokyo Ghoul (Japanese: 東京喰種（トーキョーグール）, Hepburn: Tōkyō Gūru) is a Japanese dark fantasy
+</pre></div>
+</div>
+</dd>
+<dt>Use within a chain:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">StrOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnablePassthrough</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_template</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Answer the question based only on the context provided.</span>
+
+<span class="sd">Context: {context}</span>
+
+<span class="sd">Question: {question}&quot;&quot;&quot;</span>
+<span class="p">)</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-3.5-turbo-0125&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">format_docs</span><span class="p">(</span><span class="n">docs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="n">retriever</span> <span class="o">|</span> <span class="n">format_docs</span><span class="p">,</span> <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">RunnablePassthrough</span><span class="p">()}</span>
+    <span class="o">|</span> <span class="n">prompt</span>
+    <span class="o">|</span> <span class="n">llm</span>
+    <span class="o">|</span> <span class="n">StrOutputParser</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+    <span class="s2">&quot;Who is the main character in `Tokyo Ghoul` and does he transform into a ghoul?&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>&#39;The main character in Tokyo Ghoul is Ken Kaneki, who transforms into a ghoul after receiving an organ transplant from a ghoul named Rize.&#39;
+</pre></div>
+</div>
+</dd>
+</dl>
 <dl class="py attribute pydantic_field">
 <dt class="sig sig-object py" id="langchain_community.retrievers.wikipedia.WikipediaRetriever.doc_content_chars_max">
 <em class="property"><span class="pre">param</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">doc_content_chars_max</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4000</span></em><a class="headerlink" href="#langchain_community.retrievers.wikipedia.WikipediaRetriever.doc_content_chars_max" title="Permalink to this definition">¶</a></dt>
@@ -1164,7 +1217,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 08, 2024.
+                                on Aug 09, 2024.
                 </footer>
             </div>
         </div>

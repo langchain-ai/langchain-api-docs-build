@@ -270,7 +270,8 @@
 <span class="c1"># PUBLIC API</span>
 
 
-<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">Union</span><span class="p">[</span><span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span>
+<span class="c1"># Last Any should be FieldInfoV1 but this leads to circular imports</span>
+<span class="n">T</span> <span class="o">=</span> <span class="n">TypeVar</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">,</span> <span class="n">bound</span><span class="o">=</span><span class="n">Union</span><span class="p">[</span><span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">])</span>
 
 
 <span class="k">def</span> <span class="nf">_validate_deprecation_params</span><span class="p">(</span>
@@ -373,7 +374,7 @@
         <span class="n">_package</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">package</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Implementation of the decorator returned by `deprecated`.&quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">pydantic.v1.fields</span> <span class="kn">import</span> <span class="n">FieldInfo</span>  <span class="c1"># pydantic: ignore</span>
+        <span class="kn">from</span> <span class="nn">langchain_core.utils.pydantic</span> <span class="kn">import</span> <span class="n">FieldInfoV1</span>
 
         <span class="k">def</span> <span class="nf">emit_warning</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">            </span><span class="sd">&quot;&quot;&quot;Emit the warning.&quot;&quot;&quot;</span>
@@ -448,9 +449,7 @@
                 <span class="p">)</span>
                 <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">obj</span><span class="p">)</span>
 
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">FieldInfo</span><span class="p">):</span>
-            <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span>
-
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">FieldInfoV1</span><span class="p">):</span>
             <span class="n">wrapped</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">_obj_type</span><span class="p">:</span>
                 <span class="n">_obj_type</span> <span class="o">=</span> <span class="s2">&quot;attribute&quot;</span>
@@ -459,58 +458,64 @@
             <span class="n">old_doc</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">description</span>
 
             <span class="k">def</span> <span class="nf">finalize</span><span class="p">(</span><span class="n">wrapper</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">new_doc</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">Field</span><span class="p">(</span>
-                    <span class="n">default</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
-                    <span class="n">default_factory</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">default_factory</span><span class="p">,</span>
-                    <span class="n">description</span><span class="o">=</span><span class="n">new_doc</span><span class="p">,</span>
-                    <span class="n">alias</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span>
-                    <span class="n">exclude</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">exclude</span><span class="p">,</span>
+                <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+                    <span class="n">T</span><span class="p">,</span>
+                    <span class="n">FieldInfoV1</span><span class="p">(</span>
+                        <span class="n">default</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">default</span><span class="p">,</span>
+                        <span class="n">default_factory</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">default_factory</span><span class="p">,</span>
+                        <span class="n">description</span><span class="o">=</span><span class="n">new_doc</span><span class="p">,</span>
+                        <span class="n">alias</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">alias</span><span class="p">,</span>
+                        <span class="n">exclude</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">exclude</span><span class="p">,</span>
+                    <span class="p">),</span>
                 <span class="p">)</span>
 
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="nb">property</span><span class="p">):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">_obj_type</span><span class="p">:</span>
                 <span class="n">_obj_type</span> <span class="o">=</span> <span class="s2">&quot;attribute&quot;</span>
             <span class="n">wrapped</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="n">_name</span> <span class="o">=</span> <span class="n">_name</span> <span class="ow">or</span> <span class="n">obj</span><span class="o">.</span><span class="n">fget</span><span class="o">.</span><span class="vm">__qualname__</span>
+            <span class="n">_name</span> <span class="o">=</span> <span class="n">_name</span> <span class="ow">or</span> <span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="n">obj</span><span class="o">.</span><span class="n">fget</span><span class="p">)</span><span class="o">.</span><span class="vm">__qualname__</span>
             <span class="n">old_doc</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__doc__</span>
 
             <span class="k">class</span> <span class="nc">_deprecated_property</span><span class="p">(</span><span class="nb">property</span><span class="p">):</span>
 <span class="w">                </span><span class="sd">&quot;&quot;&quot;A deprecated property.&quot;&quot;&quot;</span>
 
-                <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fget</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fdel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+                <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fget</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fdel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># type: ignore[no-untyped-def]</span>
                     <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">fget</span><span class="p">,</span> <span class="n">fset</span><span class="p">,</span> <span class="n">fdel</span><span class="p">,</span> <span class="n">doc</span><span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">__orig_fget</span> <span class="o">=</span> <span class="n">fget</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">__orig_fset</span> <span class="o">=</span> <span class="n">fset</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">__orig_fdel</span> <span class="o">=</span> <span class="n">fdel</span>
 
-                <span class="k">def</span> <span class="fm">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+                <span class="k">def</span> <span class="fm">__get__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">owner</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># type: ignore[no-untyped-def]</span>
                     <span class="k">if</span> <span class="n">instance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">owner</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">emit_warning</span><span class="p">()</span>
                     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fget</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span>
 
-                <span class="k">def</span> <span class="fm">__set__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+                <span class="k">def</span> <span class="fm">__set__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>  <span class="c1"># type: ignore[no-untyped-def]</span>
                     <span class="k">if</span> <span class="n">instance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">emit_warning</span><span class="p">()</span>
                     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fset</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
-                <span class="k">def</span> <span class="fm">__delete__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>
+                <span class="k">def</span> <span class="fm">__delete__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">):</span>  <span class="c1"># type: ignore[no-untyped-def]</span>
                     <span class="k">if</span> <span class="n">instance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">emit_warning</span><span class="p">()</span>
                     <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fdel</span><span class="p">(</span><span class="n">instance</span><span class="p">)</span>
 
-                <span class="k">def</span> <span class="nf">__set_name__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">owner</span><span class="p">,</span> <span class="n">set_name</span><span class="p">):</span>
+                <span class="k">def</span> <span class="nf">__set_name__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">owner</span><span class="p">,</span> <span class="n">set_name</span><span class="p">):</span>  <span class="c1"># type: ignore[no-untyped-def]</span>
                     <span class="k">nonlocal</span> <span class="n">_name</span>
                     <span class="k">if</span> <span class="n">_name</span> <span class="o">==</span> <span class="s2">&quot;&lt;lambda&gt;&quot;</span><span class="p">:</span>
                         <span class="n">_name</span> <span class="o">=</span> <span class="n">set_name</span>
 
-            <span class="k">def</span> <span class="nf">finalize</span><span class="p">(</span><span class="n">wrapper</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">new_doc</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+            <span class="k">def</span> <span class="nf">finalize</span><span class="p">(</span><span class="n">wrapper</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">new_doc</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">T</span><span class="p">:</span>
 <span class="w">                </span><span class="sd">&quot;&quot;&quot;Finalize the property.&quot;&quot;&quot;</span>
-                <span class="k">return</span> <span class="n">_deprecated_property</span><span class="p">(</span>
-                    <span class="n">fget</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">fget</span><span class="p">,</span> <span class="n">fset</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">fset</span><span class="p">,</span> <span class="n">fdel</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">fdel</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="n">new_doc</span>
+                <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+                    <span class="n">T</span><span class="p">,</span>
+                    <span class="n">_deprecated_property</span><span class="p">(</span>
+                        <span class="n">fget</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">fget</span><span class="p">,</span> <span class="n">fset</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">fset</span><span class="p">,</span> <span class="n">fdel</span><span class="o">=</span><span class="n">obj</span><span class="o">.</span><span class="n">fdel</span><span class="p">,</span> <span class="n">doc</span><span class="o">=</span><span class="n">new_doc</span>
+                    <span class="p">),</span>
                 <span class="p">)</span>
 
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">_name</span> <span class="o">=</span> <span class="n">_name</span> <span class="ow">or</span> <span class="n">obj</span><span class="o">.</span><span class="vm">__qualname__</span>
+            <span class="n">_name</span> <span class="o">=</span> <span class="n">_name</span> <span class="ow">or</span> <span class="n">cast</span><span class="p">(</span><span class="n">Union</span><span class="p">[</span><span class="n">Type</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="n">obj</span><span class="p">)</span><span class="o">.</span><span class="vm">__qualname__</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">_obj_type</span><span class="p">:</span>
                 <span class="c1"># edge case: when a function is within another function</span>
                 <span class="c1"># within a test, this will call it a &quot;method&quot; not a &quot;function&quot;</span>
@@ -691,7 +696,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 08, 2024.
+                                on Aug 09, 2024.
                 </footer>
             </div>
         </div>

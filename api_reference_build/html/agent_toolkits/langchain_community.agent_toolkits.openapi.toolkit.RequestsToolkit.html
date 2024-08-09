@@ -267,6 +267,118 @@ that is only accessible from the server.</p>
 what network access it has.</p>
 <p>See <a class="reference external" href="https://python.langchain.com/docs/security">https://python.langchain.com/docs/security</a> for more information.</p>
 </dd>
+<dt>Setup:</dt><dd><p>Install <code class="docutils literal notranslate"><span class="pre">langchain-community</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>langchain-community
+</pre></div>
+</div>
+</dd>
+<dt>Key init args:</dt><dd><dl class="simple">
+<dt>requests_wrapper: langchain_community.utilities.requests.GenericRequestsWrapper</dt><dd><p>wrapper for executing requests.</p>
+</dd>
+<dt>allow_dangerous_requests: bool</dt><dd><p>Defaults to False. Must “opt-in” to using dangerous requests by setting to True.</p>
+</dd>
+</dl>
+</dd>
+<dt>Instantiate:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_community.agent_toolkits.openapi.toolkit</span> <span class="kn">import</span> <span class="n">RequestsToolkit</span>
+<span class="kn">from</span> <span class="nn">langchain_community.utilities.requests</span> <span class="kn">import</span> <span class="n">TextRequestsWrapper</span>
+
+<span class="n">toolkit</span> <span class="o">=</span> <span class="n">RequestsToolkit</span><span class="p">(</span>
+    <span class="n">requests_wrapper</span><span class="o">=</span><span class="n">TextRequestsWrapper</span><span class="p">(</span><span class="n">headers</span><span class="o">=</span><span class="p">{}),</span>
+    <span class="n">allow_dangerous_requests</span><span class="o">=</span><span class="n">ALLOW_DANGEROUS_REQUEST</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>Tools:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tools</span> <span class="o">=</span> <span class="n">toolkit</span><span class="o">.</span><span class="n">get_tools</span><span class="p">()</span>
+<span class="n">tools</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>[RequestsGetTool(requests_wrapper=TextRequestsWrapper(headers={}, aiosession=None, auth=None, response_content_type=&#39;text&#39;, verify=True), allow_dangerous_requests=True),
+RequestsPostTool(requests_wrapper=TextRequestsWrapper(headers={}, aiosession=None, auth=None, response_content_type=&#39;text&#39;, verify=True), allow_dangerous_requests=True),
+RequestsPatchTool(requests_wrapper=TextRequestsWrapper(headers={}, aiosession=None, auth=None, response_content_type=&#39;text&#39;, verify=True), allow_dangerous_requests=True),
+RequestsPutTool(requests_wrapper=TextRequestsWrapper(headers={}, aiosession=None, auth=None, response_content_type=&#39;text&#39;, verify=True), allow_dangerous_requests=True),
+RequestsDeleteTool(requests_wrapper=TextRequestsWrapper(headers={}, aiosession=None, auth=None, response_content_type=&#39;text&#39;, verify=True), allow_dangerous_requests=True)]
+</pre></div>
+</div>
+</dd>
+<dt>Use within an agent:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langgraph.prebuilt</span> <span class="kn">import</span> <span class="n">create_react_agent</span>
+
+
+<span class="n">api_spec</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">openapi: 3.0.0</span>
+<span class="s2">info:</span>
+<span class="s2">  title: JSONPlaceholder API</span>
+<span class="s2">  version: 1.0.0</span>
+<span class="s2">servers:</span>
+<span class="s2">  - url: https://jsonplaceholder.typicode.com</span>
+<span class="s2">paths:</span>
+<span class="s2">  /posts:</span>
+<span class="s2">    get:</span>
+<span class="s2">      summary: Get posts</span>
+<span class="s2">      parameters: &amp;id001</span>
+<span class="s2">        - name: _limit</span>
+<span class="s2">          in: query</span>
+<span class="s2">          required: false</span>
+<span class="s2">          schema:</span>
+<span class="s2">            type: integer</span>
+<span class="s2">          example: 2</span>
+<span class="s2">          description: Limit the number of results</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">system_message</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">You have access to an API to help answer user queries.</span>
+<span class="s2">Here is documentation on the API:</span>
+<span class="si">{api_spec}</span>
+<span class="s2">&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">api_spec</span><span class="o">=</span><span class="n">api_spec</span><span class="p">)</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
+<span class="n">agent_executor</span> <span class="o">=</span> <span class="n">create_react_agent</span><span class="p">(</span><span class="n">llm</span><span class="p">,</span> <span class="n">tools</span><span class="p">,</span> <span class="n">state_modifier</span><span class="o">=</span><span class="n">system_message</span><span class="p">)</span>
+
+<span class="n">example_query</span> <span class="o">=</span> <span class="s2">&quot;Fetch the top two posts. What are their titles?&quot;</span>
+
+<span class="n">events</span> <span class="o">=</span> <span class="n">agent_executor</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[(</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">example_query</span><span class="p">)]},</span>
+    <span class="n">stream_mode</span><span class="o">=</span><span class="s2">&quot;values&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+    <span class="n">event</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pretty_print</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span> ================================[1m Human Message [0m=================================
+
+Fetch the top two posts. What are their titles?
+==================================[1m Ai Message [0m==================================
+Tool Calls:
+requests_get (call_RV2SOyzCnV5h2sm4WPgG8fND)
+Call ID: call_RV2SOyzCnV5h2sm4WPgG8fND
+Args:
+    url: https://jsonplaceholder.typicode.com/posts?_limit=2
+=================================[1m Tool Message [0m=================================
+Name: requests_get
+
+[
+{
+    &quot;userId&quot;: 1,
+    &quot;id&quot;: 1,
+    &quot;title&quot;: &quot;sunt aut facere repellat provident occaecati excepturi optio reprehenderit&quot;,
+    &quot;body&quot;: &quot;quia et suscipit...&quot;
+},
+{
+    &quot;userId&quot;: 1,
+    &quot;id&quot;: 2,
+    &quot;title&quot;: &quot;qui est esse&quot;,
+    &quot;body&quot;: &quot;est rerum tempore vitae...&quot;
+}
+]
+==================================[1m Ai Message [0m==================================
+
+The titles of the top two posts are:
+1. &quot;sunt aut facere repellat provident occaecati excepturi optio reprehenderit&quot;
+2. &quot;qui est esse&quot;
+</pre></div>
+</div>
+</dd>
 </dl>
 <p>Create a new model by parsing and validating input data from keyword arguments.</p>
 <p>Raises ValidationError if the input data cannot be parsed to form a valid model.</p>
@@ -306,7 +418,7 @@ what network access it has.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 08, 2024.
+                                on Aug 09, 2024.
                 </footer>
             </div>
         </div>

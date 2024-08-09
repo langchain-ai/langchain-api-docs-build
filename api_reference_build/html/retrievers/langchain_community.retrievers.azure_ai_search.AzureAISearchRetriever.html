@@ -283,6 +283,63 @@
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain_community.retrievers.azure_ai_search.</span></span><span class="sig-name descname"><span class="pre">AzureAISearchRetriever</span></span><a class="reference internal" href="../_modules/langchain_community/retrievers/azure_ai_search.html#AzureAISearchRetriever"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain_community.retrievers.azure_ai_search.AzureAISearchRetriever" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain_core.retrievers.BaseRetriever.html#langchain_core.retrievers.BaseRetriever" title="langchain_core.retrievers.BaseRetriever"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseRetriever</span></code></a></p>
 <p><cite>Azure AI Search</cite> service retriever.</p>
+<dl>
+<dt>Setup:</dt><dd><p>See here for more detail: <a class="reference external" href="https://python.langchain.com/v0.2/docs/integrations/retrievers/azure_ai_search/">https://python.langchain.com/v0.2/docs/integrations/retrievers/azure_ai_search/</a></p>
+<p>We will need to install the below dependencies and set the required
+environment variables:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>langchain-community<span class="w"> </span>azure-identity<span class="w"> </span>azure-search-documents
+<span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_AI_SEARCH_SERVICE_NAME</span><span class="o">=</span><span class="s2">&quot;&lt;YOUR_SEARCH_SERVICE_NAME&gt;&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_AI_SEARCH_INDEX_NAME</span><span class="o">=</span><span class="s2">&quot;&lt;YOUR_SEARCH_INDEX_NAME&gt;&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">AZURE_AI_SEARCH_API_KEY</span><span class="o">=</span><span class="s2">&quot;&lt;YOUR_API_KEY&gt;&quot;</span>
+</pre></div>
+</div>
+</dd>
+<dt>Key init args:</dt><dd><p>content_key: str
+top_k: int
+index_name: str</p>
+</dd>
+<dt>Instantiate:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_community.retrievers</span> <span class="kn">import</span> <span class="n">AzureAISearchRetriever</span>
+
+<span class="n">retriever</span> <span class="o">=</span> <span class="n">AzureAISearchRetriever</span><span class="p">(</span>
+    <span class="n">content_key</span><span class="o">=</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index_name</span><span class="o">=</span><span class="s2">&quot;langchain-vector-demo&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>Usage:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">retriever</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="s2">&quot;here is my unstructured query string&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>Use within a chain:</dt><dd><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">StrOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnablePassthrough</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">AzureChatOpenAI</span>
+
+<span class="n">prompt</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_template</span><span class="p">(</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Answer the question based only on the context provided.</span>
+
+<span class="sd">Context: {context}</span>
+
+<span class="sd">Question: {question}&quot;&quot;&quot;</span>
+<span class="p">)</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">AzureChatOpenAI</span><span class="p">(</span><span class="n">azure_deployment</span><span class="o">=</span><span class="s2">&quot;gpt-35-turbo&quot;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">format_docs</span><span class="p">(</span><span class="n">docs</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">docs</span><span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="n">retriever</span> <span class="o">|</span> <span class="n">format_docs</span><span class="p">,</span> <span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">RunnablePassthrough</span><span class="p">()}</span>
+    <span class="o">|</span> <span class="n">prompt</span>
+    <span class="o">|</span> <span class="n">llm</span>
+    <span class="o">|</span> <span class="n">StrOutputParser</span><span class="p">()</span>
+<span class="p">)</span>
+
+<span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+</dl>
 <dl class="py attribute pydantic_field">
 <dt class="sig sig-object py" id="langchain_community.retrievers.azure_ai_search.AzureAISearchRetriever.aiosession">
 <em class="property"><span class="pre">param</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">aiosession</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">aiohttp.ClientSession</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#langchain_community.retrievers.azure_ai_search.AzureAISearchRetriever.aiosession" title="Permalink to this definition">¶</a></dt>
@@ -1146,7 +1203,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 08, 2024.
+                                on Aug 09, 2024.
                 </footer>
             </div>
         </div>

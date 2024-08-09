@@ -250,7 +250,7 @@
     <span class="n">CallbackManagerForRetrieverRun</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span><span class="p">,</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">root_validator</span>
 <span class="kn">from</span> <span class="nn">langchain_core.retrievers</span> <span class="kn">import</span> <span class="n">BaseRetriever</span>
 <span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span><span class="p">,</span> <span class="n">get_from_env</span>
 
@@ -259,7 +259,71 @@
 
 
 <div class="viewcode-block" id="AzureAISearchRetriever"><a class="viewcode-back" href="../../../retrievers/langchain_community.retrievers.azure_ai_search.AzureAISearchRetriever.html#langchain_community.retrievers.azure_ai_search.AzureAISearchRetriever">[docs]</a><span class="k">class</span> <span class="nc">AzureAISearchRetriever</span><span class="p">(</span><span class="n">BaseRetriever</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;`Azure AI Search` service retriever.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;`Azure AI Search` service retriever.</span>
+
+<span class="sd">    Setup:</span>
+<span class="sd">        See here for more detail: https://python.langchain.com/v0.2/docs/integrations/retrievers/azure_ai_search/</span>
+
+<span class="sd">        We will need to install the below dependencies and set the required</span>
+<span class="sd">        environment variables:</span>
+
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -U langchain-community azure-identity azure-search-documents</span>
+<span class="sd">            export AZURE_AI_SEARCH_SERVICE_NAME=&quot;&lt;YOUR_SEARCH_SERVICE_NAME&gt;&quot;</span>
+<span class="sd">            export AZURE_AI_SEARCH_INDEX_NAME=&quot;&lt;YOUR_SEARCH_INDEX_NAME&gt;&quot;</span>
+<span class="sd">            export AZURE_AI_SEARCH_API_KEY=&quot;&lt;YOUR_API_KEY&gt;&quot;</span>
+
+<span class="sd">    Key init args:</span>
+<span class="sd">        content_key: str</span>
+<span class="sd">        top_k: int</span>
+<span class="sd">        index_name: str</span>
+
+<span class="sd">    Instantiate:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_community.retrievers import AzureAISearchRetriever</span>
+
+<span class="sd">            retriever = AzureAISearchRetriever(</span>
+<span class="sd">                content_key=&quot;content&quot;, top_k=1, index_name=&quot;langchain-vector-demo&quot;</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Usage:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            retriever.invoke(&quot;here is my unstructured query string&quot;)</span>
+
+<span class="sd">    Use within a chain:</span>
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from langchain_core.output_parsers import StrOutputParser</span>
+<span class="sd">            from langchain_core.prompts import ChatPromptTemplate</span>
+<span class="sd">            from langchain_core.runnables import RunnablePassthrough</span>
+<span class="sd">            from langchain_openai import AzureChatOpenAI</span>
+
+<span class="sd">            prompt = ChatPromptTemplate.from_template(</span>
+<span class="sd">                \&quot;\&quot;\&quot;Answer the question based only on the context provided.</span>
+
+<span class="sd">            Context: {context}</span>
+
+<span class="sd">            Question: {question}\&quot;\&quot;\&quot;</span>
+<span class="sd">            )</span>
+
+<span class="sd">            llm = AzureChatOpenAI(azure_deployment=&quot;gpt-35-turbo&quot;)</span>
+
+<span class="sd">            def format_docs(docs):</span>
+<span class="sd">                return &quot;\\n\\n&quot;.join(doc.page_content for doc in docs)</span>
+
+<span class="sd">            chain = (</span>
+<span class="sd">                {&quot;context&quot;: retriever | format_docs, &quot;question&quot;: RunnablePassthrough()}</span>
+<span class="sd">                | prompt</span>
+<span class="sd">                | llm</span>
+<span class="sd">                | StrOutputParser()</span>
+<span class="sd">            )</span>
+
+<span class="sd">            chain.invoke(&quot;...&quot;)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
     <span class="n">service_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Name of Azure AI Search service&quot;&quot;&quot;</span>
@@ -280,8 +344,8 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;OData $filter expression to apply to the search query.&quot;&quot;&quot;</span>
 
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
-        <span class="n">extra</span> <span class="o">=</span> <span class="n">Extra</span><span class="o">.</span><span class="n">forbid</span>
         <span class="n">arbitrary_types_allowed</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;forbid&quot;</span>
 
     <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
@@ -381,7 +445,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 08, 2024.
+                                on Aug 09, 2024.
                 </footer>
             </div>
         </div>
