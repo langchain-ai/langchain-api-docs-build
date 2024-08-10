@@ -291,7 +291,73 @@
 <dt class="sig sig-object py" id="langchain.chains.router.llm_router.LLMRouterChain">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain.chains.router.llm_router.</span></span><span class="sig-name descname"><span class="pre">LLMRouterChain</span></span><a class="reference internal" href="../_modules/langchain/chains/router/llm_router.html#LLMRouterChain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain.chains.router.llm_router.LLMRouterChain" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain.chains.router.base.RouterChain.html#langchain.chains.router.base.RouterChain" title="langchain.chains.router.base.RouterChain"><code class="xref py py-class docutils literal notranslate"><span class="pre">RouterChain</span></code></a></p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.2.12: </span>Use RunnableLambda to select from multiple prompt templates. See example in API reference: <a class="reference external" href="https://api.python.langchain.com/en/latest/chains/langchain.chains.router.llm_router.LLMRouterChain.html">https://api.python.langchain.com/en/latest/chains/langchain.chains.router.llm_router.LLMRouterChain.html</a></p>
+</div>
 <p>A router chain that uses an LLM chain to perform routing.</p>
+<p>This class is deprecated. See below for a replacement, which offers several
+benefits, including streaming and batch support.</p>
+<p>Below is an example implementation:</p>
+<blockquote>
+<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">operator</span> <span class="kn">import</span> <span class="n">itemgetter</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Literal</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
+
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">StrOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableLambda</span><span class="p">,</span> <span class="n">RunnablePassthrough</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">)</span>
+
+<span class="n">prompt_1</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="s2">&quot;You are an expert on animals.&quot;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{query}</span><span class="s2">&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+<span class="n">prompt_2</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="s2">&quot;You are an expert on vegetables.&quot;</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{query}</span><span class="s2">&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">chain_1</span> <span class="o">=</span> <span class="n">prompt_1</span> <span class="o">|</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">StrOutputParser</span><span class="p">()</span>
+<span class="n">chain_2</span> <span class="o">=</span> <span class="n">prompt_2</span> <span class="o">|</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">StrOutputParser</span><span class="p">()</span>
+
+<span class="n">route_system</span> <span class="o">=</span> <span class="s2">&quot;Route the user&#39;s query to either the animal or vegetable expert.&quot;</span>
+<span class="n">route_prompt</span> <span class="o">=</span> <span class="n">ChatPromptTemplate</span><span class="o">.</span><span class="n">from_messages</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="p">(</span><span class="s2">&quot;system&quot;</span><span class="p">,</span> <span class="n">route_system</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{query}</span><span class="s2">&quot;</span><span class="p">),</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">RouteQuery</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Route query to destination.&quot;&quot;&quot;</span>
+    <span class="n">destination</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;animal&quot;</span><span class="p">,</span> <span class="s2">&quot;vegetable&quot;</span><span class="p">]</span>
+
+
+<span class="n">route_chain</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">route_prompt</span>
+    <span class="o">|</span> <span class="n">llm</span><span class="o">.</span><span class="n">with_structured_output</span><span class="p">(</span><span class="n">RouteQuery</span><span class="p">)</span>
+    <span class="o">|</span> <span class="n">itemgetter</span><span class="p">(</span><span class="s2">&quot;destination&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">chain</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;destination&quot;</span><span class="p">:</span> <span class="n">route_chain</span><span class="p">,</span>  <span class="c1"># &quot;animal&quot; or &quot;vegetable&quot;</span>
+    <span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s2">&quot;query&quot;</span><span class="p">],</span>  <span class="c1"># pass through input query</span>
+<span class="p">}</span> <span class="o">|</span> <span class="n">RunnableLambda</span><span class="p">(</span>
+    <span class="c1"># if animal, chain_1. otherwise, chain_2.</span>
+    <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">chain_1</span> <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="s2">&quot;destination&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;animal&quot;</span> <span class="k">else</span> <span class="n">chain_2</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">({</span><span class="s2">&quot;query&quot;</span><span class="p">:</span> <span class="s2">&quot;what color are carrots&quot;</span><span class="p">})</span>
+</pre></div>
+</div>
+</div></blockquote>
 <dl class="py attribute pydantic_field">
 <dt class="sig sig-object py" id="langchain.chains.router.llm_router.LLMRouterChain.callback_manager">
 <em class="property"><span class="pre">param</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">callback_manager</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../callbacks/langchain_core.callbacks.base.BaseCallbackManager.html#langchain_core.callbacks.base.BaseCallbackManager" title="langchain_core.callbacks.base.BaseCallbackManager"><span class="pre">BaseCallbackManager</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#langchain.chains.router.llm_router.LLMRouterChain.callback_manager" title="Permalink to this definition">¶</a></dt>
@@ -1440,7 +1506,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>

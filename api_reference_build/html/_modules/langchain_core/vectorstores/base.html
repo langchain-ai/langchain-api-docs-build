@@ -269,30 +269,23 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">TYPE_CHECKING</span><span class="p">,</span>
     <span class="n">Any</span><span class="p">,</span>
-    <span class="n">AsyncIterable</span><span class="p">,</span>
-    <span class="n">AsyncIterator</span><span class="p">,</span>
     <span class="n">Callable</span><span class="p">,</span>
     <span class="n">ClassVar</span><span class="p">,</span>
     <span class="n">Collection</span><span class="p">,</span>
     <span class="n">Dict</span><span class="p">,</span>
     <span class="n">Iterable</span><span class="p">,</span>
-    <span class="n">Iterator</span><span class="p">,</span>
     <span class="n">List</span><span class="p">,</span>
     <span class="n">Optional</span><span class="p">,</span>
     <span class="n">Sequence</span><span class="p">,</span>
     <span class="n">Tuple</span><span class="p">,</span>
     <span class="n">Type</span><span class="p">,</span>
     <span class="n">TypeVar</span><span class="p">,</span>
-    <span class="n">Union</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">beta</span>
 <span class="kn">from</span> <span class="nn">langchain_core.embeddings</span> <span class="kn">import</span> <span class="n">Embeddings</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">root_validator</span>
 <span class="kn">from</span> <span class="nn">langchain_core.retrievers</span> <span class="kn">import</span> <span class="n">BaseRetriever</span>
 <span class="kn">from</span> <span class="nn">langchain_core.runnables.config</span> <span class="kn">import</span> <span class="n">run_in_executor</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils.aiter</span> <span class="kn">import</span> <span class="n">abatch_iterate</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils.iter</span> <span class="kn">import</span> <span class="n">batch_iterate</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">langchain_core.callbacks.manager</span> <span class="kn">import</span> <span class="p">(</span>
@@ -300,7 +293,6 @@
         <span class="n">CallbackManagerForRetrieverRun</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
-    <span class="kn">from</span> <span class="nn">langchain_core.indexing</span> <span class="kn">import</span> <span class="n">UpsertResponse</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -336,7 +328,7 @@
 <span class="sd">            ValueError: If the number of metadatas does not match the number of texts.</span>
 <span class="sd">            ValueError: If the number of ids does not match the number of texts.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">upsert</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">upsert</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">add_documents</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">add_documents</span><span class="p">:</span>
             <span class="c1"># Import document in local scope to avoid circular imports</span>
             <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 
@@ -349,189 +341,18 @@
             <span class="k">if</span> <span class="n">metadatas</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts_</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;The number of metadatas must match the number of texts.&quot;</span>
-                    <span class="s2">&quot;Got {len(metadatas)} metadatas and {len(texts_)} texts.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span><span class="si">}</span><span class="s2"> metadatas and </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">texts_</span><span class="p">)</span><span class="si">}</span><span class="s2"> texts.&quot;</span>
                 <span class="p">)</span>
-
-            <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-                <span class="n">ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;ids&quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts_</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;The number of ids must match the number of texts.&quot;</span>
-                        <span class="s2">&quot;Got {len(ids)} ids and {len(texts_)} texts.&quot;</span>
-                    <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">ids</span> <span class="o">=</span> <span class="kc">None</span>
-
             <span class="n">metadatas_</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadatas</span> <span class="k">else</span> <span class="n">cycle</span><span class="p">([{}])</span>
-            <span class="n">ids_</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="n">ids</span> <span class="k">if</span> <span class="n">ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">cycle</span><span class="p">([</span><span class="kc">None</span><span class="p">])</span>
             <span class="n">docs</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata_</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="n">id_</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">metadata_</span><span class="p">,</span> <span class="n">id_</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas_</span><span class="p">,</span> <span class="n">ids_</span><span class="p">)</span>
+                <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata_</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">metadata_</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas_</span><span class="p">)</span>
             <span class="p">]</span>
-            <span class="n">upsert_response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">upsert_response</span><span class="p">[</span><span class="s2">&quot;succeeded&quot;</span><span class="p">]</span>
+
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_documents</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;`add_texts` has not been implemented for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> &quot;</span>
         <span class="p">)</span></div>
-
-    <span class="c1"># Developer guidelines:</span>
-    <span class="c1"># Do not override streaming_upsert!</span>
-<div class="viewcode-block" id="VectorStore.streaming_upsert"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.streaming_upsert">[docs]</a>    <span class="nd">@beta</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="s2">&quot;Added in 0.2.11. The API is subject to change.&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">streaming_upsert</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">/</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">UpsertResponse</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Upsert documents in a streaming fashion.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            items: Iterable of Documents to add to the vectorstore.</span>
-<span class="sd">            batch_size: The size of each batch to upsert.</span>
-<span class="sd">            kwargs: Additional keyword arguments.</span>
-<span class="sd">                kwargs should only include parameters that are common to all</span>
-<span class="sd">                documents. (e.g., timeout for indexing, retry policy, etc.)</span>
-<span class="sd">                kwargs should not include ids to avoid ambiguous semantics.</span>
-<span class="sd">                Instead, the ID should be provided as part of the Document object.</span>
-
-<span class="sd">        Yields:</span>
-<span class="sd">            UpsertResponse: A response object that contains the list of IDs that were</span>
-<span class="sd">            successfully added or updated in the vectorstore and the list of IDs that</span>
-<span class="sd">            failed to be added or updated.</span>
-
-<span class="sd">        .. versionadded:: 0.2.11</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># The default implementation of this method breaks the input into</span>
-        <span class="c1"># batches of size `batch_size` and calls the `upsert` method on each batch.</span>
-        <span class="c1"># Subclasses can override this method to provide a more efficient</span>
-        <span class="c1"># implementation.</span>
-        <span class="k">for</span> <span class="n">item_batch</span> <span class="ow">in</span> <span class="n">batch_iterate</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">items</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="bp">self</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">item_batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
-
-    <span class="c1"># Please note that we&#39;ve added a new method `upsert` instead of re-using the</span>
-    <span class="c1"># existing `add_documents` method.</span>
-    <span class="c1"># This was done to resolve potential ambiguities around the behavior of **kwargs</span>
-    <span class="c1"># in existing add_documents / add_texts methods which could include per document</span>
-    <span class="c1"># information (e.g., the `ids` parameter).</span>
-    <span class="c1"># Over time the `add_documents` could be denoted as legacy and deprecated</span>
-    <span class="c1"># in favor of the `upsert` method.</span>
-<div class="viewcode-block" id="VectorStore.upsert"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.upsert">[docs]</a>    <span class="nd">@beta</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="s2">&quot;Added in 0.2.11. The API is subject to change.&quot;</span><span class="p">)</span>
-    <span class="k">def</span> <span class="nf">upsert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UpsertResponse</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add or update documents in the vectorstore.</span>
-
-<span class="sd">        The upsert functionality should utilize the ID field of the Document object</span>
-<span class="sd">        if it is provided. If the ID is not provided, the upsert method is free</span>
-<span class="sd">        to generate an ID for the document.</span>
-
-<span class="sd">        When an ID is specified and the document already exists in the vectorstore,</span>
-<span class="sd">        the upsert method should update the document with the new data. If the document</span>
-<span class="sd">        does not exist, the upsert method should add the document to the vectorstore.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            items: Sequence of Documents to add to the vectorstore.</span>
-<span class="sd">            kwargs: Additional keyword arguments.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            UpsertResponse: A response object that contains the list of IDs that were</span>
-<span class="sd">            successfully added or updated in the vectorstore and the list of IDs that</span>
-<span class="sd">            failed to be added or updated.</span>
-
-<span class="sd">        .. versionadded:: 0.2.11</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1">#  Developer guidelines:</span>
-        <span class="c1">#</span>
-        <span class="c1">#  Vectorstores implementations are free to extend `upsert` implementation</span>
-        <span class="c1">#  to take in additional data per document.</span>
-        <span class="c1">#</span>
-        <span class="c1">#  This data **SHOULD NOT** be part of the **kwargs** parameter, instead</span>
-        <span class="c1">#  sub-classes can use a Union type on `documents` to include additional</span>
-        <span class="c1">#  supported formats for the input data stream.</span>
-        <span class="c1">#</span>
-        <span class="c1">#  For example,</span>
-        <span class="c1">#</span>
-        <span class="c1">#  .. code-block:: python</span>
-        <span class="c1">#  from typing import TypedDict</span>
-        <span class="c1">#</span>
-        <span class="c1">#  class DocumentWithVector(TypedDict):</span>
-        <span class="c1">#      document: Document</span>
-        <span class="c1">#      vector: List[float]</span>
-        <span class="c1">#</span>
-        <span class="c1">#  def upsert(</span>
-        <span class="c1">#          self,</span>
-        <span class="c1">#          documents: Union[Iterable[Document], Iterable[DocumentWithVector]],</span>
-        <span class="c1">#          /,</span>
-        <span class="c1">#          **kwargs</span>
-        <span class="c1">#  ) -&gt; UpsertResponse:</span>
-        <span class="c1">#      \&quot;\&quot;\&quot;Add or update documents in the vectorstore.\&quot;\&quot;\&quot;</span>
-        <span class="c1">#      # Implementation should check if documents is an</span>
-        <span class="c1">#      # iterable of DocumentWithVector or Document</span>
-        <span class="c1">#      pass</span>
-        <span class="c1">#</span>
-        <span class="c1">#  Implementations that override upsert should include a new doc-string</span>
-        <span class="c1">#  that explains the semantics of upsert and includes in code</span>
-        <span class="c1">#  examples of how to insert using the alternate data formats.</span>
-
-        <span class="c1"># The implementation does not delegate to the `add_texts` method or</span>
-        <span class="c1"># the `add_documents` method by default since those implementations</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;upsert has not been implemented for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span></div>
-
-<div class="viewcode-block" id="VectorStore.astreaming_upsert"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.astreaming_upsert">[docs]</a>    <span class="nd">@beta</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="s2">&quot;Added in 0.2.11. The API is subject to change.&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">astreaming_upsert</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">items</span><span class="p">:</span> <span class="n">AsyncIterable</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span>
-        <span class="o">/</span><span class="p">,</span>
-        <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">UpsertResponse</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Upsert documents in a streaming fashion. Async version of streaming_upsert.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            items: Iterable of Documents to add to the vectorstore.</span>
-<span class="sd">            batch_size: The size of each batch to upsert.</span>
-<span class="sd">            kwargs: Additional keyword arguments.</span>
-<span class="sd">                kwargs should only include parameters that are common to all</span>
-<span class="sd">                documents. (e.g., timeout for indexing, retry policy, etc.)</span>
-<span class="sd">                kwargs should not include ids to avoid ambiguous semantics.</span>
-<span class="sd">                Instead the ID should be provided as part of the Document object.</span>
-
-<span class="sd">        Yields:</span>
-<span class="sd">            UpsertResponse: A response object that contains the list of IDs that were</span>
-<span class="sd">            successfully added or updated in the vectorstore and the list of IDs that</span>
-<span class="sd">            failed to be added or updated.</span>
-
-<span class="sd">        .. versionadded:: 0.2.11</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">async</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">abatch_iterate</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">items</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aupsert</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
-
-<div class="viewcode-block" id="VectorStore.aupsert"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.aupsert">[docs]</a>    <span class="nd">@beta</span><span class="p">(</span><span class="n">message</span><span class="o">=</span><span class="s2">&quot;Added in 0.2.11. The API is subject to change.&quot;</span><span class="p">)</span>
-    <span class="k">async</span> <span class="k">def</span> <span class="nf">aupsert</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UpsertResponse</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add or update documents in the vectorstore. Async version of upsert.</span>
-
-<span class="sd">        The upsert functionality should utilize the ID field of the Document object</span>
-<span class="sd">        if it is provided. If the ID is not provided, the upsert method is free</span>
-<span class="sd">        to generate an ID for the document.</span>
-
-<span class="sd">        When an ID is specified and the document already exists in the vectorstore,</span>
-<span class="sd">        the upsert method should update the document with the new data. If the document</span>
-<span class="sd">        does not exist, the upsert method should add the document to the vectorstore.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            items: Sequence of Documents to add to the vectorstore.</span>
-<span class="sd">            kwargs: Additional keyword arguments.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            UpsertResponse: A response object that contains the list of IDs that were</span>
-<span class="sd">            successfully added or updated in the vectorstore and the list of IDs that</span>
-<span class="sd">            failed to be added or updated.</span>
-
-<span class="sd">        .. versionadded:: 0.2.11</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1">#  Developer guidelines: See guidelines for the `upsert` method.</span>
-        <span class="c1"># The implementation does not delegate to the `add_texts` method or</span>
-        <span class="c1"># the `add_documents` method by default since those implementations</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">upsert</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]:</span>
@@ -647,7 +468,7 @@
 <span class="sd">            ValueError: If the number of metadatas does not match the number of texts.</span>
 <span class="sd">            ValueError: If the number of ids does not match the number of texts.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">aupsert</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">aupsert</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">aadd_documents</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">aadd_documents</span><span class="p">:</span>
             <span class="c1"># Import document in local scope to avoid circular imports</span>
             <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
 
@@ -660,27 +481,16 @@
             <span class="k">if</span> <span class="n">metadatas</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts_</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;The number of metadatas must match the number of texts.&quot;</span>
-                    <span class="s2">&quot;Got {len(metadatas)} metadatas and {len(texts_)} texts.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span><span class="si">}</span><span class="s2"> metadatas and </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">texts_</span><span class="p">)</span><span class="si">}</span><span class="s2"> texts.&quot;</span>
                 <span class="p">)</span>
-
-            <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-                <span class="n">ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;ids&quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">texts_</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;The number of ids must match the number of texts.&quot;</span>
-                        <span class="s2">&quot;Got {len(ids)} ids and {len(texts_)} texts.&quot;</span>
-                    <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">ids</span> <span class="o">=</span> <span class="kc">None</span>
-
             <span class="n">metadatas_</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">metadatas</span><span class="p">)</span> <span class="k">if</span> <span class="n">metadatas</span> <span class="k">else</span> <span class="n">cycle</span><span class="p">([{}])</span>
-            <span class="n">ids_</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="n">ids</span> <span class="k">if</span> <span class="n">ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">cycle</span><span class="p">([</span><span class="kc">None</span><span class="p">])</span>
+
             <span class="n">docs</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata_</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="n">id_</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">metadata_</span><span class="p">,</span> <span class="n">id_</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas_</span><span class="p">,</span> <span class="n">ids_</span><span class="p">)</span>
+                <span class="n">Document</span><span class="p">(</span><span class="n">page_content</span><span class="o">=</span><span class="n">text</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata_</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">text</span><span class="p">,</span> <span class="n">metadata_</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas_</span><span class="p">)</span>
             <span class="p">]</span>
-            <span class="n">upsert_response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aupsert</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">upsert_response</span><span class="p">[</span><span class="s2">&quot;succeeded&quot;</span><span class="p">]</span>
+
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aadd_documents</span><span class="p">(</span><span class="n">docs</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_texts</span><span class="p">,</span> <span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="VectorStore.add_documents"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.add_documents">[docs]</a>    <span class="k">def</span> <span class="nf">add_documents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
@@ -698,37 +508,22 @@
 <span class="sd">        Raises:</span>
 <span class="sd">            ValueError: If the number of ids does not match the number of documents.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">upsert</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">upsert</span><span class="p">:</span>
-            <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">add_texts</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">add_texts</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
 
-            <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-                <span class="n">ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;ids&quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;The number of ids must match the number of documents. &quot;</span>
-                        <span class="s2">&quot;Got {len(ids)} ids and {len(documents)} documents.&quot;</span>
-                    <span class="p">)</span>
+                <span class="c1"># If there&#39;s at least one valid ID, we&#39;ll assume that IDs</span>
+                <span class="c1"># should be used.</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+                    <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ids</span>
 
-                <span class="n">documents_</span> <span class="o">=</span> <span class="p">[]</span>
-
-                <span class="k">for</span> <span class="n">id_</span><span class="p">,</span> <span class="n">document</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">documents</span><span class="p">):</span>
-                    <span class="n">doc_with_id</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span>
-                        <span class="n">page_content</span><span class="o">=</span><span class="n">document</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span>
-                        <span class="n">metadata</span><span class="o">=</span><span class="n">document</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-                        <span class="nb">id</span><span class="o">=</span><span class="n">id_</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="n">documents_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_with_id</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">documents_</span> <span class="o">=</span> <span class="n">documents</span>
-
-            <span class="c1"># If upsert has been implemented, we can use it to add documents</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">documents_</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)[</span><span class="s2">&quot;succeeded&quot;</span><span class="p">]</span>
-
-        <span class="c1"># Code path that delegates to add_text for backwards compatibility</span>
-        <span class="c1"># TODO: Handle the case where the user doesn&#39;t provide ids on the Collection</span>
-        <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
-        <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+            <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
+            <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;`add_documents` and `add_texts` has not been implemented &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> &quot;</span>
+        <span class="p">)</span></div>
 
 <div class="viewcode-block" id="VectorStore.aadd_documents"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.aadd_documents">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">aadd_documents</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
@@ -746,41 +541,21 @@
 <span class="sd">        Raises:</span>
 <span class="sd">            ValueError: If the number of IDs does not match the number of documents.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># If either upsert or aupsert has been implemented, we delegate to them!</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">aupsert</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">aupsert</span>
-            <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">upsert</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">upsert</span>
-        <span class="p">):</span>
-            <span class="c1"># If aupsert has been implemented, we can use it to add documents</span>
-            <span class="kn">from</span> <span class="nn">langchain_core.documents</span> <span class="kn">import</span> <span class="n">Document</span>
+        <span class="c1"># If the async method has been overridden, we&#39;ll use that.</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">aadd_texts</span> <span class="o">!=</span> <span class="n">VectorStore</span><span class="o">.</span><span class="n">aadd_texts</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">ids</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
 
-            <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-                <span class="n">ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;ids&quot;</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">&quot;The number of ids must match the number of documents.&quot;</span>
-                        <span class="s2">&quot;Got {len(ids)} ids and {len(documents)} documents.&quot;</span>
-                    <span class="p">)</span>
+                <span class="c1"># If there&#39;s at least one valid ID, we&#39;ll assume that IDs</span>
+                <span class="c1"># should be used.</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+                    <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ids</span>
 
-                <span class="n">documents_</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
+            <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aadd_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-                <span class="k">for</span> <span class="n">id_</span><span class="p">,</span> <span class="n">document</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">documents</span><span class="p">):</span>
-                    <span class="n">doc_with_id</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span>
-                        <span class="n">page_content</span><span class="o">=</span><span class="n">document</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span>
-                        <span class="n">metadata</span><span class="o">=</span><span class="n">document</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
-                        <span class="nb">id</span><span class="o">=</span><span class="n">id_</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="n">documents_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_with_id</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">documents_</span> <span class="o">=</span> <span class="n">documents</span>
-
-            <span class="c1"># The default implementation of aupsert delegates to upsert.</span>
-            <span class="n">upsert_response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aupsert</span><span class="p">(</span><span class="n">documents_</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">upsert_response</span><span class="p">[</span><span class="s2">&quot;succeeded&quot;</span><span class="p">]</span>
-
-        <span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">page_content</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
-        <span class="n">metadatas</span> <span class="o">=</span> <span class="p">[</span><span class="n">doc</span><span class="o">.</span><span class="n">metadata</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">]</span>
-        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">aadd_texts</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">metadatas</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">run_in_executor</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_documents</span><span class="p">,</span> <span class="n">documents</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="VectorStore.search"><a class="viewcode-back" href="../../../vectorstores/langchain_core.vectorstores.base.VectorStore.html#langchain_google_community.bq_storage_vectorstores.bigquery.VectorStore.search">[docs]</a>    <span class="k">def</span> <span class="nf">search</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">search_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return docs most similar to query using a specified search type.</span>
@@ -1554,7 +1329,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>

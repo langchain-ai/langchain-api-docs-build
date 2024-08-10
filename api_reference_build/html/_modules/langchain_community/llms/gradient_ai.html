@@ -317,7 +317,7 @@
         <span class="n">allow_population_by_field_name</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;forbid&quot;</span>
 
-    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">allow_reuse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that api key and python package exists in environment.&quot;&quot;&quot;</span>
 
@@ -328,6 +328,26 @@
             <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;gradient_workspace_id&quot;</span><span class="p">,</span> <span class="s2">&quot;GRADIENT_WORKSPACE_ID&quot;</span>
         <span class="p">)</span>
 
+        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;gradient_api_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
+            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;gradient_api_url&quot;</span><span class="p">,</span> <span class="s2">&quot;GRADIENT_API_URL&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">values</span>
+
+    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">post_init</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Post init validation.&quot;&quot;&quot;</span>
+        <span class="c1"># Can be most to post_init_validation</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">gradientai</span>  <span class="c1"># noqa</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;DeprecationWarning: `GradientLLM` will use &quot;</span>
+                <span class="s2">&quot;`pip install gradientai` in future releases of langchain.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="c1"># Can be most to post_init_validation</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">values</span><span class="p">[</span><span class="s2">&quot;gradient_access_token&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span>
             <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="s2">&quot;gradient_access_token&quot;</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mi">10</span>
@@ -353,20 +373,6 @@
 
             <span class="k">if</span> <span class="mi">0</span> <span class="o">&gt;=</span> <span class="n">kw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max_generated_token_count&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;`max_generated_token_count` must be positive&quot;</span><span class="p">)</span>
-
-        <span class="n">values</span><span class="p">[</span><span class="s2">&quot;gradient_api_url&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span> <span class="s2">&quot;gradient_api_url&quot;</span><span class="p">,</span> <span class="s2">&quot;GRADIENT_API_URL&quot;</span>
-        <span class="p">)</span>
-
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">import</span> <span class="nn">gradientai</span>  <span class="c1"># noqa</span>
-        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-            <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;DeprecationWarning: `GradientLLM` will use &quot;</span>
-                <span class="s2">&quot;`pip install gradientai` in future releases of langchain.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-            <span class="k">pass</span>
 
         <span class="k">return</span> <span class="n">values</span>
 
@@ -646,7 +652,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>

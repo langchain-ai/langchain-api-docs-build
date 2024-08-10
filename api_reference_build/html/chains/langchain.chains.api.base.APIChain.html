@@ -292,6 +292,9 @@
 <dt class="sig sig-object py" id="langchain.chains.api.base.APIChain">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain.chains.api.base.</span></span><span class="sig-name descname"><span class="pre">APIChain</span></span><a class="reference internal" href="../_modules/langchain/chains/api/base.html#APIChain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain.chains.api.base.APIChain" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain.chains.base.Chain.html#langchain.chains.base.Chain" title="langchain.chains.base.Chain"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chain</span></code></a></p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.2.13: </span>This class is deprecated and will be removed in langchain 1.0. See API reference for replacement: <a class="reference external" href="https://api.python.langchain.com/en/latest/chains/langchain.chains.api.base.APIChain.html">https://api.python.langchain.com/en/latest/chains/langchain.chains.api.base.APIChain.html</a></p>
+</div>
 <p>Chain that makes API calls and summarizes the responses to answer a question.</p>
 <dl>
 <dt><em>Security Note</em>: This API chain uses the requests toolkit</dt><dd><p>to make GET, POST, PATCH, PUT, and DELETE requests to an API.</p>
@@ -305,6 +308,112 @@ what network access it has.</p>
 <p>See <a class="reference external" href="https://python.langchain.com/docs/security">https://python.langchain.com/docs/security</a> for more information.</p>
 </dd>
 </dl>
+<p>Note: this class is deprecated. See below for a replacement implementation
+using LangGraph. The benefits of this implementation are:</p>
+<ul class="simple">
+<li><p>Uses LLM tool calling features to encourage properly-formatted API requests;</p></li>
+<li><p>Support for both token-by-token and step-by-step streaming;</p></li>
+<li><p>Support for checkpointing and memory of chat history;</p></li>
+<li><p>Easier to modify or extend (e.g., with additional tools, structured responses, etc.)</p></li>
+</ul>
+<p>Install LangGraph with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>langgraph
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
+
+<span class="kn">from</span> <span class="nn">langchain.chains.api.prompt</span> <span class="kn">import</span> <span class="n">API_URL_PROMPT</span>
+<span class="kn">from</span> <span class="nn">langchain_community.agent_toolkits.openapi.toolkit</span> <span class="kn">import</span> <span class="n">RequestsToolkit</span>
+<span class="kn">from</span> <span class="nn">langchain_community.utilities.requests</span> <span class="kn">import</span> <span class="n">TextRequestsWrapper</span>
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
+<span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">ChatPromptTemplate</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableConfig</span>
+<span class="kn">from</span> <span class="nn">langgraph.graph</span> <span class="kn">import</span> <span class="n">END</span><span class="p">,</span> <span class="n">StateGraph</span>
+<span class="kn">from</span> <span class="nn">langgraph.graph.message</span> <span class="kn">import</span> <span class="n">add_messages</span>
+<span class="kn">from</span> <span class="nn">langgraph.prebuilt.tool_node</span> <span class="kn">import</span> <span class="n">ToolNode</span>
+
+<span class="c1"># NOTE: There are inherent risks in giving models discretion</span>
+<span class="c1"># to execute real-world actions. We must &quot;opt-in&quot; to these</span>
+<span class="c1"># risks by setting allow_dangerous_request=True to use these tools.</span>
+<span class="c1"># This can be dangerous for calling unwanted requests. Please make</span>
+<span class="c1"># sure your custom OpenAPI spec (yaml) is safe and that permissions</span>
+<span class="c1"># associated with the tools are narrowly-scoped.</span>
+<span class="n">ALLOW_DANGEROUS_REQUESTS</span> <span class="o">=</span> <span class="kc">True</span>
+
+<span class="c1"># Subset of spec for https://jsonplaceholder.typicode.com</span>
+<span class="n">api_spec</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">openapi: 3.0.0</span>
+<span class="s2">info:</span>
+<span class="s2">  title: JSONPlaceholder API</span>
+<span class="s2">  version: 1.0.0</span>
+<span class="s2">servers:</span>
+<span class="s2">  - url: https://jsonplaceholder.typicode.com</span>
+<span class="s2">paths:</span>
+<span class="s2">  /posts:</span>
+<span class="s2">    get:</span>
+<span class="s2">      summary: Get posts</span>
+<span class="s2">      parameters: &amp;id001</span>
+<span class="s2">        - name: _limit</span>
+<span class="s2">          in: query</span>
+<span class="s2">          required: false</span>
+<span class="s2">          schema:</span>
+<span class="s2">            type: integer</span>
+<span class="s2">          example: 2</span>
+<span class="s2">          description: Limit the number of results</span>
+<span class="s2">&quot;&quot;&quot;</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">toolkit</span> <span class="o">=</span> <span class="n">RequestsToolkit</span><span class="p">(</span>
+    <span class="n">requests_wrapper</span><span class="o">=</span><span class="n">TextRequestsWrapper</span><span class="p">(</span><span class="n">headers</span><span class="o">=</span><span class="p">{}),</span>  <span class="c1"># no auth required</span>
+    <span class="n">allow_dangerous_requests</span><span class="o">=</span><span class="n">ALLOW_DANGEROUS_REQUESTS</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">tools</span> <span class="o">=</span> <span class="n">toolkit</span><span class="o">.</span><span class="n">get_tools</span><span class="p">()</span>
+
+<span class="n">api_request_chain</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">API_URL_PROMPT</span><span class="o">.</span><span class="n">partial</span><span class="p">(</span><span class="n">api_docs</span><span class="o">=</span><span class="n">api_spec</span><span class="p">)</span>
+    <span class="o">|</span> <span class="n">llm</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">(</span><span class="n">tools</span><span class="p">,</span> <span class="n">tool_choice</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">ChainState</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LangGraph state.&quot;&quot;&quot;</span>
+
+    <span class="n">messages</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="n">add_messages</span><span class="p">]</span>
+
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">acall_request_chain</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">ChainState</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">):</span>
+    <span class="n">last_message</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">api_request_chain</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span>
+        <span class="p">{</span><span class="s2">&quot;question&quot;</span><span class="p">:</span> <span class="n">last_message</span><span class="o">.</span><span class="n">content</span><span class="p">},</span> <span class="n">config</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">response</span><span class="p">]}</span>
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">acall_model</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">ChainState</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">):</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">],</span> <span class="n">config</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">response</span><span class="p">]}</span>
+
+<span class="n">graph_builder</span> <span class="o">=</span> <span class="n">StateGraph</span><span class="p">(</span><span class="n">ChainState</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;call_tool&quot;</span><span class="p">,</span> <span class="n">acall_request_chain</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;execute_tool&quot;</span><span class="p">,</span> <span class="n">ToolNode</span><span class="p">(</span><span class="n">tools</span><span class="p">))</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;call_model&quot;</span><span class="p">,</span> <span class="n">acall_model</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">set_entry_point</span><span class="p">(</span><span class="s2">&quot;call_tool&quot;</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;call_tool&quot;</span><span class="p">,</span> <span class="s2">&quot;execute_tool&quot;</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;execute_tool&quot;</span><span class="p">,</span> <span class="s2">&quot;call_model&quot;</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;call_model&quot;</span><span class="p">,</span> <span class="n">END</span><span class="p">)</span>
+<span class="n">chain</span> <span class="o">=</span> <span class="n">graph_builder</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">example_query</span> <span class="o">=</span> <span class="s2">&quot;Fetch the top two posts. What are their titles?&quot;</span>
+
+<span class="n">events</span> <span class="o">=</span> <span class="n">chain</span><span class="o">.</span><span class="n">astream</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[(</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">example_query</span><span class="p">)]},</span>
+    <span class="n">stream_mode</span><span class="o">=</span><span class="s2">&quot;values&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">async</span> <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+    <span class="n">event</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pretty_print</span><span class="p">()</span>
+</pre></div>
+</div>
 <dl class="py attribute pydantic_field">
 <dt class="sig sig-object py" id="langchain.chains.api.base.APIChain.api_answer_chain">
 <em class="property"><span class="pre">param</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">api_answer_chain</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="langchain.chains.llm.LLMChain.html#langchain.chains.llm.LLMChain" title="langchain.chains.llm.LLMChain"><span class="pre">LLMChain</span></a></em><em class="property"> <span class="pre">[Required]</span></em><a class="headerlink" href="#langchain.chains.api.base.APIChain.api_answer_chain" title="Permalink to this definition">¶</a></dt>
@@ -1448,7 +1557,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>

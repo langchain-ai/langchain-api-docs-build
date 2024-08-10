@@ -245,6 +245,7 @@
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Tuple</span>
 <span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlparse</span>
 
+<span class="kn">from</span> <span class="nn">langchain_core._api</span> <span class="kn">import</span> <span class="n">deprecated</span>
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsyncCallbackManagerForChainRun</span><span class="p">,</span>
     <span class="n">CallbackManagerForChainRun</span><span class="p">,</span>
@@ -293,6 +294,15 @@
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">langchain_community.utilities.requests</span> <span class="kn">import</span> <span class="n">TextRequestsWrapper</span>
 
+    <span class="nd">@deprecated</span><span class="p">(</span>
+        <span class="n">since</span><span class="o">=</span><span class="s2">&quot;0.2.13&quot;</span><span class="p">,</span>
+        <span class="n">message</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">&quot;This class is deprecated and will be removed in langchain 1.0. &quot;</span>
+            <span class="s2">&quot;See API reference for replacement: &quot;</span>
+            <span class="s2">&quot;https://api.python.langchain.com/en/latest/chains/langchain.chains.api.base.APIChain.html&quot;</span>  <span class="c1"># noqa: E501</span>
+        <span class="p">),</span>
+        <span class="n">removal</span><span class="o">=</span><span class="s2">&quot;1.0&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="k">class</span> <span class="nc">APIChain</span><span class="p">(</span><span class="n">Chain</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Chain that makes API calls and summarizes the responses to answer a question.</span>
 
@@ -309,7 +319,117 @@
 <span class="sd">            what network access it has.</span>
 
 <span class="sd">            See https://python.langchain.com/docs/security for more information.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+
+<span class="sd">        Note: this class is deprecated. See below for a replacement implementation</span>
+<span class="sd">        using LangGraph. The benefits of this implementation are:</span>
+
+<span class="sd">        - Uses LLM tool calling features to encourage properly-formatted API requests;</span>
+<span class="sd">        - Support for both token-by-token and step-by-step streaming;</span>
+<span class="sd">        - Support for checkpointing and memory of chat history;</span>
+<span class="sd">        - Easier to modify or extend (e.g., with additional tools, structured responses, etc.)</span>
+
+<span class="sd">        Install LangGraph with:</span>
+
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -U langgraph</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            from typing import Annotated, Sequence</span>
+<span class="sd">            from typing_extensions import TypedDict</span>
+
+<span class="sd">            from langchain.chains.api.prompt import API_URL_PROMPT</span>
+<span class="sd">            from langchain_community.agent_toolkits.openapi.toolkit import RequestsToolkit</span>
+<span class="sd">            from langchain_community.utilities.requests import TextRequestsWrapper</span>
+<span class="sd">            from langchain_core.messages import BaseMessage</span>
+<span class="sd">            from langchain_core.prompts import ChatPromptTemplate</span>
+<span class="sd">            from langchain_openai import ChatOpenAI</span>
+<span class="sd">            from langchain_core.runnables import RunnableConfig</span>
+<span class="sd">            from langgraph.graph import END, StateGraph</span>
+<span class="sd">            from langgraph.graph.message import add_messages</span>
+<span class="sd">            from langgraph.prebuilt.tool_node import ToolNode</span>
+
+<span class="sd">            # NOTE: There are inherent risks in giving models discretion</span>
+<span class="sd">            # to execute real-world actions. We must &quot;opt-in&quot; to these</span>
+<span class="sd">            # risks by setting allow_dangerous_request=True to use these tools.</span>
+<span class="sd">            # This can be dangerous for calling unwanted requests. Please make</span>
+<span class="sd">            # sure your custom OpenAPI spec (yaml) is safe and that permissions</span>
+<span class="sd">            # associated with the tools are narrowly-scoped.</span>
+<span class="sd">            ALLOW_DANGEROUS_REQUESTS = True</span>
+
+<span class="sd">            # Subset of spec for https://jsonplaceholder.typicode.com</span>
+<span class="sd">            api_spec = \&quot;\&quot;\&quot;</span>
+<span class="sd">            openapi: 3.0.0</span>
+<span class="sd">            info:</span>
+<span class="sd">              title: JSONPlaceholder API</span>
+<span class="sd">              version: 1.0.0</span>
+<span class="sd">            servers:</span>
+<span class="sd">              - url: https://jsonplaceholder.typicode.com</span>
+<span class="sd">            paths:</span>
+<span class="sd">              /posts:</span>
+<span class="sd">                get:</span>
+<span class="sd">                  summary: Get posts</span>
+<span class="sd">                  parameters: &amp;id001</span>
+<span class="sd">                    - name: _limit</span>
+<span class="sd">                      in: query</span>
+<span class="sd">                      required: false</span>
+<span class="sd">                      schema:</span>
+<span class="sd">                        type: integer</span>
+<span class="sd">                      example: 2</span>
+<span class="sd">                      description: Limit the number of results</span>
+<span class="sd">            \&quot;\&quot;\&quot;</span>
+
+<span class="sd">            llm = ChatOpenAI(model=&quot;gpt-4o-mini&quot;, temperature=0)</span>
+<span class="sd">            toolkit = RequestsToolkit(</span>
+<span class="sd">                requests_wrapper=TextRequestsWrapper(headers={}),  # no auth required</span>
+<span class="sd">                allow_dangerous_requests=ALLOW_DANGEROUS_REQUESTS,</span>
+<span class="sd">            )</span>
+<span class="sd">            tools = toolkit.get_tools()</span>
+
+<span class="sd">            api_request_chain = (</span>
+<span class="sd">                API_URL_PROMPT.partial(api_docs=api_spec)</span>
+<span class="sd">                | llm.bind_tools(tools, tool_choice=&quot;any&quot;)</span>
+<span class="sd">            )</span>
+
+<span class="sd">            class ChainState(TypedDict):</span>
+<span class="sd">                \&quot;\&quot;\&quot;LangGraph state.\&quot;\&quot;\&quot;</span>
+
+<span class="sd">                messages: Annotated[Sequence[BaseMessage], add_messages]</span>
+
+
+<span class="sd">            async def acall_request_chain(state: ChainState, config: RunnableConfig):</span>
+<span class="sd">                last_message = state[&quot;messages&quot;][-1]</span>
+<span class="sd">                response = await api_request_chain.ainvoke(</span>
+<span class="sd">                    {&quot;question&quot;: last_message.content}, config</span>
+<span class="sd">                )</span>
+<span class="sd">                return {&quot;messages&quot;: [response]}</span>
+
+<span class="sd">            async def acall_model(state: ChainState, config: RunnableConfig):</span>
+<span class="sd">                response = await llm.ainvoke(state[&quot;messages&quot;], config)</span>
+<span class="sd">                return {&quot;messages&quot;: [response]}</span>
+
+<span class="sd">            graph_builder = StateGraph(ChainState)</span>
+<span class="sd">            graph_builder.add_node(&quot;call_tool&quot;, acall_request_chain)</span>
+<span class="sd">            graph_builder.add_node(&quot;execute_tool&quot;, ToolNode(tools))</span>
+<span class="sd">            graph_builder.add_node(&quot;call_model&quot;, acall_model)</span>
+<span class="sd">            graph_builder.set_entry_point(&quot;call_tool&quot;)</span>
+<span class="sd">            graph_builder.add_edge(&quot;call_tool&quot;, &quot;execute_tool&quot;)</span>
+<span class="sd">            graph_builder.add_edge(&quot;execute_tool&quot;, &quot;call_model&quot;)</span>
+<span class="sd">            graph_builder.add_edge(&quot;call_model&quot;, END)</span>
+<span class="sd">            chain = graph_builder.compile()</span>
+
+<span class="sd">        .. code-block:: python</span>
+
+<span class="sd">            example_query = &quot;Fetch the top two posts. What are their titles?&quot;</span>
+
+<span class="sd">            events = chain.astream(</span>
+<span class="sd">                {&quot;messages&quot;: [(&quot;user&quot;, example_query)]},</span>
+<span class="sd">                stream_mode=&quot;values&quot;,</span>
+<span class="sd">            )</span>
+<span class="sd">            async for event in events:</span>
+<span class="sd">                event[&quot;messages&quot;][-1].pretty_print()</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
         <span class="n">api_request_chain</span><span class="p">:</span> <span class="n">LLMChain</span>
         <span class="n">api_answer_chain</span><span class="p">:</span> <span class="n">LLMChain</span>
@@ -502,7 +622,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>

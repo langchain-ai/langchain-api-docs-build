@@ -700,8 +700,46 @@
         <span class="k">assert</span> <span class="n">db</span><span class="o">.</span><span class="n">last_query_ok</span><span class="p">(),</span> <span class="n">response</span>
         <span class="k">return</span> <span class="n">response</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;FindDescriptorSet&quot;</span><span class="p">][</span><span class="s2">&quot;entities&quot;</span><span class="p">]</span></div>
 
-<div class="viewcode-block" id="ApertureDB.upsert"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.aperturedb.ApertureDB.html#langchain_community.vectorstores.aperturedb.ApertureDB.upsert">[docs]</a>    <span class="nd">@override</span>
-    <span class="k">def</span> <span class="nf">upsert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UpsertResponse</span><span class="p">:</span>
+<div class="viewcode-block" id="ApertureDB.add_documents"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.aperturedb.ApertureDB.html#langchain_community.vectorstores.aperturedb.ApertureDB.add_documents">[docs]</a>    <span class="k">def</span> <span class="nf">add_documents</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">documents</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add or update documents in the vectorstore.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            documents: Documents to add to the vectorstore.</span>
+<span class="sd">            kwargs: Additional keyword arguments.</span>
+<span class="sd">                if kwargs contains ids and documents contain ids,</span>
+<span class="sd">                the ids in the kwargs will receive precedence.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            List of IDs of the added texts.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the number of ids does not match the number of documents.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="s2">&quot;ids&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;ids&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">ids</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">documents</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;The number of ids must match the number of documents. &quot;</span>
+                    <span class="s2">&quot;Got {len(ids)} ids and {len(documents)} documents.&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">documents_</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="k">for</span> <span class="n">id_</span><span class="p">,</span> <span class="n">document</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">documents</span><span class="p">):</span>
+                <span class="n">doc_with_id</span> <span class="o">=</span> <span class="n">Document</span><span class="p">(</span>
+                    <span class="n">page_content</span><span class="o">=</span><span class="n">document</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="n">document</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span>
+                    <span class="nb">id</span><span class="o">=</span><span class="n">id_</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">documents_</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_with_id</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">documents_</span> <span class="o">=</span> <span class="n">documents</span>
+
+        <span class="c1"># If upsert has been implemented, we can use it to add documents</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">upsert</span><span class="p">(</span><span class="n">documents_</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)[</span><span class="s2">&quot;succeeded&quot;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="ApertureDB.upsert"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.aperturedb.ApertureDB.html#langchain_community.vectorstores.aperturedb.ApertureDB.upsert">[docs]</a>    <span class="k">def</span> <span class="nf">upsert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Document</span><span class="p">],</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UpsertResponse</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Insert or update items</span>
 
 <span class="sd">        Updating documents is dependent on the documents&#39; `id` attribute.</span>
@@ -762,7 +800,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>

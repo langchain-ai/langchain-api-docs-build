@@ -246,14 +246,14 @@
 
 <span class="kn">from</span> <span class="nn">langchain_core.callbacks</span> <span class="kn">import</span> <span class="n">CallbackManagerForChainRun</span>
 <span class="kn">from</span> <span class="nn">langchain_core.language_models</span> <span class="kn">import</span> <span class="n">BaseLanguageModel</span>
-<span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseLLMOutputParser</span>
+<span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="n">BaseOutputParser</span><span class="p">,</span> <span class="n">StrOutputParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers.json</span> <span class="kn">import</span> <span class="n">SimpleJsonOutputParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.prompts</span> <span class="kn">import</span> <span class="n">BasePromptTemplate</span>
 <span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">root_validator</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">Runnable</span>
 
 <span class="kn">from</span> <span class="nn">langchain.chains.base</span> <span class="kn">import</span> <span class="n">Chain</span>
 <span class="kn">from</span> <span class="nn">langchain.chains.elasticsearch_database.prompts</span> <span class="kn">import</span> <span class="n">ANSWER_PROMPT</span><span class="p">,</span> <span class="n">DSL_PROMPT</span>
-<span class="kn">from</span> <span class="nn">langchain.chains.llm</span> <span class="kn">import</span> <span class="n">LLMChain</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">elasticsearch</span> <span class="kn">import</span> <span class="n">Elasticsearch</span>
@@ -275,9 +275,9 @@
 <span class="sd">            db_chain = ElasticsearchDatabaseChain.from_llm(OpenAI(), database)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="n">query_chain</span><span class="p">:</span> <span class="n">LLMChain</span>
+    <span class="n">query_chain</span><span class="p">:</span> <span class="n">Runnable</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Chain for creating the ES query.&quot;&quot;&quot;</span>
-    <span class="n">answer_chain</span><span class="p">:</span> <span class="n">LLMChain</span>
+    <span class="n">answer_chain</span><span class="p">:</span> <span class="n">Runnable</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Chain for answering the user question.&quot;&quot;&quot;</span>
     <span class="n">database</span><span class="p">:</span> <span class="n">Any</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Elasticsearch database to connect to of type elasticsearch.Elasticsearch.&quot;&quot;&quot;</span>
@@ -375,9 +375,9 @@
         <span class="n">intermediate_steps</span><span class="p">:</span> <span class="n">List</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">intermediate_steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">query_inputs</span><span class="p">)</span>  <span class="c1"># input: es generation</span>
-            <span class="n">es_cmd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_chain</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-                <span class="n">callbacks</span><span class="o">=</span><span class="n">_run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">(),</span>
-                <span class="o">**</span><span class="n">query_inputs</span><span class="p">,</span>
+            <span class="n">es_cmd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">query_chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+                <span class="n">query_inputs</span><span class="p">,</span>
+                <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;callbacks&quot;</span><span class="p">:</span> <span class="n">_run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()},</span>
             <span class="p">)</span>
 
             <span class="n">_run_manager</span><span class="o">.</span><span class="n">on_text</span><span class="p">(</span><span class="n">es_cmd</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
@@ -394,9 +394,9 @@
             <span class="n">_run_manager</span><span class="o">.</span><span class="n">on_text</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Answer:&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
             <span class="n">answer_inputs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">result</span><span class="p">,</span> <span class="s2">&quot;input&quot;</span><span class="p">:</span> <span class="n">input_text</span><span class="p">}</span>
             <span class="n">intermediate_steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">answer_inputs</span><span class="p">)</span>  <span class="c1"># input: final answer</span>
-            <span class="n">final_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">answer_chain</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
-                <span class="n">callbacks</span><span class="o">=</span><span class="n">_run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">(),</span>
-                <span class="o">**</span><span class="n">answer_inputs</span><span class="p">,</span>
+            <span class="n">final_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">answer_chain</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span>
+                <span class="n">answer_inputs</span><span class="p">,</span>
+                <span class="n">config</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;callbacks&quot;</span><span class="p">:</span> <span class="n">_run_manager</span><span class="o">.</span><span class="n">get_child</span><span class="p">()},</span>
             <span class="p">)</span>
 
             <span class="n">intermediate_steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">final_result</span><span class="p">)</span>  <span class="c1"># output: final answer</span>
@@ -423,7 +423,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">query_prompt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BasePromptTemplate</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">answer_prompt</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BasePromptTemplate</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">query_output_parser</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseLLMOutputParser</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">query_output_parser</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseOutputParser</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ElasticsearchDatabaseChain</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Convenience method to construct ElasticsearchDatabaseChain from an LLM.</span>
@@ -439,11 +439,9 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">query_prompt</span> <span class="o">=</span> <span class="n">query_prompt</span> <span class="ow">or</span> <span class="n">DSL_PROMPT</span>
         <span class="n">query_output_parser</span> <span class="o">=</span> <span class="n">query_output_parser</span> <span class="ow">or</span> <span class="n">SimpleJsonOutputParser</span><span class="p">()</span>
-        <span class="n">query_chain</span> <span class="o">=</span> <span class="n">LLMChain</span><span class="p">(</span>
-            <span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">query_prompt</span><span class="p">,</span> <span class="n">output_parser</span><span class="o">=</span><span class="n">query_output_parser</span>
-        <span class="p">)</span>
+        <span class="n">query_chain</span> <span class="o">=</span> <span class="n">query_prompt</span> <span class="o">|</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">query_output_parser</span>
         <span class="n">answer_prompt</span> <span class="o">=</span> <span class="n">answer_prompt</span> <span class="ow">or</span> <span class="n">ANSWER_PROMPT</span>
-        <span class="n">answer_chain</span> <span class="o">=</span> <span class="n">LLMChain</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">llm</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="n">answer_prompt</span><span class="p">)</span>
+        <span class="n">answer_chain</span> <span class="o">=</span> <span class="n">answer_prompt</span> <span class="o">|</span> <span class="n">llm</span> <span class="o">|</span> <span class="n">StrOutputParser</span><span class="p">()</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
             <span class="n">query_chain</span><span class="o">=</span><span class="n">query_chain</span><span class="p">,</span>
             <span class="n">answer_chain</span><span class="o">=</span><span class="n">answer_chain</span><span class="p">,</span>
@@ -458,7 +456,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 09, 2024.
+                                on Aug 10, 2024.
                 </footer>
             </div>
         </div>
