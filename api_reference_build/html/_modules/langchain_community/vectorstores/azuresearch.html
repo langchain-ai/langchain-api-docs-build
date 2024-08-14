@@ -240,6 +240,7 @@
   <h1>Source code for langchain_community.vectorstores.azuresearch</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">asyncio</span>
 <span class="kn">import</span> <span class="nn">base64</span>
 <span class="kn">import</span> <span class="nn">itertools</span>
 <span class="kn">import</span> <span class="nn">json</span>
@@ -281,7 +282,12 @@
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">azure.search.documents</span> <span class="kn">import</span> <span class="n">SearchClient</span><span class="p">,</span> <span class="n">SearchItemPaged</span>
-    <span class="kn">from</span> <span class="nn">azure.search.documents.aio</span> <span class="kn">import</span> <span class="n">SearchClient</span> <span class="k">as</span> <span class="n">AsyncSearchClient</span>
+    <span class="kn">from</span> <span class="nn">azure.search.documents.aio</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="n">AsyncSearchItemPaged</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="kn">from</span> <span class="nn">azure.search.documents.aio</span> <span class="kn">import</span> <span class="p">(</span>
+        <span class="n">SearchClient</span> <span class="k">as</span> <span class="n">AsyncSearchClient</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="kn">from</span> <span class="nn">azure.search.documents.indexes.models</span> <span class="kn">import</span> <span class="p">(</span>
         <span class="n">CorsOptions</span><span class="p">,</span>
         <span class="n">ScoringProfile</span><span class="p">,</span>
@@ -600,6 +606,31 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_user_agent</span> <span class="o">=</span> <span class="n">user_agent</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cors_options</span> <span class="o">=</span> <span class="n">cors_options</span></div>
 
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Close the sync client</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;client&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c1"># Close the async client</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;async_client&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="p">:</span>
+            <span class="c1"># Check if we&#39;re in an existing event loop</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">loop</span><span class="o">.</span><span class="n">is_running</span><span class="p">():</span>
+                    <span class="c1"># Schedule the coroutine to close the async client</span>
+                    <span class="n">loop</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">close</span><span class="p">())</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># If no event loop is running, run the coroutine directly</span>
+                    <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">close</span><span class="p">())</span>
+            <span class="k">except</span> <span class="ne">RuntimeError</span><span class="p">:</span>
+                <span class="c1"># Handle the case where there&#39;s no event loop</span>
+                <span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">new_event_loop</span><span class="p">()</span>
+                <span class="n">asyncio</span><span class="o">.</span><span class="n">set_event_loop</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">loop</span><span class="o">.</span><span class="n">run_until_complete</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">close</span><span class="p">())</span>
+                <span class="k">finally</span><span class="p">:</span>
+                    <span class="n">loop</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">embeddings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Embeddings</span><span class="p">]:</span>
         <span class="c1"># TODO: Support embedding object directly</span>
@@ -758,21 +789,19 @@
             <span class="n">ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
             <span class="c1"># Upload data in batches</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="n">MAX_UPLOAD_BATCH_SIZE</span><span class="p">:</span>
-                <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span> <span class="k">as</span> <span class="n">async_client</span><span class="p">:</span>
-                    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">async_client</span><span class="o">.</span><span class="n">upload_documents</span><span class="p">(</span><span class="n">documents</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
-                    <span class="c1"># Check if all documents were successfully uploaded</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">succeeded</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">response</span><span class="p">):</span>
-                        <span class="k">raise</span> <span class="n">LangChainException</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-                    <span class="c1"># Reset data</span>
-                    <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">upload_documents</span><span class="p">(</span><span class="n">documents</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+                <span class="c1"># Check if all documents were successfully uploaded</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">succeeded</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">response</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="n">LangChainException</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+                <span class="c1"># Reset data</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="c1"># Considering case where data is an exact multiple of batch-size entries</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">ids</span>
 
         <span class="c1"># Upload data to index</span>
-        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span> <span class="k">as</span> <span class="n">async_client</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">async_client</span><span class="o">.</span><span class="n">upload_documents</span><span class="p">(</span><span class="n">documents</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">upload_documents</span><span class="p">(</span><span class="n">documents</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
         <span class="c1"># Check if all documents were successfully uploaded</span>
         <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">succeeded</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">response</span><span class="p">):</span>
             <span class="k">return</span> <span class="n">ids</span>
@@ -806,9 +835,8 @@
 <span class="sd">            False otherwise.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">ids</span><span class="p">:</span>
-            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span> <span class="k">as</span> <span class="n">async_client</span><span class="p">:</span>
-                <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="n">async_client</span><span class="o">.</span><span class="n">delete_documents</span><span class="p">([{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">])</span>
-                <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">res</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">delete_documents</span><span class="p">([{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">])</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">res</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span></div>
 
@@ -988,7 +1016,7 @@
             <span class="n">embedding</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">_results_to_documents</span><span class="p">(</span><span class="n">results</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">_aresults_to_documents</span><span class="p">(</span><span class="n">results</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="AzureSearch.max_marginal_relevance_search_with_score"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.azuresearch.AzureSearch.html#langchain_community.vectorstores.azuresearch.AzureSearch.max_marginal_relevance_search_with_score">[docs]</a>    <span class="k">def</span> <span class="nf">max_marginal_relevance_search_with_score</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1137,7 +1165,7 @@
             <span class="n">embedding</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">_results_to_documents</span><span class="p">(</span><span class="n">results</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="k">await</span> <span class="n">_aresults_to_documents</span><span class="p">(</span><span class="n">results</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="AzureSearch.hybrid_search_with_relevance_scores"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.azuresearch.AzureSearch.html#langchain_community.vectorstores.azuresearch.AzureSearch.hybrid_search_with_relevance_scores">[docs]</a>    <span class="k">def</span> <span class="nf">hybrid_search_with_relevance_scores</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1290,7 +1318,7 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">filters</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SearchItemPaged</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncSearchItemPaged</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform vector or hybrid search in the Azure search index.</span>
 
 <span class="sd">        Args:</span>
@@ -1304,20 +1332,19 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="kn">from</span> <span class="nn">azure.search.documents.models</span> <span class="kn">import</span> <span class="n">VectorizedQuery</span>
 
-        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span> <span class="k">as</span> <span class="n">async_client</span><span class="p">:</span>
-            <span class="k">return</span> <span class="k">await</span> <span class="n">async_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
-                <span class="n">search_text</span><span class="o">=</span><span class="n">text_query</span><span class="p">,</span>
-                <span class="n">vector_queries</span><span class="o">=</span><span class="p">[</span>
-                    <span class="n">VectorizedQuery</span><span class="p">(</span>
-                        <span class="n">vector</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
-                        <span class="n">k_nearest_neighbors</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-                        <span class="n">fields</span><span class="o">=</span><span class="n">FIELDS_CONTENT_VECTOR</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">],</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
-                <span class="n">top</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+            <span class="n">search_text</span><span class="o">=</span><span class="n">text_query</span><span class="p">,</span>
+            <span class="n">vector_queries</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">VectorizedQuery</span><span class="p">(</span>
+                    <span class="n">vector</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">embedding</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+                    <span class="n">k_nearest_neighbors</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                    <span class="n">fields</span><span class="o">=</span><span class="n">FIELDS_CONTENT_VECTOR</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">],</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
+            <span class="n">top</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="AzureSearch.semantic_hybrid_search"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.azuresearch.AzureSearch.html#langchain_community.vectorstores.azuresearch.AzureSearch.semantic_hybrid_search">[docs]</a>    <span class="k">def</span> <span class="nf">semantic_hybrid_search</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span>
@@ -1529,71 +1556,68 @@
         <span class="kn">from</span> <span class="nn">azure.search.documents.models</span> <span class="kn">import</span> <span class="n">VectorizedQuery</span>
 
         <span class="n">vector</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_aembed_query</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>
-        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span> <span class="k">as</span> <span class="n">async_client</span><span class="p">:</span>
-            <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="n">async_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
-                <span class="n">search_text</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
-                <span class="n">vector_queries</span><span class="o">=</span><span class="p">[</span>
-                    <span class="n">VectorizedQuery</span><span class="p">(</span>
-                        <span class="n">vector</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">vector</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
-                        <span class="n">k_nearest_neighbors</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-                        <span class="n">fields</span><span class="o">=</span><span class="n">FIELDS_CONTENT_VECTOR</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">],</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
-                <span class="n">query_type</span><span class="o">=</span><span class="s2">&quot;semantic&quot;</span><span class="p">,</span>
-                <span class="n">semantic_configuration_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">semantic_configuration_name</span><span class="p">,</span>
-                <span class="n">query_caption</span><span class="o">=</span><span class="s2">&quot;extractive&quot;</span><span class="p">,</span>
-                <span class="n">query_answer</span><span class="o">=</span><span class="s2">&quot;extractive&quot;</span><span class="p">,</span>
-                <span class="n">top</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
-                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="c1"># Get Semantic Answers</span>
-            <span class="n">semantic_answers</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">results</span><span class="o">.</span><span class="n">get_answers</span><span class="p">())</span> <span class="ow">or</span> <span class="p">[]</span>
-            <span class="n">semantic_answers_dict</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
-            <span class="k">for</span> <span class="n">semantic_answer</span> <span class="ow">in</span> <span class="n">semantic_answers</span><span class="p">:</span>
-                <span class="n">semantic_answers_dict</span><span class="p">[</span><span class="n">semantic_answer</span><span class="o">.</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">semantic_answer</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
-                    <span class="s2">&quot;highlights&quot;</span><span class="p">:</span> <span class="n">semantic_answer</span><span class="o">.</span><span class="n">highlights</span><span class="p">,</span>
-                <span class="p">}</span>
-            <span class="c1"># Convert results to Document objects</span>
-            <span class="n">docs</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="p">(</span>
-                    <span class="n">Document</span><span class="p">(</span>
-                        <span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">FIELDS_CONTENT</span><span class="p">),</span>
-                        <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
-                            <span class="o">**</span><span class="p">(</span>
-                                <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="n">FIELDS_METADATA</span><span class="p">])</span>
-                                <span class="k">if</span> <span class="n">FIELDS_METADATA</span> <span class="ow">in</span> <span class="n">result</span>
-                                <span class="k">else</span> <span class="p">{</span>
-                                    <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
-                                    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-                                    <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="n">FIELDS_CONTENT_VECTOR</span>
-                                <span class="p">}</span>
-                            <span class="p">),</span>
-                            <span class="o">**</span><span class="p">{</span>
-                                <span class="s2">&quot;captions&quot;</span><span class="p">:</span> <span class="p">{</span>
-                                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;@search.captions&quot;</span><span class="p">,</span> <span class="p">[{}])[</span>
-                                        <span class="mi">0</span>
-                                    <span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
-                                    <span class="s2">&quot;highlights&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;@search.captions&quot;</span><span class="p">,</span> <span class="p">[{}])[</span>
-                                        <span class="mi">0</span>
-                                    <span class="p">]</span><span class="o">.</span><span class="n">highlights</span><span class="p">,</span>
-                                <span class="p">}</span>
-                                <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;@search.captions&quot;</span><span class="p">)</span>
-                                <span class="k">else</span> <span class="p">{},</span>
-                                <span class="s2">&quot;answers&quot;</span><span class="p">:</span> <span class="n">semantic_answers_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-                                    <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">FIELDS_ID</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
-                                    <span class="s2">&quot;&quot;</span><span class="p">,</span>
-                                <span class="p">),</span>
-                            <span class="p">},</span>
-                        <span class="p">},</span>
-                    <span class="p">),</span>
-                    <span class="nb">float</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;@search.score&quot;</span><span class="p">]),</span>
-                    <span class="nb">float</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;@search.reranker_score&quot;</span><span class="p">]),</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+            <span class="n">search_text</span><span class="o">=</span><span class="n">query</span><span class="p">,</span>
+            <span class="n">vector_queries</span><span class="o">=</span><span class="p">[</span>
+                <span class="n">VectorizedQuery</span><span class="p">(</span>
+                    <span class="n">vector</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">vector</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+                    <span class="n">k_nearest_neighbors</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+                    <span class="n">fields</span><span class="o">=</span><span class="n">FIELDS_CONTENT_VECTOR</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span>
-            <span class="p">]</span>
-            <span class="k">return</span> <span class="n">docs</span></div>
+            <span class="p">],</span>
+            <span class="nb">filter</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
+            <span class="n">query_type</span><span class="o">=</span><span class="s2">&quot;semantic&quot;</span><span class="p">,</span>
+            <span class="n">semantic_configuration_name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">semantic_configuration_name</span><span class="p">,</span>
+            <span class="n">query_caption</span><span class="o">=</span><span class="s2">&quot;extractive&quot;</span><span class="p">,</span>
+            <span class="n">query_answer</span><span class="o">=</span><span class="s2">&quot;extractive&quot;</span><span class="p">,</span>
+            <span class="n">top</span><span class="o">=</span><span class="n">k</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Get Semantic Answers</span>
+        <span class="n">semantic_answers</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">results</span><span class="o">.</span><span class="n">get_answers</span><span class="p">())</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="n">semantic_answers_dict</span><span class="p">:</span> <span class="n">Dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">semantic_answer</span> <span class="ow">in</span> <span class="n">semantic_answers</span><span class="p">:</span>
+            <span class="n">semantic_answers_dict</span><span class="p">[</span><span class="n">semantic_answer</span><span class="o">.</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">semantic_answer</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+                <span class="s2">&quot;highlights&quot;</span><span class="p">:</span> <span class="n">semantic_answer</span><span class="o">.</span><span class="n">highlights</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="c1"># Convert results to Document objects</span>
+        <span class="n">docs</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span>
+                <span class="n">Document</span><span class="p">(</span>
+                    <span class="n">page_content</span><span class="o">=</span><span class="n">result</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">FIELDS_CONTENT</span><span class="p">),</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                        <span class="o">**</span><span class="p">(</span>
+                            <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="n">FIELDS_METADATA</span><span class="p">])</span>
+                            <span class="k">if</span> <span class="n">FIELDS_METADATA</span> <span class="ow">in</span> <span class="n">result</span>
+                            <span class="k">else</span> <span class="p">{</span>
+                                <span class="n">k</span><span class="p">:</span> <span class="n">v</span>
+                                <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                                <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="n">FIELDS_CONTENT_VECTOR</span>
+                            <span class="p">}</span>
+                        <span class="p">),</span>
+                        <span class="o">**</span><span class="p">{</span>
+                            <span class="s2">&quot;captions&quot;</span><span class="p">:</span> <span class="p">{</span>
+                                <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;@search.captions&quot;</span><span class="p">,</span> <span class="p">[{}])[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
+                                <span class="s2">&quot;highlights&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;@search.captions&quot;</span><span class="p">,</span> <span class="p">[{}])[</span>
+                                    <span class="mi">0</span>
+                                <span class="p">]</span><span class="o">.</span><span class="n">highlights</span><span class="p">,</span>
+                            <span class="p">}</span>
+                            <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;@search.captions&quot;</span><span class="p">)</span>
+                            <span class="k">else</span> <span class="p">{},</span>
+                            <span class="s2">&quot;answers&quot;</span><span class="p">:</span> <span class="n">semantic_answers_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                                <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">FIELDS_ID</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+                                <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                            <span class="p">),</span>
+                        <span class="p">},</span>
+                    <span class="p">},</span>
+                <span class="p">),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;@search.score&quot;</span><span class="p">]),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;@search.reranker_score&quot;</span><span class="p">]),</span>
+            <span class="p">)</span>
+            <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="n">docs</span></div>
 
 <div class="viewcode-block" id="AzureSearch.from_texts"><a class="viewcode-back" href="../../../vectorstores/langchain_community.vectorstores.azuresearch.AzureSearch.html#langchain_community.vectorstores.azuresearch.AzureSearch.from_texts">[docs]</a>    <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">from_texts</span><span class="p">(</span>
@@ -1869,6 +1893,19 @@
     <span class="k">return</span> <span class="n">docs</span>
 
 
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_aresults_to_documents</span><span class="p">(</span>
+    <span class="n">results</span><span class="p">:</span> <span class="n">AsyncSearchItemPaged</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Document</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+    <span class="n">docs</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span>
+            <span class="n">_result_to_document</span><span class="p">(</span><span class="n">result</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;@search.score&quot;</span><span class="p">]),</span>
+        <span class="p">)</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span>
+    <span class="p">]</span>
+    <span class="k">return</span> <span class="n">docs</span>
+
+
 <span class="k">async</span> <span class="k">def</span> <span class="nf">_areorder_results_with_maximal_marginal_relevance</span><span class="p">(</span>
     <span class="n">results</span><span class="p">:</span> <span class="n">SearchItemPaged</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span>
     <span class="n">query_embedding</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -1882,7 +1919,7 @@
             <span class="nb">float</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;@search.score&quot;</span><span class="p">]),</span>
             <span class="n">result</span><span class="p">[</span><span class="n">FIELDS_CONTENT_VECTOR</span><span class="p">],</span>
         <span class="p">)</span>
-        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span>
+        <span class="k">async</span> <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span>
     <span class="p">]</span>
     <span class="n">documents</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">vectors</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">docs</span><span class="p">))</span>
 
@@ -1962,7 +1999,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 13, 2024.
+                                on Aug 14, 2024.
                 </footer>
             </div>
         </div>
