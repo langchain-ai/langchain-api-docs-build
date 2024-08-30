@@ -11,7 +11,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain.chains.llm_math.base.LLMMathChain &mdash; 🦜🔗 LangChain 0.2.13</title>
+        <title>langchain.chains.llm_math.base.LLMMathChain &mdash; 🦜🔗 LangChain 0.2.15</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/chains/langchain.chains.llm_math.base.LLMMathChain.html"/>
@@ -85,6 +85,9 @@
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
+        </li>
+        <li class="nav-item">
+          <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../box_api_reference.html">box</a>
         </li>
         <li class="nav-item">
           <a class="sk-nav-link nav-link nav-more-item-mobile-items" href="../chroma_api_reference.html">chroma</a>
@@ -179,6 +182,7 @@
               <a class="sk-nav-dropdown-item dropdown-item" href="../astradb_api_reference.html">astradb</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../aws_api_reference.html">aws</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../azure_dynamic_sessions_api_reference.html">azure-dynamic-sessions</a>
+              <a class="sk-nav-dropdown-item dropdown-item" href="../box_api_reference.html">box</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../chroma_api_reference.html">chroma</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../cohere_api_reference.html">cohere</a>
               <a class="sk-nav-dropdown-item dropdown-item" href="../couchbase_api_reference.html">couchbase</a>
@@ -290,7 +294,114 @@
 <dt class="sig sig-object py" id="langchain.chains.llm_math.base.LLMMathChain">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">langchain.chains.llm_math.base.</span></span><span class="sig-name descname"><span class="pre">LLMMathChain</span></span><a class="reference internal" href="../_modules/langchain/chains/llm_math/base.html#LLMMathChain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#langchain.chains.llm_math.base.LLMMathChain" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="langchain.chains.base.Chain.html#langchain.chains.base.Chain" title="langchain.chains.base.Chain"><code class="xref py py-class docutils literal notranslate"><span class="pre">Chain</span></code></a></p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.2.13: </span>This class is deprecated and will be removed in langchain 1.0. See API reference for replacement: <a class="reference external" href="https://api.python.langchain.com/en/latest/chains/langchain.chains.llm_math.base.LLMMathChain.html">https://api.python.langchain.com/en/latest/chains/langchain.chains.llm_math.base.LLMMathChain.html</a></p>
+</div>
 <p>Chain that interprets a prompt and executes python code to do math.</p>
+<dl>
+<dt>Note: this class is deprecated. See below for a replacement implementation</dt><dd><p>using LangGraph. The benefits of this implementation are:</p>
+<ul class="simple">
+<li><p>Uses LLM tool calling features;</p></li>
+<li><p>Support for both token-by-token and step-by-step streaming;</p></li>
+<li><p>Support for checkpointing and memory of chat history;</p></li>
+<li><p>Easier to modify or extend (e.g., with additional tools, structured responses, etc.)</p></li>
+</ul>
+<p>Install LangGraph with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>langgraph
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Annotated</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">BaseMessage</span>
+<span class="kn">from</span> <span class="nn">langchain_core.runnables</span> <span class="kn">import</span> <span class="n">RunnableConfig</span>
+<span class="kn">from</span> <span class="nn">langchain_core.tools</span> <span class="kn">import</span> <span class="n">tool</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">ChatOpenAI</span>
+<span class="kn">from</span> <span class="nn">langgraph.graph</span> <span class="kn">import</span> <span class="n">END</span><span class="p">,</span> <span class="n">StateGraph</span>
+<span class="kn">from</span> <span class="nn">langgraph.graph.message</span> <span class="kn">import</span> <span class="n">add_messages</span>
+<span class="kn">from</span> <span class="nn">langgraph.prebuilt.tool_node</span> <span class="kn">import</span> <span class="n">ToolNode</span>
+<span class="kn">import</span> <span class="nn">numexpr</span>
+<span class="kn">from</span> <span class="nn">typing_extensions</span> <span class="kn">import</span> <span class="n">TypedDict</span>
+
+<span class="nd">@tool</span>
+<span class="k">def</span> <span class="nf">calculator</span><span class="p">(</span><span class="n">expression</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate expression using Python&#39;s numexpr library.</span>
+
+<span class="sd">    Expression should be a single line mathematical expression</span>
+<span class="sd">    that solves the problem.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &quot;37593 * 67&quot; for &quot;37593 times 67&quot;</span>
+<span class="sd">        &quot;37593**(1/5)&quot; for &quot;37593^(1/5)&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">local_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;pi&quot;</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="s2">&quot;e&quot;</span><span class="p">:</span> <span class="n">math</span><span class="o">.</span><span class="n">e</span><span class="p">}</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span>
+        <span class="n">numexpr</span><span class="o">.</span><span class="n">evaluate</span><span class="p">(</span>
+            <span class="n">expression</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+            <span class="n">global_dict</span><span class="o">=</span><span class="p">{},</span>  <span class="c1"># restrict access to globals</span>
+            <span class="n">local_dict</span><span class="o">=</span><span class="n">local_dict</span><span class="p">,</span>  <span class="c1"># add common mathematical functions</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">ChatOpenAI</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">,</span> <span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">tools</span> <span class="o">=</span> <span class="p">[</span><span class="n">calculator</span><span class="p">]</span>
+<span class="n">llm_with_tools</span> <span class="o">=</span> <span class="n">llm</span><span class="o">.</span><span class="n">bind_tools</span><span class="p">(</span><span class="n">tools</span><span class="p">,</span> <span class="n">tool_choice</span><span class="o">=</span><span class="s2">&quot;any&quot;</span><span class="p">)</span>
+
+<span class="k">class</span> <span class="nc">ChainState</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LangGraph state.&quot;&quot;&quot;</span>
+
+    <span class="n">messages</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="n">BaseMessage</span><span class="p">],</span> <span class="n">add_messages</span><span class="p">]</span>
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">acall_chain</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">ChainState</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">):</span>
+    <span class="n">last_message</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm_with_tools</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">],</span> <span class="n">config</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">response</span><span class="p">]}</span>
+
+<span class="k">async</span> <span class="k">def</span> <span class="nf">acall_model</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">ChainState</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">RunnableConfig</span><span class="p">):</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">llm</span><span class="o">.</span><span class="n">ainvoke</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">],</span> <span class="n">config</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">response</span><span class="p">]}</span>
+
+<span class="n">graph_builder</span> <span class="o">=</span> <span class="n">StateGraph</span><span class="p">(</span><span class="n">ChainState</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;call_tool&quot;</span><span class="p">,</span> <span class="n">acall_chain</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;execute_tool&quot;</span><span class="p">,</span> <span class="n">ToolNode</span><span class="p">(</span><span class="n">tools</span><span class="p">))</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_node</span><span class="p">(</span><span class="s2">&quot;call_model&quot;</span><span class="p">,</span> <span class="n">acall_model</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">set_entry_point</span><span class="p">(</span><span class="s2">&quot;call_tool&quot;</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;call_tool&quot;</span><span class="p">,</span> <span class="s2">&quot;execute_tool&quot;</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;execute_tool&quot;</span><span class="p">,</span> <span class="s2">&quot;call_model&quot;</span><span class="p">)</span>
+<span class="n">graph_builder</span><span class="o">.</span><span class="n">add_edge</span><span class="p">(</span><span class="s2">&quot;call_model&quot;</span><span class="p">,</span> <span class="n">END</span><span class="p">)</span>
+<span class="n">chain</span> <span class="o">=</span> <span class="n">graph_builder</span><span class="o">.</span><span class="n">compile</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">example_query</span> <span class="o">=</span> <span class="s2">&quot;What is 551368 divided by 82&quot;</span>
+
+<span class="n">events</span> <span class="o">=</span> <span class="n">chain</span><span class="o">.</span><span class="n">astream</span><span class="p">(</span>
+    <span class="p">{</span><span class="s2">&quot;messages&quot;</span><span class="p">:</span> <span class="p">[(</span><span class="s2">&quot;user&quot;</span><span class="p">,</span> <span class="n">example_query</span><span class="p">)]},</span>
+    <span class="n">stream_mode</span><span class="o">=</span><span class="s2">&quot;values&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">async</span> <span class="k">for</span> <span class="n">event</span> <span class="ow">in</span> <span class="n">events</span><span class="p">:</span>
+    <span class="n">event</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">pretty_print</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>================================ Human Message =================================
+
+What is 551368 divided by 82
+================================== Ai Message ==================================
+Tool Calls:
+calculator (call_MEiGXuJjJ7wGU4aOT86QuGJS)
+Call ID: call_MEiGXuJjJ7wGU4aOT86QuGJS
+Args:
+    expression: 551368 / 82
+================================= Tool Message =================================
+Name: calculator
+
+6724.0
+================================== Ai Message ==================================
+
+551368 divided by 82 equals 6724.
+</pre></div>
+</div>
+</dd>
+</dl>
 <p class="rubric">Example</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain.chains</span> <span class="kn">import</span> <span class="n">LLMMathChain</span>
 <span class="kn">from</span> <span class="nn">langchain_community.llms</span> <span class="kn">import</span> <span class="n">OpenAI</span>
@@ -647,7 +758,7 @@ directly as keyword arguments.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="langchain.chains.llm_math.base.LLMMathChain.as_tool">
-<span class="sig-name descname"><span class="pre">as_tool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args_schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../vectorstores/langchain_community.vectorstores.pgembedding.BaseModel.html#langchain_community.vectorstores.pgembedding.BaseModel" title="langchain_community.vectorstores.pgembedding.BaseModel"><span class="pre">BaseModel</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../tools/langchain_core.tools.BaseTool.html#langchain_core.tools.BaseTool" title="langchain_core.tools.BaseTool"><span class="pre">BaseTool</span></a></span></span><a class="headerlink" href="#langchain.chains.llm_math.base.LLMMathChain.as_tool" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">as_tool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args_schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../video_captioning/langchain_experimental.video_captioning.models.BaseModel.html#langchain_experimental.video_captioning.models.BaseModel" title="langchain_experimental.video_captioning.models.BaseModel"><span class="pre">BaseModel</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arg_types</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Type</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../tools/langchain_core.tools.base.BaseTool.html#langchain_core.tools.base.BaseTool" title="langchain_core.tools.base.BaseTool"><span class="pre">BaseTool</span></a></span></span><a class="headerlink" href="#langchain.chains.llm_math.base.LLMMathChain.as_tool" title="Permalink to this definition">¶</a></dt>
 <dd><div class="admonition-beta admonition">
 <p class="admonition-title">Beta</p>
 <p>This API is in beta and may change in the future.</p>
@@ -662,7 +773,7 @@ pass <code class="docutils literal notranslate"><span class="pre">arg_types</spa
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>args_schema</strong> (<em>Optional</em><em>[</em><em>Type</em><em>[</em><a class="reference internal" href="../vectorstores/langchain_community.vectorstores.pgembedding.BaseModel.html#langchain_community.vectorstores.pgembedding.BaseModel" title="langchain_community.vectorstores.pgembedding.BaseModel"><em>BaseModel</em></a><em>]</em><em>]</em>) – The schema for the tool. Defaults to None.</p></li>
+<li><p><strong>args_schema</strong> (<em>Optional</em><em>[</em><em>Type</em><em>[</em><a class="reference internal" href="../video_captioning/langchain_experimental.video_captioning.models.BaseModel.html#langchain_experimental.video_captioning.models.BaseModel" title="langchain_experimental.video_captioning.models.BaseModel"><em>BaseModel</em></a><em>]</em><em>]</em>) – The schema for the tool. Defaults to None.</p></li>
 <li><p><strong>name</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The name of the tool. Defaults to None.</p></li>
 <li><p><strong>description</strong> (<em>Optional</em><em>[</em><em>str</em><em>]</em>) – The description of the tool. Defaults to None.</p></li>
 <li><p><strong>arg_types</strong> (<em>Optional</em><em>[</em><em>Dict</em><em>[</em><em>str</em><em>, </em><em>Type</em><em>]</em><em>]</em>) – A dictionary of argument names to types. Defaults to None.</p></li>
@@ -672,7 +783,7 @@ pass <code class="docutils literal notranslate"><span class="pre">arg_types</spa
 <dd class="field-even"><p>A BaseTool instance.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p><a class="reference internal" href="../tools/langchain_core.tools.BaseTool.html#langchain_core.tools.BaseTool" title="langchain_core.tools.BaseTool">BaseTool</a></p>
+<dd class="field-odd"><p><a class="reference internal" href="../tools/langchain_core.tools.base.BaseTool.html#langchain_core.tools.base.BaseTool" title="langchain_core.tools.base.BaseTool">BaseTool</a></p>
 </dd>
 </dl>
 <p>Typed dict input:</p>
@@ -1413,7 +1524,7 @@ Subclasses should override this method if they support streaming output.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 14, 2024.
+                                on Aug 30, 2024.
                 </footer>
             </div>
         </div>
