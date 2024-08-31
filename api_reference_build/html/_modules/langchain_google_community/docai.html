@@ -253,7 +253,7 @@
 <span class="kn">import</span> <span class="nn">re</span>
 <span class="kn">import</span> <span class="nn">time</span>
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
 
 <span class="kn">from</span> <span class="nn">langchain_core.document_loaders</span> <span class="kn">import</span> <span class="n">BaseBlobParser</span>
 <span class="kn">from</span> <span class="nn">langchain_core.document_loaders.blob_loaders</span> <span class="kn">import</span> <span class="n">Blob</span>
@@ -267,7 +267,7 @@
     <span class="kn">from</span> <span class="nn">google.cloud.documentai</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore[import]</span>
         <span class="n">DocumentProcessorServiceClient</span><span class="p">,</span>
     <span class="p">)</span>
-
+    <span class="kn">from</span> <span class="nn">google.cloud.documentai_v1.types</span> <span class="kn">import</span> <span class="n">ProcessOptions</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -291,6 +291,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">client</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;DocumentProcessorServiceClient&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">project_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">location</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">gcs_output_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">processor_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -339,12 +340,19 @@
                     <span class="s2">&quot;`pip install langchain-google-community[docai]`&quot;</span>
                 <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
             <span class="n">options</span> <span class="o">=</span> <span class="n">ClientOptions</span><span class="p">(</span>
-                <span class="n">api_endpoint</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">-documentai.googleapis.com&quot;</span>
+                <span class="n">quota_project_id</span><span class="o">=</span><span class="n">project_id</span><span class="p">,</span>
+                <span class="n">api_endpoint</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">-documentai.googleapis.com&quot;</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">DocumentProcessorServiceClient</span><span class="p">(</span>
                 <span class="n">client_options</span><span class="o">=</span><span class="n">options</span><span class="p">,</span>
                 <span class="n">client_info</span><span class="o">=</span><span class="n">get_client_info</span><span class="p">(</span><span class="n">module</span><span class="o">=</span><span class="s2">&quot;document-ai&quot;</span><span class="p">),</span>
-            <span class="p">)</span></div>
+            <span class="p">)</span>
+            <span class="c1"># get processor type</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_processor_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">get_processor</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">processor_name</span><span class="p">)</span><span class="o">.</span><span class="n">type</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_processor_type</span> <span class="o">==</span> <span class="s2">&quot;LAYOUT_PARSER_PROCESSOR&quot;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_use_layout_parser</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_use_layout_parser</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 <div class="viewcode-block" id="DocAIParser.lazy_parse"><a class="viewcode-back" href="../../docai/langchain_google_community.docai.DocAIParser.html#langchain_google_community.docai.DocAIParser.lazy_parse">[docs]</a>    <span class="k">def</span> <span class="nf">lazy_parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blob</span><span class="p">:</span> <span class="n">Blob</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Parses a blob lazily.</span>
@@ -357,31 +365,83 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">yield from</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_parse</span><span class="p">([</span><span class="n">blob</span><span class="p">],</span> <span class="n">gcs_output_path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_gcs_output_path</span><span class="p">)</span></div>
 
+    <span class="k">def</span> <span class="nf">_prepare_process_options</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">enable_native_pdf_parsing</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">page_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">chunk_size</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
+        <span class="n">include_ancestor_headings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;ProcessOptions&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare process options for DocAI process request</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            enable_native_pdf_parsing: enable pdf embedded text extraction</span>
+<span class="sd">            page_range: list of page numbers to parse. If `None`,</span>
+<span class="sd">                entire document will be parsed.</span>
+<span class="sd">            chunk_size: maximum number of characters per chunk (supported</span>
+<span class="sd">                only with Document AI Layout Parser processor).</span>
+<span class="sd">            include_ancestor_headings: whether or not to include ancestor</span>
+<span class="sd">                headings when splitting (supported only</span>
+<span class="sd">                with Document AI Layout Parser processor).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">google.cloud.documentai_v1.types</span> <span class="kn">import</span> <span class="n">OcrConfig</span><span class="p">,</span> <span class="n">ProcessOptions</span>
+        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;documentai package not found, please install it with &quot;</span>
+                <span class="s2">&quot;`pip install langchain-google-community[docai]`&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_layout_parser</span><span class="p">:</span>
+            <span class="n">layout_config</span> <span class="o">=</span> <span class="n">ProcessOptions</span><span class="o">.</span><span class="n">LayoutConfig</span><span class="p">(</span>
+                <span class="n">chunking_config</span><span class="o">=</span><span class="n">ProcessOptions</span><span class="o">.</span><span class="n">LayoutConfig</span><span class="o">.</span><span class="n">ChunkingConfig</span><span class="p">(</span>
+                    <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+                    <span class="n">include_ancestor_headings</span><span class="o">=</span><span class="n">include_ancestor_headings</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">individual_page_selector</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">ProcessOptions</span><span class="o">.</span><span class="n">IndividualPageSelector</span><span class="p">(</span><span class="n">pages</span><span class="o">=</span><span class="n">page_range</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">page_range</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">process_options</span> <span class="o">=</span> <span class="n">ProcessOptions</span><span class="p">(</span>
+                <span class="n">layout_config</span><span class="o">=</span><span class="n">layout_config</span><span class="p">,</span>
+                <span class="n">individual_page_selector</span><span class="o">=</span><span class="n">individual_page_selector</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ocr_config</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">OcrConfig</span><span class="p">(</span><span class="n">enable_native_pdf_parsing</span><span class="o">=</span><span class="n">enable_native_pdf_parsing</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">enable_native_pdf_parsing</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">individual_page_selector</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">ProcessOptions</span><span class="o">.</span><span class="n">IndividualPageSelector</span><span class="p">(</span><span class="n">pages</span><span class="o">=</span><span class="n">page_range</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">page_range</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">process_options</span> <span class="o">=</span> <span class="n">ProcessOptions</span><span class="p">(</span>
+                <span class="n">ocr_config</span><span class="o">=</span><span class="n">ocr_config</span><span class="p">,</span> <span class="n">individual_page_selector</span><span class="o">=</span><span class="n">individual_page_selector</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">process_options</span>
+
 <div class="viewcode-block" id="DocAIParser.online_process"><a class="viewcode-back" href="../../docai/langchain_google_community.docai.DocAIParser.html#langchain_google_community.docai.DocAIParser.online_process">[docs]</a>    <span class="k">def</span> <span class="nf">online_process</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">blob</span><span class="p">:</span> <span class="n">Blob</span><span class="p">,</span>
-        <span class="n">enable_native_pdf_parsing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">field_mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">page_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">process_options_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Parses a blob lazily using online processing.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            blob: a blob to parse.</span>
-<span class="sd">            enable_native_pdf_parsing: enable pdf embedded text extraction</span>
 <span class="sd">            field_mask: a comma-separated list of which fields to include in the</span>
 <span class="sd">                Document AI response.</span>
 <span class="sd">                suggested: &quot;text,pages.pageNumber,pages.layout&quot;</span>
-<span class="sd">            page_range: list of page numbers to parse. If `None`,</span>
-<span class="sd">                entire document will be parsed.</span>
+<span class="sd">            process_options_kwargs: optional parameters to pass to the Document</span>
+<span class="sd">                AI processors</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">google.cloud</span> <span class="kn">import</span> <span class="n">documentai</span>
-            <span class="kn">from</span> <span class="nn">google.cloud.documentai_v1.types</span> <span class="kn">import</span> <span class="p">(</span>  <span class="c1"># type: ignore[import, attr-defined]</span>
-                <span class="n">IndividualPageSelector</span><span class="p">,</span>
-                <span class="n">OcrConfig</span><span class="p">,</span>
-                <span class="n">ProcessOptions</span><span class="p">,</span>
-            <span class="p">)</span>
         <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;Could not import google-cloud-documentai python package. &quot;</span>
@@ -397,14 +457,9 @@
                 <span class="s2">&quot;documentai_toolbox package not found, please install it with &quot;</span>
                 <span class="s2">&quot;`pip install langchain-google-community[docai]`&quot;</span>
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
-        <span class="n">ocr_config</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">OcrConfig</span><span class="p">(</span><span class="n">enable_native_pdf_parsing</span><span class="o">=</span><span class="n">enable_native_pdf_parsing</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">enable_native_pdf_parsing</span>
-            <span class="k">else</span> <span class="kc">None</span>
-        <span class="p">)</span>
-        <span class="n">individual_page_selector</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">IndividualPageSelector</span><span class="p">(</span><span class="n">pages</span><span class="o">=</span><span class="n">page_range</span><span class="p">)</span> <span class="k">if</span> <span class="n">page_range</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="p">)</span>
+
+        <span class="c1"># prepare process options</span>
+        <span class="n">process_options</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_process_options</span><span class="p">(</span><span class="o">**</span><span class="n">process_options_kwargs</span><span class="p">)</span>
 
         <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">process_document</span><span class="p">(</span>
             <span class="n">documentai</span><span class="o">.</span><span class="n">ProcessRequest</span><span class="p">(</span>
@@ -413,24 +468,34 @@
                     <span class="n">gcs_uri</span><span class="o">=</span><span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
                     <span class="n">mime_type</span><span class="o">=</span><span class="n">blob</span><span class="o">.</span><span class="n">mimetype</span> <span class="ow">or</span> <span class="s2">&quot;application/pdf&quot;</span><span class="p">,</span>
                 <span class="p">),</span>
-                <span class="n">process_options</span><span class="o">=</span><span class="n">ProcessOptions</span><span class="p">(</span>
-                    <span class="n">ocr_config</span><span class="o">=</span><span class="n">ocr_config</span><span class="p">,</span>
-                    <span class="n">individual_page_selector</span><span class="o">=</span><span class="n">individual_page_selector</span><span class="p">,</span>
-                <span class="p">),</span>
+                <span class="n">process_options</span><span class="o">=</span><span class="n">process_options</span><span class="p">,</span>
                 <span class="n">skip_human_review</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                 <span class="n">field_mask</span><span class="o">=</span><span class="n">field_mask</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
-        <span class="k">yield from</span> <span class="p">(</span>
-            <span class="n">Document</span><span class="p">(</span>
-                <span class="n">page_content</span><span class="o">=</span><span class="n">_text_from_layout</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">layout</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
-                <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
-                    <span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="n">page</span><span class="o">.</span><span class="n">page_number</span><span class="p">,</span>
-                    <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
-                <span class="p">},</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_layout_parser</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="p">(</span>
+                <span class="n">Document</span><span class="p">(</span>
+                    <span class="n">page_content</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s2">&quot;chunk_id&quot;</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">chunk_id</span><span class="p">,</span>
+                        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">chunked_document</span><span class="o">.</span><span class="n">chunks</span>
             <span class="p">)</span>
-            <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">pages</span>
-        <span class="p">)</span></div>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">yield from</span> <span class="p">(</span>
+                <span class="n">Document</span><span class="p">(</span>
+                    <span class="n">page_content</span><span class="o">=</span><span class="n">_text_from_layout</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">layout</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
+                    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                        <span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="n">page</span><span class="o">.</span><span class="n">page_number</span><span class="p">,</span>
+                        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">blob</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+                    <span class="p">},</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">document</span><span class="o">.</span><span class="n">pages</span>
+            <span class="p">)</span></div>
 
 <div class="viewcode-block" id="DocAIParser.batch_parse"><a class="viewcode-back" href="../../docai/langchain_google_community.docai.DocAIParser.html#langchain_google_community.docai.DocAIParser.batch_parse">[docs]</a>    <span class="k">def</span> <span class="nf">batch_parse</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -438,6 +503,7 @@
         <span class="n">gcs_output_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">timeout_sec</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3600</span><span class="p">,</span>
         <span class="n">check_in_interval_sec</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">process_options_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Parses a list of blobs lazily.</span>
 
@@ -446,7 +512,10 @@
 <span class="sd">            gcs_output_path: a path on Google Cloud Storage to store parsing results.</span>
 <span class="sd">            timeout_sec: a timeout to wait for Document AI to complete, in seconds.</span>
 <span class="sd">            check_in_interval_sec: an interval to wait until next check</span>
-<span class="sd">                whether parsing operations have been completed, in seconds</span>
+<span class="sd">                whether parsing operations have been completed, in seconds.</span>
+<span class="sd">            process_options_kwargs: optional parameters to pass to the Document</span>
+<span class="sd">                AI processors</span>
+
 <span class="sd">        This is a long-running operation. A recommended way is to decouple</span>
 <span class="sd">            parsing from creating LangChain Documents:</span>
 <span class="sd">            &gt;&gt;&gt; operations = parser.docai_parse(blobs, gcs_path)</span>
@@ -463,7 +532,9 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;An output path on Google Cloud Storage should be provided.&quot;</span>
             <span class="p">)</span>
-        <span class="n">operations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">docai_parse</span><span class="p">(</span><span class="n">blobs</span><span class="p">,</span> <span class="n">gcs_output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">)</span>
+        <span class="n">operations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">docai_parse</span><span class="p">(</span>
+            <span class="n">blobs</span><span class="p">,</span> <span class="n">gcs_output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span> <span class="o">**</span><span class="n">process_options_kwargs</span>
+        <span class="p">)</span>
         <span class="n">operation_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">op</span><span class="o">.</span><span class="n">operation</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">operations</span><span class="p">]</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="s2">&quot;Started parsing with Document AI, submitted operations </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">operation_names</span>
@@ -499,15 +570,31 @@
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">exc</span>
         <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
             <span class="n">gcs_bucket_name</span><span class="p">,</span> <span class="n">gcs_prefix</span> <span class="o">=</span> <span class="n">split_gcs_uri</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">parsed_path</span><span class="p">)</span>
-            <span class="n">shards</span> <span class="o">=</span> <span class="n">_get_shards</span><span class="p">(</span><span class="n">gcs_bucket_name</span><span class="p">,</span> <span class="n">gcs_prefix</span><span class="p">)</span>
-            <span class="k">yield from</span> <span class="p">(</span>
-                <span class="n">Document</span><span class="p">(</span>
-                    <span class="n">page_content</span><span class="o">=</span><span class="n">_text_from_layout</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">layout</span><span class="p">,</span> <span class="n">shard</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
-                    <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="n">page</span><span class="o">.</span><span class="n">page_number</span><span class="p">,</span> <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">source_path</span><span class="p">},</span>
+            <span class="n">shards</span> <span class="o">=</span> <span class="n">_get_shards</span><span class="p">(</span><span class="n">gcs_bucket_name</span><span class="p">,</span> <span class="n">gcs_prefix</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_layout_parser</span><span class="p">:</span>
+                <span class="k">yield from</span> <span class="p">(</span>
+                    <span class="n">Document</span><span class="p">(</span>
+                        <span class="n">page_content</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
+                        <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                            <span class="s2">&quot;chunk_id&quot;</span><span class="p">:</span> <span class="n">chunk</span><span class="o">.</span><span class="n">chunk_id</span><span class="p">,</span>
+                            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">source_path</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="n">shards</span>
+                    <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">shard</span><span class="o">.</span><span class="n">chunked_document</span><span class="o">.</span><span class="n">chunks</span>
                 <span class="p">)</span>
-                <span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="n">shards</span>
-                <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">shard</span><span class="o">.</span><span class="n">pages</span>
-            <span class="p">)</span></div>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield from</span> <span class="p">(</span>
+                    <span class="n">Document</span><span class="p">(</span>
+                        <span class="n">page_content</span><span class="o">=</span><span class="n">_text_from_layout</span><span class="p">(</span><span class="n">page</span><span class="o">.</span><span class="n">layout</span><span class="p">,</span> <span class="n">shard</span><span class="o">.</span><span class="n">text</span><span class="p">),</span>
+                        <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+                            <span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="n">page</span><span class="o">.</span><span class="n">page_number</span><span class="p">,</span>
+                            <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="n">result</span><span class="o">.</span><span class="n">source_path</span><span class="p">,</span>
+                        <span class="p">},</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">shard</span> <span class="ow">in</span> <span class="n">shards</span>
+                    <span class="k">for</span> <span class="n">page</span> <span class="ow">in</span> <span class="n">shard</span><span class="o">.</span><span class="n">pages</span>
+                <span class="p">)</span></div>
 
 <div class="viewcode-block" id="DocAIParser.operations_from_names"><a class="viewcode-back" href="../../docai/langchain_google_community.docai.DocAIParser.html#langchain_google_community.docai.DocAIParser.operations_from_names">[docs]</a>    <span class="k">def</span> <span class="nf">operations_from_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation_names</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="s2">&quot;Operation&quot;</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Initializes Long-Running Operations from their names.&quot;&quot;&quot;</span>
@@ -536,8 +623,8 @@
         <span class="n">gcs_output_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">processor_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
-        <span class="n">enable_native_pdf_parsing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">field_mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">process_options_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="s2">&quot;Operation&quot;</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Runs Google Document AI PDF Batch Processing on a list of blobs.</span>
 
@@ -546,10 +633,11 @@
 <span class="sd">            gcs_output_path: a path (folder) on GCS to store results</span>
 <span class="sd">            processor_name: name of a Document AI processor.</span>
 <span class="sd">            batch_size: amount of documents per batch</span>
-<span class="sd">            enable_native_pdf_parsing: a config option for the parser</span>
 <span class="sd">            field_mask: a comma-separated list of which fields to include in the</span>
 <span class="sd">                Document AI response.</span>
 <span class="sd">                suggested: &quot;text,pages.pageNumber,pages.layout&quot;</span>
+<span class="sd">            process_options_kwargs: optional parameters to pass to the Document</span>
+<span class="sd">                AI processors</span>
 
 <span class="sd">        Document AI has a 1000 file limit per batch, so batches larger than that need</span>
 <span class="sd">        to be split into multiple requests.</span>
@@ -558,7 +646,6 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">google.cloud</span> <span class="kn">import</span> <span class="n">documentai</span>
-            <span class="kn">from</span> <span class="nn">google.cloud.documentai_v1.types</span> <span class="kn">import</span> <span class="n">OcrConfig</span><span class="p">,</span> <span class="n">ProcessOptions</span>
         <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
                 <span class="s2">&quot;documentai package not found, please install it with &quot;</span>
@@ -594,15 +681,8 @@
                 <span class="p">)</span>
             <span class="p">)</span>
 
-            <span class="n">process_options</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">ProcessOptions</span><span class="p">(</span>
-                    <span class="n">ocr_config</span><span class="o">=</span><span class="n">OcrConfig</span><span class="p">(</span>
-                        <span class="n">enable_native_pdf_parsing</span><span class="o">=</span><span class="n">enable_native_pdf_parsing</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-                <span class="k">if</span> <span class="n">enable_native_pdf_parsing</span>
-                <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
+            <span class="n">process_options</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_process_options</span><span class="p">(</span><span class="o">**</span><span class="n">process_options_kwargs</span><span class="p">)</span>
+
             <span class="n">operations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">batch_process_documents</span><span class="p">(</span>
                     <span class="n">documentai</span><span class="o">.</span><span class="n">BatchProcessRequest</span><span class="p">(</span>
@@ -649,7 +729,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 30, 2024.
+                                on Aug 31, 2024.
                 </footer>
             </div>
         </div>

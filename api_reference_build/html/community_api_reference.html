@@ -320,6 +320,12 @@
 </ul>
 </li>
 <li><a class="reference internal" href="#module-langchain_community.graph_vectorstores"><code class="xref py py-mod docutils literal notranslate"><span class="pre">langchain_community.graph_vectorstores</span></code></a><ul>
+<li><a class="reference internal" href="#get-started">Get started</a></li>
+<li><a class="reference internal" href="#create-the-graph-vector-store-and-add-documents">Create the graph vector store and add documents</a></li>
+<li><a class="reference internal" href="#similarity-search">Similarity search</a></li>
+<li><a class="reference internal" href="#traversal-search">Traversal search</a></li>
+<li><a class="reference internal" href="#async-methods">Async methods</a></li>
+<li><a class="reference internal" href="#graph-vector-store-retriever">Graph vector store retriever</a></li>
 <li><a class="reference internal" href="#id34">Classes</a></li>
 </ul>
 </li>
@@ -3534,6 +3540,121 @@ strategy could be to select examples based on the diversity of the examples.</p>
 </section>
 <section id="module-langchain_community.graph_vectorstores">
 <span id="langchain-community-graph-vectorstores"></span><h2><a class="reference internal" href="#module-langchain_community.graph_vectorstores" title="langchain_community.graph_vectorstores"><code class="xref py py-mod docutils literal notranslate"><span class="pre">langchain_community.graph_vectorstores</span></code></a><a class="headerlink" href="#module-langchain_community.graph_vectorstores" title="Permalink to this heading">¶</a></h2>
+<p><strong>Graph Vector Store</strong></p>
+<p>Sometimes embedding models don’t capture all the important relationships between
+documents.
+Graph Vector Stores are an extension to both vector stores and retrievers that allow
+documents to be explicitly connected to each other.</p>
+<p>Graph vector store retrievers use both vector similarity and links to find documents
+related to an unstructured query.</p>
+<p>Graphs allow linking between documents.
+Each document identifies tags that link to and from it.
+For example, a paragraph of text may be linked to URLs based on the anchor tags in
+it’s content and linked from the URL(s) it is published at.</p>
+<p>Link extractors can be used to extract links from documents.</p>
+<p>Example:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">graph_vector_store</span> <span class="o">=</span> <span class="n">CassandraGraphVectorStore</span><span class="p">()</span>
+<span class="n">link_extractor</span> <span class="o">=</span> <span class="n">HtmlLinkExtractor</span><span class="p">()</span>
+<span class="n">links</span> <span class="o">=</span> <span class="n">link_extractor</span><span class="o">.</span><span class="n">extract_one</span><span class="p">(</span><span class="n">HtmlInput</span><span class="p">(</span><span class="n">document</span><span class="o">.</span><span class="n">page_content</span><span class="p">,</span> <span class="s2">&quot;http://mysite&quot;</span><span class="p">))</span>
+<span class="n">add_links</span><span class="p">(</span><span class="n">document</span><span class="p">,</span> <span class="n">links</span><span class="p">)</span>
+<span class="n">graph_vector_store</span><span class="o">.</span><span class="n">add_document</span><span class="p">(</span><span class="n">document</span><span class="p">)</span>
+</pre></div>
+</div>
+<section id="get-started">
+<h3>Get started<a class="headerlink" href="#get-started" title="Permalink to this heading">¶</a></h3>
+<p>We chunk the State of the Union text and split it into documents.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_community.document_loaders</span> <span class="kn">import</span> <span class="n">TextLoader</span>
+<span class="kn">from</span> <span class="nn">langchain_text_splitters</span> <span class="kn">import</span> <span class="n">CharacterTextSplitter</span>
+
+<span class="n">raw_documents</span> <span class="o">=</span> <span class="n">TextLoader</span><span class="p">(</span><span class="s2">&quot;state_of_the_union.txt&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+<span class="n">text_splitter</span> <span class="o">=</span> <span class="n">CharacterTextSplitter</span><span class="p">(</span><span class="n">chunk_size</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">chunk_overlap</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">documents</span> <span class="o">=</span> <span class="n">text_splitter</span><span class="o">.</span><span class="n">split_documents</span><span class="p">(</span><span class="n">raw_documents</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Links can be added to documents manually but it’s easier to use a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">LinkExtractor</span></code>.
+Several common link extractors are available and you can build your own.
+For this guide, we’ll use the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">KeybertLinkExtractor</span></code>
+which uses the KeyBERT model to tag documents with keywords and uses these keywords to
+create links between documents.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">langchain_community.graph_vectorstores.extractors</span> <span class="kn">import</span> <span class="n">KeybertLinkExtractor</span>
+<span class="kn">from</span> <span class="nn">langchain_community.graph_vectorstores.links</span> <span class="kn">import</span> <span class="n">add_links</span>
+
+<span class="n">extractor</span> <span class="o">=</span> <span class="n">KeybertLinkExtractor</span><span class="p">()</span>
+
+<span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">documents</span><span class="p">:</span>
+    <span class="n">add_links</span><span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">extractor</span><span class="o">.</span><span class="n">extract_one</span><span class="p">(</span><span class="n">doc</span><span class="p">))</span>
+</pre></div>
+</div>
+</section>
+<section id="create-the-graph-vector-store-and-add-documents">
+<h3>Create the graph vector store and add documents<a class="headerlink" href="#create-the-graph-vector-store-and-add-documents" title="Permalink to this heading">¶</a></h3>
+<p>We’ll use an Apache Cassandra or Astra DB database as an example.
+We create a <code class="xref py py-class docutils literal notranslate"><span class="pre">CassandraGraphVectorStore</span></code>
+from the documents and an <code class="xref py py-class docutils literal notranslate"><span class="pre">OpenAIEmbeddings</span></code> model.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">cassio</span>
+<span class="kn">from</span> <span class="nn">langchain_community.graph_vectorstores</span> <span class="kn">import</span> <span class="n">CassandraGraphVectorStore</span>
+<span class="kn">from</span> <span class="nn">langchain_openai</span> <span class="kn">import</span> <span class="n">OpenAIEmbeddings</span>
+
+<span class="c1"># Initialize cassio and the Cassandra session from the environment variables</span>
+<span class="n">cassio</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="n">auto</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">store</span> <span class="o">=</span> <span class="n">CassandraGraphVectorStore</span><span class="o">.</span><span class="n">from_documents</span><span class="p">(</span>
+    <span class="n">embedding</span><span class="o">=</span><span class="n">OpenAIEmbeddings</span><span class="p">(),</span>
+    <span class="n">documents</span><span class="o">=</span><span class="n">documents</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="similarity-search">
+<h3>Similarity search<a class="headerlink" href="#similarity-search" title="Permalink to this heading">¶</a></h3>
+<p>If we don’t traverse the graph, a graph vector store behaves like a regular vector
+store.
+So all methods available in a vector store are also available in a graph vector store.
+The <code class="xref py py-meth docutils literal notranslate"><span class="pre">similarity_search()</span></code>
+method returns documents similar to a query without considering
+the links between documents.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">docs</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">similarity_search</span><span class="p">(</span>
+    <span class="s2">&quot;What did the president say about Ketanji Brown Jackson?&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="traversal-search">
+<h3>Traversal search<a class="headerlink" href="#traversal-search" title="Permalink to this heading">¶</a></h3>
+<p>The <code class="xref py py-meth docutils literal notranslate"><span class="pre">traversal_search()</span></code>
+method returns documents similar to a query considering the links
+between documents. It first does a similarity search and then traverses the graph to
+find linked documents.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">docs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+    <span class="n">store</span><span class="o">.</span><span class="n">traversal_search</span><span class="p">(</span><span class="s2">&quot;What did the president say about Ketanji Brown Jackson?&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="async-methods">
+<h3>Async methods<a class="headerlink" href="#async-methods" title="Permalink to this heading">¶</a></h3>
+<p>The graph vector store has async versions of the methods prefixed with <code class="docutils literal notranslate"><span class="pre">a</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">docs</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">doc</span>
+    <span class="k">async</span> <span class="k">for</span> <span class="n">doc</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">atraversal_search</span><span class="p">(</span>
+        <span class="s2">&quot;What did the president say about Ketanji Brown Jackson?&quot;</span>
+    <span class="p">)</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="graph-vector-store-retriever">
+<h3>Graph vector store retriever<a class="headerlink" href="#graph-vector-store-retriever" title="Permalink to this heading">¶</a></h3>
+<p>The graph vector store can be converted to a retriever.
+It is similar to the vector store retriever but it also has traversal search methods
+such as <code class="docutils literal notranslate"><span class="pre">traversal</span></code> and <code class="docutils literal notranslate"><span class="pre">mmr_traversal</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">retriever</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">as_retriever</span><span class="p">(</span><span class="n">search_type</span><span class="o">=</span><span class="s2">&quot;mmr_traversal&quot;</span><span class="p">)</span>
+<span class="n">docs</span> <span class="o">=</span> <span class="n">retriever</span><span class="o">.</span><span class="n">invoke</span><span class="p">(</span><span class="s2">&quot;What did the president say about Ketanji Brown Jackson?&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
 <section id="id34">
 <h3>Classes<a class="headerlink" href="#id34" title="Permalink to this heading">¶</a></h3>
 <table class="autosummary longtable docutils align-default">
@@ -7152,7 +7273,7 @@ and retrieve the data that are ‘most similar’ to the embedded query.</p>
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Aug 30, 2024.
+                                on Aug 31, 2024.
                 </footer>
             </div>
         </div>
