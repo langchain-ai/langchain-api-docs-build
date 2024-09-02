@@ -506,7 +506,27 @@
     <span class="n">field</span> <span class="o">=</span> <span class="n">inst</span><span class="o">.</span><span class="n">__fields__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">field</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">return</span> <span class="n">field</span><span class="o">.</span><span class="n">required</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">or</span> <span class="n">value</span> <span class="ow">or</span> <span class="n">field</span><span class="o">.</span><span class="n">get_default</span><span class="p">()</span> <span class="o">!=</span> <span class="n">value</span>
+    <span class="c1"># Handle edge case: a value cannot be converted to a boolean (e.g. a</span>
+    <span class="c1"># Pandas DataFrame).</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">value_is_truthy</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">_</span><span class="p">:</span>
+        <span class="n">value_is_truthy</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1"># Handle edge case: inequality of two objects does not evaluate to a bool (e.g. two</span>
+    <span class="c1"># Pandas DataFrames).</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">value_neq_default</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">get_default</span><span class="p">()</span> <span class="o">!=</span> <span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">_</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">value_neq_default</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">get_default</span><span class="p">()</span> <span class="o">!=</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">_</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">value_neq_default</span> <span class="o">=</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">default</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">_</span><span class="p">:</span>
+                <span class="n">value_neq_default</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">return</span> <span class="n">field</span><span class="o">.</span><span class="n">required</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">or</span> <span class="n">value_is_truthy</span> <span class="ow">or</span> <span class="n">value_neq_default</span>
 
 
 <span class="k">def</span> <span class="nf">_replace_secrets</span><span class="p">(</span>
@@ -567,7 +587,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 01, 2024.
+                                on Sep 02, 2024.
                 </footer>
             </div>
         </div>
