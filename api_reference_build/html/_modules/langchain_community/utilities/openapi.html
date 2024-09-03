@@ -373,11 +373,31 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No schema found for </span><span class="si">{</span><span class="n">ref_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">schemas</span><span class="p">[</span><span class="n">ref_name</span><span class="p">]</span></div>
 
-<div class="viewcode-block" id="OpenAPISpec.get_schema"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.openapi.OpenAPISpec.html#langchain_community.utilities.openapi.OpenAPISpec.get_schema">[docs]</a>    <span class="k">def</span> <span class="nf">get_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">schema</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Reference</span><span class="p">,</span> <span class="n">Schema</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Schema</span><span class="p">:</span>
+<div class="viewcode-block" id="OpenAPISpec.get_schema"><a class="viewcode-back" href="../../../utilities/langchain_community.utilities.openapi.OpenAPISpec.html#langchain_community.utilities.openapi.OpenAPISpec.get_schema">[docs]</a>    <span class="k">def</span> <span class="nf">get_schema</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">schema</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Reference</span><span class="p">,</span> <span class="n">Schema</span><span class="p">],</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Schema</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">max_depth</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">depth</span> <span class="o">&gt;=</span> <span class="n">max_depth</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RecursionError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Max depth of </span><span class="si">{</span><span class="n">max_depth</span><span class="si">}</span><span class="s2"> has been exceeded when resolving references.&quot;</span>
+            <span class="p">)</span>
+
         <span class="kn">from</span> <span class="nn">openapi_pydantic</span> <span class="kn">import</span> <span class="n">Reference</span>
 
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">Reference</span><span class="p">):</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_referenced_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+            <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_referenced_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+
+        <span class="c1"># TODO: Resolve references on all fields of Schema ?</span>
+        <span class="c1"># (e.g. patternProperties, etc...)</span>
+        <span class="k">if</span> <span class="n">schema</span><span class="o">.</span><span class="n">properties</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">p_name</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">schema</span><span class="o">.</span><span class="n">properties</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">schema</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="n">p_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_schema</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">schema</span><span class="o">.</span><span class="n">items</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">schema</span><span class="o">.</span><span class="n">items</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_schema</span><span class="p">(</span><span class="n">schema</span><span class="o">.</span><span class="n">items</span><span class="p">,</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">)</span>
+
         <span class="k">return</span> <span class="n">schema</span></div>
 
     <span class="k">def</span> <span class="nf">_get_root_referenced_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">Reference</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Schema</span><span class="p">:</span>
@@ -565,7 +585,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 02, 2024.
+                                on Sep 03, 2024.
                 </footer>
             </div>
         </div>
