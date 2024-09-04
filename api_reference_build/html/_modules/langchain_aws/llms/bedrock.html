@@ -10,7 +10,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     
-        <title>langchain_aws.llms.bedrock &mdash; 🦜🔗 LangChain 0.2.15</title>
+        <title>langchain_aws.llms.bedrock &mdash; 🦜🔗 LangChain 0.2.16</title>
     
     <link rel="canonical"
           href="https://api.python.langchain.com/en/latest/_modules/langchain_aws/llms/bedrock.html"/>
@@ -244,6 +244,7 @@
   <h1>Source code for langchain_aws.llms.bedrock</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">asyncio</span>
 <span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="p">(</span>
@@ -269,8 +270,7 @@
 <span class="kn">from</span> <span class="nn">langchain_core.messages</span> <span class="kn">import</span> <span class="n">AIMessageChunk</span><span class="p">,</span> <span class="n">ToolCall</span>
 <span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">tool_call</span><span class="p">,</span> <span class="n">tool_call_chunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.outputs</span> <span class="kn">import</span> <span class="n">Generation</span><span class="p">,</span> <span class="n">GenerationChunk</span><span class="p">,</span> <span class="n">LLMResult</span>
-<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Extra</span><span class="p">,</span> <span class="n">Field</span><span class="p">,</span> <span class="n">root_validator</span>
-<span class="kn">from</span> <span class="nn">langchain_core.utils</span> <span class="kn">import</span> <span class="n">get_from_dict_or_env</span>
+<span class="kn">from</span> <span class="nn">langchain_core.pydantic_v1</span> <span class="kn">import</span> <span class="n">Field</span><span class="p">,</span> <span class="n">root_validator</span>
 
 <span class="kn">from</span> <span class="nn">langchain_aws.function_calling</span> <span class="kn">import</span> <span class="n">_tools_in_params</span>
 <span class="kn">from</span> <span class="nn">langchain_aws.utils</span> <span class="kn">import</span> <span class="p">(</span>
@@ -794,7 +794,7 @@
 <span class="sd">                ...Logic to handle guardrail intervention...</span>
 <span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
-    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that AWS credentials to and python package exists in environment.&quot;&quot;&quot;</span>
 
@@ -811,11 +811,10 @@
                 <span class="c1"># use default credentials</span>
                 <span class="n">session</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span>
 
-            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;region_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_from_dict_or_env</span><span class="p">(</span>
-                <span class="n">values</span><span class="p">,</span>
-                <span class="s2">&quot;region_name&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;AWS_DEFAULT_REGION&quot;</span><span class="p">,</span>
-                <span class="n">default</span><span class="o">=</span><span class="n">session</span><span class="o">.</span><span class="n">region_name</span><span class="p">,</span>
+            <span class="n">values</span><span class="p">[</span><span class="s2">&quot;region_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;region_name&quot;</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;AWS_DEFAULT_REGION&quot;</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="n">session</span><span class="o">.</span><span class="n">region_name</span>
             <span class="p">)</span>
 
             <span class="n">client_params</span> <span class="o">=</span> <span class="p">{}</span>
@@ -1191,7 +1190,7 @@
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="nd">@root_validator</span><span class="p">()</span>
+    <span class="nd">@root_validator</span><span class="p">(</span><span class="n">pre</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_on_failure</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">validate_environment</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">:</span>
         <span class="n">model_id</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;model_id&quot;</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">model_id</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;anthropic.claude-3&quot;</span><span class="p">):</span>
@@ -1238,7 +1237,7 @@
     <span class="k">class</span> <span class="nc">Config</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Configuration for this pydantic object.&quot;&quot;&quot;</span>
 
-        <span class="n">extra</span> <span class="o">=</span> <span class="n">Extra</span><span class="o">.</span><span class="n">forbid</span>
+        <span class="n">extra</span> <span class="o">=</span> <span class="s2">&quot;forbid&quot;</span>
 
     <span class="k">def</span> <span class="nf">_stream</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1438,7 +1437,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 03, 2024.
+                                on Sep 04, 2024.
                 </footer>
             </div>
         </div>
