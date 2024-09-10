@@ -313,11 +313,175 @@
 
 <span class="sd">        Expects the input to be an HTML string or a `BeautifulSoup` object.</span>
 
+<span class="sd">        Example::</span>
+
+<span class="sd">            extractor = HtmlLinkExtractor()</span>
+<span class="sd">            results = extractor.extract_one(HtmlInput(html, url))</span>
+
+<span class="sd">        .. seealso::</span>
+
+<span class="sd">            - :mod:`How to use a graph vector store &lt;langchain_community.graph_vectorstores&gt;`</span>
+<span class="sd">            - :class:`How to create links between documents &lt;langchain_core.graph_vectorstores.links.Link&gt;`</span>
+
+<span class="sd">        How to link Documents on hyperlinks in HTML</span>
+<span class="sd">        ===========================================</span>
+
+<span class="sd">        Preliminaries</span>
+<span class="sd">        -------------</span>
+
+<span class="sd">        Install the ``beautifulsoup4`` package:</span>
+
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -q langchain_community beautifulsoup4</span>
+
+<span class="sd">        Usage</span>
+<span class="sd">        -----</span>
+
+<span class="sd">        For this example, we&#39;ll scrape 2 HTML pages that have an hyperlink from one</span>
+<span class="sd">        page to the other using an ``AsyncHtmlLoader``.</span>
+<span class="sd">        Then we use the ``HtmlLinkExtractor`` to create the links in the documents.</span>
+
+<span class="sd">        Using extract_one()</span>
+<span class="sd">        ^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">        We can use :meth:`extract_one` on a document to get the links and add the links</span>
+<span class="sd">        to the document metadata with</span>
+<span class="sd">        :meth:`~langchain_core.graph_vectorstores.links.add_links`::</span>
+
+<span class="sd">            from langchain_community.document_loaders import AsyncHtmlLoader</span>
+<span class="sd">            from langchain_community.graph_vectorstores.extractors import (</span>
+<span class="sd">                HtmlInput,</span>
+<span class="sd">                HtmlLinkExtractor,</span>
+<span class="sd">            )</span>
+<span class="sd">            from langchain_community.graph_vectorstores.links import add_links</span>
+<span class="sd">            from langchain_core.documents import Document</span>
+
+<span class="sd">            loader = AsyncHtmlLoader(</span>
+<span class="sd">                [</span>
+<span class="sd">                    &quot;https://python.langchain.com/v0.2/docs/integrations/providers/astradb/&quot;,</span>
+<span class="sd">                    &quot;https://docs.datastax.com/en/astra/home/astra.html&quot;,</span>
+<span class="sd">                ]</span>
+<span class="sd">            )</span>
+
+<span class="sd">            documents = loader.load()</span>
+
+<span class="sd">            html_extractor = HtmlLinkExtractor()</span>
+
+<span class="sd">            for doc in documents:</span>
+<span class="sd">                links = html_extractor.extract_one(HtmlInput(doc.page_content, url))</span>
+<span class="sd">                add_links(doc, links)</span>
+
+<span class="sd">            documents[0].metadata[&quot;links&quot;][:5]</span>
+
+<span class="sd">        .. code-block:: output</span>
+
+<span class="sd">            [Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/spreedly/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/nvidia/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/ray_serve/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/bageldb/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/introduction/&#39;)]</span>
+
+<span class="sd">        Using as_document_extractor()</span>
+<span class="sd">        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">        If you use a document loader that returns the raw HTML and that sets the source</span>
+<span class="sd">        key in the document metadata such as ``AsyncHtmlLoader``,</span>
+<span class="sd">        you can simplify by using :meth:`as_document_extractor` that takes directly a</span>
+<span class="sd">        ``Document`` as input::</span>
+
+<span class="sd">            from langchain_community.document_loaders import AsyncHtmlLoader</span>
+<span class="sd">            from langchain_community.graph_vectorstores.extractors import HtmlLinkExtractor</span>
+<span class="sd">            from langchain_core.graph_vectorstores.links import add_links</span>
+
+<span class="sd">            loader = AsyncHtmlLoader(</span>
+<span class="sd">                [</span>
+<span class="sd">                    &quot;https://python.langchain.com/v0.2/docs/integrations/providers/astradb/&quot;,</span>
+<span class="sd">                    &quot;https://docs.datastax.com/en/astra/home/astra.html&quot;,</span>
+<span class="sd">                ]</span>
+<span class="sd">            )</span>
+<span class="sd">            documents = loader.load()</span>
+<span class="sd">            html_extractor = HtmlLinkExtractor().as_document_extractor()</span>
+
+<span class="sd">            for document in documents:</span>
+<span class="sd">                links = html_extractor.extract_one(document)</span>
+<span class="sd">                add_links(document, links)</span>
+
+<span class="sd">            documents[0].metadata[&quot;links&quot;][:5]</span>
+
+<span class="sd">        .. code-block:: output</span>
+
+<span class="sd">            [Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/spreedly/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/nvidia/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/ray_serve/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/bageldb/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/introduction/&#39;)]</span>
+
+<span class="sd">        Using LinkExtractorTransformer</span>
+<span class="sd">        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">        Using the :class:`~langchain_community.graph_vectorstores.extractors.keybert_link_extractor.LinkExtractorTransformer`,</span>
+<span class="sd">        we can simplify the link extraction::</span>
+
+<span class="sd">            from langchain_community.document_loaders import AsyncHtmlLoader</span>
+<span class="sd">            from langchain_community.graph_vectorstores.extractors import (</span>
+<span class="sd">                HtmlLinkExtractor,</span>
+<span class="sd">                LinkExtractorTransformer,</span>
+<span class="sd">            )</span>
+<span class="sd">            from langchain_community.graph_vectorstores.links import add_links</span>
+
+<span class="sd">            loader = AsyncHtmlLoader(</span>
+<span class="sd">                [</span>
+<span class="sd">                    &quot;https://python.langchain.com/v0.2/docs/integrations/providers/astradb/&quot;,</span>
+<span class="sd">                    &quot;https://docs.datastax.com/en/astra/home/astra.html&quot;,</span>
+<span class="sd">                ]</span>
+<span class="sd">            )</span>
+
+<span class="sd">            documents = loader.load()</span>
+<span class="sd">            transformer = LinkExtractorTransformer([HtmlLinkExtractor().as_document_extractor()])</span>
+<span class="sd">            documents = transformer.transform_documents(documents)</span>
+
+<span class="sd">            documents[0].metadata[&quot;links&quot;][:5]</span>
+
+<span class="sd">        .. code-block:: output</span>
+
+<span class="sd">            [Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/spreedly/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/nvidia/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/ray_serve/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/integrations/providers/bageldb/&#39;),</span>
+<span class="sd">             Link(kind=&#39;hyperlink&#39;, direction=&#39;out&#39;, tag=&#39;https://python.langchain.com/v0.2/docs/introduction/&#39;)]</span>
+
+<span class="sd">        We can check that there is a link from the first document to the second::</span>
+
+<span class="sd">            for doc_to in documents:</span>
+<span class="sd">                for link_to in doc_to.metadata[&quot;links&quot;]:</span>
+<span class="sd">                    if link_to.direction == &quot;in&quot;:</span>
+<span class="sd">                        for doc_from in documents:</span>
+<span class="sd">                            for link_from in doc_from.metadata[&quot;links&quot;]:</span>
+<span class="sd">                                if (</span>
+<span class="sd">                                    link_to.direction == &quot;in&quot;</span>
+<span class="sd">                                    and link_from.direction == &quot;out&quot;</span>
+<span class="sd">                                    and link_to.tag == link_from.tag</span>
+<span class="sd">                                ):</span>
+<span class="sd">                                    print(</span>
+<span class="sd">                                        f&quot;Found link from {doc_from.metadata[&#39;source&#39;]} to {doc_to.metadata[&#39;source&#39;]}.&quot;</span>
+<span class="sd">                                    )</span>
+
+<span class="sd">        .. code-block:: output</span>
+
+<span class="sd">            Found link from https://python.langchain.com/v0.2/docs/integrations/providers/astradb/ to https://docs.datastax.com/en/astra/home/astra.html.</span>
+
+<span class="sd">        The documents with URL links can then be added to a :class:`~langchain_core.graph_vectorstores.base.GraphVectorStore`::</span>
+
+<span class="sd">            from langchain_community.graph_vectorstores import CassandraGraphVectorStore</span>
+
+<span class="sd">            store = CassandraGraphVectorStore.from_documents(documents=documents, embedding=...)</span>
+
 <span class="sd">        Args:</span>
-<span class="sd">            kind: The kind of edge to extract. Defaults to &quot;hyperlink&quot;.</span>
+<span class="sd">            kind: The kind of edge to extract. Defaults to ``hyperlink``.</span>
 <span class="sd">            drop_fragments: Whether fragments in URLs and links should be</span>
-<span class="sd">                dropped. Defaults to `True`.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">                dropped. Defaults to ``True``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">bs4</span>  <span class="c1"># noqa:F401</span>
         <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
@@ -334,9 +498,10 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LinkExtractor</span><span class="p">[</span><span class="n">Document</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a LinkExtractor that applies to documents.</span>
 
-<span class="sd">        NOTE: Since the HtmlLinkExtractor parses HTML, if you use with other similar</span>
-<span class="sd">        link extractors it may be more efficient to call the link extractors directly</span>
-<span class="sd">        on the parsed BeautifulSoup object.</span>
+<span class="sd">        Note:</span>
+<span class="sd">            Since the HtmlLinkExtractor parses HTML, if you use with other similar</span>
+<span class="sd">            link extractors it may be more efficient to call the link extractors</span>
+<span class="sd">            directly on the parsed BeautifulSoup object.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            url_metadata_key: The name of the filed in document metadata with the URL of</span>
@@ -376,7 +541,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 09, 2024.
+                                on Sep 10, 2024.
                 </footer>
             </div>
         </div>

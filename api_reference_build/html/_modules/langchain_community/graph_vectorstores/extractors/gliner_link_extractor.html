@@ -258,7 +258,117 @@
 
 <div class="viewcode-block" id="GLiNERLinkExtractor"><a class="viewcode-back" href="../../../../graph_vectorstores/langchain_community.graph_vectorstores.extractors.gliner_link_extractor.GLiNERLinkExtractor.html#langchain_community.graph_vectorstores.extractors.gliner_link_extractor.GLiNERLinkExtractor">[docs]</a><span class="nd">@beta</span><span class="p">()</span>
 <span class="k">class</span> <span class="nc">GLiNERLinkExtractor</span><span class="p">(</span><span class="n">LinkExtractor</span><span class="p">[</span><span class="n">GLiNERInput</span><span class="p">]):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Link documents with common named entities using GLiNER &lt;https://github.com/urchade/GLiNER&gt;.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Link documents with common named entities using `GLiNER`_.</span>
+
+<span class="sd">    `GLiNER`_ is a Named Entity Recognition (NER) model capable of identifying any</span>
+<span class="sd">    entity type using a bidirectional transformer encoder (BERT-like).</span>
+
+<span class="sd">    The ``GLiNERLinkExtractor`` uses GLiNER to create links between documents that</span>
+<span class="sd">    have named entities in common.</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        extractor = GLiNERLinkExtractor(</span>
+<span class="sd">            labels=[&quot;Person&quot;, &quot;Award&quot;, &quot;Date&quot;, &quot;Competitions&quot;, &quot;Teams&quot;]</span>
+<span class="sd">        )</span>
+<span class="sd">        results = extractor.extract_one(&quot;some long text...&quot;)</span>
+
+<span class="sd">    .. _GLiNER: https://github.com/urchade/GLiNER</span>
+
+<span class="sd">    .. seealso::</span>
+
+<span class="sd">            - :mod:`How to use a graph vector store &lt;langchain_community.graph_vectorstores&gt;`</span>
+<span class="sd">            - :class:`How to create links between documents &lt;langchain_core.graph_vectorstores.links.Link&gt;`</span>
+
+<span class="sd">    How to link Documents on common named entities</span>
+<span class="sd">    ==============================================</span>
+
+<span class="sd">    Preliminaries</span>
+<span class="sd">    -------------</span>
+
+<span class="sd">    Install the ``gliner`` package:</span>
+
+<span class="sd">    .. code-block:: bash</span>
+
+<span class="sd">        pip install -q langchain_community gliner</span>
+
+<span class="sd">    Usage</span>
+<span class="sd">    -----</span>
+
+<span class="sd">    We load the ``state_of_the_union.txt`` file, chunk it, then for each chunk we</span>
+<span class="sd">    extract named entity links and add them to the chunk.</span>
+
+<span class="sd">    Using extract_one()</span>
+<span class="sd">    ^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">    We can use :meth:`extract_one` on a document to get the links and add the links</span>
+<span class="sd">    to the document metadata with</span>
+<span class="sd">    :meth:`~langchain_core.graph_vectorstores.links.add_links`::</span>
+
+<span class="sd">        from langchain_community.document_loaders import TextLoader</span>
+<span class="sd">        from langchain_community.graph_vectorstores import CassandraGraphVectorStore</span>
+<span class="sd">        from langchain_community.graph_vectorstores.extractors import GLiNERLinkExtractor</span>
+<span class="sd">        from langchain_core.graph_vectorstores.links import add_links</span>
+<span class="sd">        from langchain_text_splitters import CharacterTextSplitter</span>
+
+<span class="sd">        loader = TextLoader(&quot;state_of_the_union.txt&quot;)</span>
+<span class="sd">        raw_documents = loader.load()</span>
+
+<span class="sd">        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)</span>
+<span class="sd">        documents = text_splitter.split_documents(raw_documents)</span>
+
+<span class="sd">        ner_extractor = GLiNERLinkExtractor([&quot;Person&quot;, &quot;Topic&quot;])</span>
+<span class="sd">        for document in documents:</span>
+<span class="sd">            links = ner_extractor.extract_one(document)</span>
+<span class="sd">            add_links(document, links)</span>
+
+<span class="sd">        print(documents[0].metadata)</span>
+
+<span class="sd">    .. code-block:: output</span>
+
+<span class="sd">        {&#39;source&#39;: &#39;state_of_the_union.txt&#39;, &#39;links&#39;: [Link(kind=&#39;entity:Person&#39;, direction=&#39;bidir&#39;, tag=&#39;President Zelenskyy&#39;), Link(kind=&#39;entity:Person&#39;, direction=&#39;bidir&#39;, tag=&#39;Vladimir Putin&#39;)]}</span>
+
+<span class="sd">    Using LinkExtractorTransformer</span>
+<span class="sd">    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">    Using the :class:`~langchain_community.graph_vectorstores.extractors.keybert_link_extractor.LinkExtractorTransformer`,</span>
+<span class="sd">    we can simplify the link extraction::</span>
+
+<span class="sd">        from langchain_community.document_loaders import TextLoader</span>
+<span class="sd">        from langchain_community.graph_vectorstores.extractors import (</span>
+<span class="sd">            GLiNERLinkExtractor,</span>
+<span class="sd">            LinkExtractorTransformer,</span>
+<span class="sd">        )</span>
+<span class="sd">        from langchain_text_splitters import CharacterTextSplitter</span>
+
+<span class="sd">        loader = TextLoader(&quot;state_of_the_union.txt&quot;)</span>
+<span class="sd">        raw_documents = loader.load()</span>
+
+<span class="sd">        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)</span>
+<span class="sd">        documents = text_splitter.split_documents(raw_documents)</span>
+
+<span class="sd">        ner_extractor = GLiNERLinkExtractor([&quot;Person&quot;, &quot;Topic&quot;])</span>
+<span class="sd">        transformer = LinkExtractorTransformer([ner_extractor])</span>
+<span class="sd">        documents = transformer.transform_documents(documents)</span>
+
+<span class="sd">        print(documents[0].metadata)</span>
+
+<span class="sd">    .. code-block:: output</span>
+
+<span class="sd">        {&#39;source&#39;: &#39;state_of_the_union.txt&#39;, &#39;links&#39;: [Link(kind=&#39;entity:Person&#39;, direction=&#39;bidir&#39;, tag=&#39;President Zelenskyy&#39;), Link(kind=&#39;entity:Person&#39;, direction=&#39;bidir&#39;, tag=&#39;Vladimir Putin&#39;)]}</span>
+
+<span class="sd">    The documents with named entity links can then be added to a :class:`~langchain_core.graph_vectorstores.base.GraphVectorStore`::</span>
+
+<span class="sd">        from langchain_community.graph_vectorstores import CassandraGraphVectorStore</span>
+
+<span class="sd">        store = CassandraGraphVectorStore.from_documents(documents=documents, embedding=...)</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        labels: List of kinds of entities to extract.</span>
+<span class="sd">        kind: Kind of links to produce with this extractor.</span>
+<span class="sd">        model: GLiNER model to use.</span>
+<span class="sd">        extract_kwargs: Keyword arguments to pass to GLiNER.</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
 
 <div class="viewcode-block" id="GLiNERLinkExtractor.__init__"><a class="viewcode-back" href="../../../../graph_vectorstores/langchain_community.graph_vectorstores.extractors.gliner_link_extractor.GLiNERLinkExtractor.html#langchain_community.graph_vectorstores.extractors.gliner_link_extractor.GLiNERLinkExtractor.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -268,23 +378,6 @@
         <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;urchade/gliner_mediumv2.1&quot;</span><span class="p">,</span>
         <span class="n">extract_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract keywords using GLiNER.</span>
-
-<span class="sd">        Example:</span>
-
-<span class="sd">            .. code-block:: python</span>
-
-<span class="sd">                extractor = GLiNERLinkExtractor(</span>
-<span class="sd">                    labels=[&quot;Person&quot;, &quot;Award&quot;, &quot;Date&quot;, &quot;Competitions&quot;, &quot;Teams&quot;]</span>
-<span class="sd">                )</span>
-<span class="sd">                results = extractor.extract_one(&quot;some long text...&quot;)</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            labels: List of kinds of entities to extract.</span>
-<span class="sd">            kind: Kind of links to produce with this extractor.</span>
-<span class="sd">            model: GLiNER model to use.</span>
-<span class="sd">            extract_kwargs: Keyword arguments to pass to GLiNER.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">from</span> <span class="nn">gliner</span> <span class="kn">import</span> <span class="n">GLiNER</span>
 
@@ -323,7 +416,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 09, 2024.
+                                on Sep 10, 2024.
                 </footer>
             </div>
         </div>

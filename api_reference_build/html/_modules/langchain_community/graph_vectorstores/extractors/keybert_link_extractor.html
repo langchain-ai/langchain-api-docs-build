@@ -264,22 +264,114 @@
         <span class="n">embedding_model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;all-MiniLM-L6-v2&quot;</span><span class="p">,</span>
         <span class="n">extract_keywords_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract keywords using KeyBERT &lt;https://maartengr.github.io/KeyBERT/&gt;.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract keywords using `KeyBERT &lt;https://maartengr.github.io/KeyBERT/&gt;`_.</span>
 
-<span class="sd">        Example:</span>
+<span class="sd">        KeyBERT is a minimal and easy-to-use keyword extraction technique that</span>
+<span class="sd">        leverages BERT embeddings to create keywords and keyphrases that are most</span>
+<span class="sd">        similar to a document.</span>
 
-<span class="sd">            .. code-block:: python</span>
+<span class="sd">        The KeybertLinkExtractor uses KeyBERT to create links between documents that</span>
+<span class="sd">        have keywords in common.</span>
 
-<span class="sd">                extractor = KeybertLinkExtractor()</span>
+<span class="sd">        Example::</span>
 
-<span class="sd">                results = extractor.extract_one(PAGE_1)</span>
+<span class="sd">            extractor = KeybertLinkExtractor()</span>
+<span class="sd">            results = extractor.extract_one(&quot;lorem ipsum...&quot;)</span>
+
+<span class="sd">        .. seealso::</span>
+
+<span class="sd">            - :mod:`How to use a graph vector store &lt;langchain_community.graph_vectorstores&gt;`</span>
+<span class="sd">            - :class:`How to create links between documents &lt;langchain_core.graph_vectorstores.links.Link&gt;`</span>
+
+<span class="sd">        How to link Documents on common keywords using Keybert</span>
+<span class="sd">        ======================================================</span>
+
+<span class="sd">        Preliminaries</span>
+<span class="sd">        -------------</span>
+
+<span class="sd">        Install the keybert package:</span>
+
+<span class="sd">        .. code-block:: bash</span>
+
+<span class="sd">            pip install -q langchain_community keybert</span>
+
+<span class="sd">        Usage</span>
+<span class="sd">        -----</span>
+
+<span class="sd">        We load the ``state_of_the_union.txt`` file, chunk it, then for each chunk we</span>
+<span class="sd">        extract keyword links and add them to the chunk.</span>
+
+<span class="sd">        Using extract_one()</span>
+<span class="sd">        ^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">        We can use :meth:`extract_one` on a document to get the links and add the links</span>
+<span class="sd">        to the document metadata with</span>
+<span class="sd">        :meth:`~langchain_core.graph_vectorstores.links.add_links`::</span>
+
+<span class="sd">            from langchain_community.document_loaders import TextLoader</span>
+<span class="sd">            from langchain_community.graph_vectorstores import CassandraGraphVectorStore</span>
+<span class="sd">            from langchain_community.graph_vectorstores.extractors import KeybertLinkExtractor</span>
+<span class="sd">            from langchain_core.graph_vectorstores.links import add_links</span>
+<span class="sd">            from langchain_text_splitters import CharacterTextSplitter</span>
+
+<span class="sd">            loader = TextLoader(&quot;state_of_the_union.txt&quot;)</span>
+
+<span class="sd">            raw_documents = loader.load()</span>
+<span class="sd">            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)</span>
+
+<span class="sd">            documents = text_splitter.split_documents(raw_documents)</span>
+<span class="sd">            keyword_extractor = KeybertLinkExtractor()</span>
+
+<span class="sd">            for document in documents:</span>
+<span class="sd">                links = keyword_extractor.extract_one(document)</span>
+<span class="sd">                add_links(document, links)</span>
+
+<span class="sd">            print(documents[0].metadata)</span>
+
+<span class="sd">        .. code-block:: output</span>
+
+<span class="sd">            {&#39;source&#39;: &#39;state_of_the_union.txt&#39;, &#39;links&#39;: [Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;ukraine&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;ukrainian&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;putin&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;vladimir&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;russia&#39;)]}</span>
+
+<span class="sd">        Using LinkExtractorTransformer</span>
+<span class="sd">        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+
+<span class="sd">        Using the :class:`~langchain_community.graph_vectorstores.extractors.keybert_link_extractor.LinkExtractorTransformer`,</span>
+<span class="sd">        we can simplify the link extraction::</span>
+
+<span class="sd">            from langchain_community.document_loaders import TextLoader</span>
+<span class="sd">            from langchain_community.graph_vectorstores.extractors import (</span>
+<span class="sd">                KeybertLinkExtractor,</span>
+<span class="sd">                LinkExtractorTransformer,</span>
+<span class="sd">            )</span>
+<span class="sd">            from langchain_text_splitters import CharacterTextSplitter</span>
+
+<span class="sd">            loader = TextLoader(&quot;state_of_the_union.txt&quot;)</span>
+<span class="sd">            raw_documents = loader.load()</span>
+
+<span class="sd">            text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)</span>
+<span class="sd">            documents = text_splitter.split_documents(raw_documents)</span>
+
+<span class="sd">            transformer = LinkExtractorTransformer([KeybertLinkExtractor()])</span>
+<span class="sd">            documents = transformer.transform_documents(documents)</span>
+
+<span class="sd">            print(documents[0].metadata)</span>
+
+<span class="sd">        .. code-block:: output</span>
+
+<span class="sd">            {&#39;source&#39;: &#39;state_of_the_union.txt&#39;, &#39;links&#39;: [Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;ukraine&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;ukrainian&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;putin&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;vladimir&#39;), Link(kind=&#39;kw&#39;, direction=&#39;bidir&#39;, tag=&#39;russia&#39;)]}</span>
+
+<span class="sd">        The documents with keyword links can then be added to a :class:`~langchain_core.graph_vectorstores.base.GraphVectorStore`::</span>
+
+<span class="sd">            from langchain_community.graph_vectorstores import CassandraGraphVectorStore</span>
+
+<span class="sd">            store = CassandraGraphVectorStore.from_documents(documents=documents, embedding=...)</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            kind: Kind of links to produce with this extractor.</span>
 <span class="sd">            embedding_model: Name of the embedding model to use with KeyBERT.</span>
 <span class="sd">            extract_keywords_kwargs: Keyword arguments to pass to KeyBERT&#39;s</span>
-<span class="sd">                `extract_keywords` method.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">                ``extract_keywords`` method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="kn">import</span> <span class="nn">keybert</span>
 
@@ -325,7 +417,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 09, 2024.
+                                on Sep 10, 2024.
                 </footer>
             </div>
         </div>
