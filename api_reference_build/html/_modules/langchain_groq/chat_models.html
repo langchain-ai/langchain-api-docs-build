@@ -296,7 +296,6 @@
     <span class="n">ToolMessage</span><span class="p">,</span>
     <span class="n">ToolMessageChunk</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">langchain_core.messages.tool</span> <span class="kn">import</span> <span class="n">tool_call_chunk</span> <span class="k">as</span> <span class="n">create_tool_call_chunk</span>
 <span class="kn">from</span> <span class="nn">langchain_core.output_parsers</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">JsonOutputParser</span><span class="p">,</span>
     <span class="n">PydanticOutputParser</span><span class="p">,</span>
@@ -629,9 +628,11 @@
             <span class="n">values</span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-8</span>
 
         <span class="n">client_params</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;groq_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;groq_api_key&quot;</span><span class="p">]</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;api_key&quot;</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">values</span><span class="p">[</span><span class="s2">&quot;groq_api_key&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get_secret_value</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;groq_api_key&quot;</span><span class="p">]</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">),</span>
             <span class="s2">&quot;base_url&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;groq_api_base&quot;</span><span class="p">],</span>
             <span class="s2">&quot;timeout&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;request_timeout&quot;</span><span class="p">],</span>
             <span class="s2">&quot;max_retries&quot;</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="s2">&quot;max_retries&quot;</span><span class="p">],</span>
@@ -746,42 +747,6 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">message_dicts</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_message_dicts</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
 
-        <span class="c1"># groq api does not support streaming with tools yet</span>
-        <span class="k">if</span> <span class="s2">&quot;tools&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-                <span class="n">messages</span><span class="o">=</span><span class="n">message_dicts</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
-            <span class="p">)</span>
-            <span class="n">chat_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_chat_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-            <span class="n">generation</span> <span class="o">=</span> <span class="n">chat_result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">AIMessage</span><span class="p">,</span> <span class="n">generation</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
-            <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">create_tool_call_chunk</span><span class="p">(</span>
-                    <span class="n">name</span><span class="o">=</span><span class="n">rtc</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
-                    <span class="n">args</span><span class="o">=</span><span class="n">rtc</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
-                    <span class="nb">id</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
-                    <span class="n">index</span><span class="o">=</span><span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">rtc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">,</span> <span class="p">[])</span>
-            <span class="p">]</span>
-            <span class="n">chunk_</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
-                    <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                    <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                    <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>
-                    <span class="n">usage_metadata</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">,</span>
-                <span class="p">),</span>
-                <span class="n">generation_info</span><span class="o">=</span><span class="n">generation</span><span class="o">.</span><span class="n">generation_info</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                <span class="n">geninfo</span> <span class="o">=</span> <span class="n">chunk_</span><span class="o">.</span><span class="n">generation_info</span> <span class="ow">or</span> <span class="p">{}</span>
-                <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span>
-                    <span class="n">chunk_</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
-                    <span class="n">chunk</span><span class="o">=</span><span class="n">chunk_</span><span class="p">,</span>
-                    <span class="n">logprobs</span><span class="o">=</span><span class="n">geninfo</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;logprobs&quot;</span><span class="p">),</span>
-                <span class="p">)</span>
-            <span class="k">yield</span> <span class="n">chunk_</span>
-            <span class="k">return</span>
-
         <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
 
         <span class="n">default_chunk_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">BaseMessageChunk</span><span class="p">]</span> <span class="o">=</span> <span class="n">AIMessageChunk</span>
@@ -817,42 +782,6 @@
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncIterator</span><span class="p">[</span><span class="n">ChatGenerationChunk</span><span class="p">]:</span>
         <span class="n">message_dicts</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_message_dicts</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span>
-
-        <span class="c1"># groq api does not support streaming with tools yet</span>
-        <span class="k">if</span> <span class="s2">&quot;tools&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_client</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-                <span class="n">messages</span><span class="o">=</span><span class="n">message_dicts</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
-            <span class="p">)</span>
-            <span class="n">chat_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_chat_result</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
-            <span class="n">generation</span> <span class="o">=</span> <span class="n">chat_result</span><span class="o">.</span><span class="n">generations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="n">AIMessage</span><span class="p">,</span> <span class="n">generation</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
-            <span class="n">tool_call_chunks</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="p">{</span>
-                    <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">rtc</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
-                    <span class="s2">&quot;args&quot;</span><span class="p">:</span> <span class="n">rtc</span><span class="p">[</span><span class="s2">&quot;function&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;arguments&quot;</span><span class="p">),</span>
-                    <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span>
-                    <span class="s2">&quot;index&quot;</span><span class="p">:</span> <span class="n">rtc</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">),</span>
-                <span class="p">}</span>
-                <span class="k">for</span> <span class="n">rtc</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tool_calls&quot;</span><span class="p">,</span> <span class="p">[])</span>
-            <span class="p">]</span>
-            <span class="n">chunk_</span> <span class="o">=</span> <span class="n">ChatGenerationChunk</span><span class="p">(</span>
-                <span class="n">message</span><span class="o">=</span><span class="n">AIMessageChunk</span><span class="p">(</span>
-                    <span class="n">content</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span>
-                    <span class="n">additional_kwargs</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">additional_kwargs</span><span class="p">,</span>
-                    <span class="n">tool_call_chunks</span><span class="o">=</span><span class="n">tool_call_chunks</span><span class="p">,</span>  <span class="c1"># type: ignore[arg-type]</span>
-                    <span class="n">usage_metadata</span><span class="o">=</span><span class="n">message</span><span class="o">.</span><span class="n">usage_metadata</span><span class="p">,</span>
-                <span class="p">),</span>
-                <span class="n">generation_info</span><span class="o">=</span><span class="n">generation</span><span class="o">.</span><span class="n">generation_info</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">run_manager</span><span class="p">:</span>
-                <span class="n">geninfo</span> <span class="o">=</span> <span class="n">chunk_</span><span class="o">.</span><span class="n">generation_info</span> <span class="ow">or</span> <span class="p">{}</span>
-                <span class="k">await</span> <span class="n">run_manager</span><span class="o">.</span><span class="n">on_llm_new_token</span><span class="p">(</span>
-                    <span class="n">chunk_</span><span class="o">.</span><span class="n">text</span><span class="p">,</span>
-                    <span class="n">chunk</span><span class="o">=</span><span class="n">chunk_</span><span class="p">,</span>
-                    <span class="n">logprobs</span><span class="o">=</span><span class="n">geninfo</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;logprobs&quot;</span><span class="p">),</span>
-                <span class="p">)</span>
-            <span class="k">yield</span> <span class="n">chunk_</span>
-            <span class="k">return</span>
 
         <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="s2">&quot;stream&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
 
@@ -1550,7 +1479,7 @@
                                 &copy; 2023, LangChain, Inc.
                                     .
                             Last updated
-                                on Sep 12, 2024.
+                                on Sep 13, 2024.
                 </footer>
             </div>
         </div>
